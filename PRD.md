@@ -95,3 +95,6 @@ Fase	Tarea	Entregable
 6	Dashboard (opcional)	Ver operaciones, ganancias, logs
 7	Telegram Bot (opcional)	Notificaciones por operación / alertas
 
+Binance 
+BINANCE_API_KEY=tu_api_key
+BINANCE_API_SECRET=tu_secret_key

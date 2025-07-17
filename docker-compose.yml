@@ -15,7 +15,9 @@ services:
       - "5432:5432"
 
   api:
-    build: ./docker
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     container_name: gridbot_api
     ports:
       - "8000:8000"

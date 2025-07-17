@@ -1,5 +1,9 @@
-from db.session import engine, Base
-from models.grid_config import GridConfig
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from app.db.session import engine, Base
+from app.models.grid_config import GridConfig
 
 def init_db():
     Base.metadata.create_all(bind=engine)
