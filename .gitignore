@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Entorno virtual
+.venv/
+venv/
+ENV/
+
+# Archivos de entorno y configuración sensible
+.env
+.env.*
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# VSCode
+.vscode/
+
+# Otros
+.DS_Store
+.idea/
+*.sqlite3
+
+# Tests y resultados temporales
+htmlcov/
+.coverage
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/ 
