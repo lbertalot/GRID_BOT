@@ -1,5 +1,5 @@
-from app.db.session import engine, Base
-from app.models.grid_config import GridConfig
+from db.session import engine, Base
+from models.grid_config import GridConfig
 
 def init_db():
     Base.metadata.create_all(bind=engine)
