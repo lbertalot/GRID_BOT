@@ -4,8 +4,10 @@ SQLAlchemy
 psycopg2-binary
 python-dotenv
 pytest
+pytest-asyncio
 httpx
 Jinja2
 python-multipart
 python-binance
 APScheduler
+numpy

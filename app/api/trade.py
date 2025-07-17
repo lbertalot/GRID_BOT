@@ -1,9 +1,15 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel
 from binance import Client
 import os
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from app.scheduler.grid_job import update_grid_config, get_grid_config
+from app.services.binance_service import log_trade
+from app.db.session import SessionLocal
+from sqlalchemy.orm import Session
+from app.models.trade import Trade
+from typing import List, Optional
+from fastapi import Query
 
 router = APIRouter()
 
@@ -54,8 +60,15 @@ def get_balances():
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error consultando balances: {e}")
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @router.post("/order")
-def place_order(order: OrderRequest = Body(...)):
+def place_order(order: OrderRequest = Body(...), db=Depends(get_db)):
     api_key = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
     client = Client(api_key, api_secret)
@@ -78,6 +91,14 @@ def place_order(order: OrderRequest = Body(...)):
                 raise HTTPException(status_code=400, detail="Lado de orden inválido (debe ser BUY o SELL)")
         else:
             raise HTTPException(status_code=400, detail="Tipo de orden inválido (debe ser MARKET o LIMIT)")
+        # Registro en base de datos
+        log_trade(
+            db=db,
+            symbol=order.symbol.upper(),
+            side=order.side,
+            quantity=order.quantity,
+            entry_price=float(result['fills'][0]['price']) if 'fills' in result and result['fills'] else None
+        )
         return {"order": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error ejecutando orden: {e}")
@@ -115,3 +136,29 @@ def api_get_grid_config():
 def api_update_grid_config(params: GridParams = Body(...)):
     update_grid_config(params.dict())
     return {"message": "Configuración actualizada", "config": get_grid_config()}
+
+@router.get("/trades", response_model=List[dict])
+def get_trades(
+    symbol: Optional[str] = Query(None),
+    side: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Trade)
+    if symbol:
+        query = query.filter(Trade.symbol == symbol.upper())
+    if side:
+        query = query.filter(Trade.side == side.upper())
+    trades = query.order_by(Trade.timestamp.desc()).all()
+    return [
+        {
+            "id": t.id,
+            "symbol": t.symbol,
+            "side": t.side,
+            "quantity": t.quantity,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
+            "profit_loss": t.profit_loss,
+            "timestamp": t.timestamp.isoformat() if t.timestamp else None
+        }
+        for t in trades
+    ]

@@ -1,13 +1,14 @@
 🏗️ Actualización del PRD con stack técnico nuevo
+
 🔧 Stack Tecnológico
 Componente	Tecnología elegida
-API Backend	FastAPI
-Base de Datos	PostgreSQL (vía SQLAlchemy o Tortoise ORM)
-Infraestructura	Docker (multi-servicio: app + db + worker)
-Trading	Binance Spot API vía SDK oficial
-Scheduler	APScheduler o Celery (según complejidad)
-Alertas (opcional)	Telegram Bot
-Monitoreo	Logs vía logging o Prometheus/Grafana (futuro)
+API Backend	FastAPI ✅
+Base de Datos	PostgreSQL (vía SQLAlchemy) ✅
+Infraestructura	Docker (multi-servicio: app + db + worker) ✅
+Trading	Binance Spot API vía SDK oficial ✅
+Scheduler	APScheduler ✅
+Alertas (opcional)	Telegram Bot (pendiente)
+Monitoreo	Logs vía logging (básico) / Prometheus/Grafana (futuro)
 
 🧱 Nueva Arquitectura del Sistema
 
@@ -26,74 +27,60 @@ Monitoreo	Logs vía logging o Prometheus/Grafana (futuro)
                   │
         ┌─────────▼─────────┐
         │ Bot Worker        │  ← Ejecuta lógica de trading
-        │ (schedule/celery) │
+        │ (APScheduler)     │
         └───────────────────┘
+
 🧩 Componentes del proyecto
-📁 Estructura de carpetas propuesta
-css
-Copiar
-Editar
+📁 Estructura de carpetas real
+
+```
 grid_bot/
 │
 ├── app/
 │   ├── main.py          ← FastAPI app
-│   ├── api/             ← Endpoints REST
+│   ├── api/             ← Endpoints REST (trading, grid, consulta de operaciones)
 │   ├── core/            ← Configuración, utils
-│   ├── services/        ← Lógica de trading (Binance)
-│   ├── models/          ← ORM con SQLAlchemy
-│   ├── db/              ← Sesiones, migraciones
-│   └── scheduler/       ← Jobs de trading
+│   ├── services/        ← Lógica de trading (Binance, grid, logging de operaciones)
+│   ├── models/          ← ORM con SQLAlchemy (Trade, GridConfig)
+│   ├── db/              ← Sesiones, migraciones, init_db.py
+│   └── scheduler/       ← Jobs de trading (APScheduler)
 │
 ├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
+│   └── Dockerfile
 │
+├── docker-compose.yml
 ├── .env
 ├── requirements.txt
-└── README.md
-⚙️ Servicios Docker
-docker-compose.yml básico
-yaml
-Copiar
-Editar
-version: '3.8'
+├── README.md
+├── tests/               ← Tests automatizados (pytest)
+└── PRD.md
+```
 
-services:
-  db:
-    image: postgres:16
-    container_name: gridbot_db
-    restart: always
-    environment:
-      POSTGRES_USER: griduser
-      POSTGRES_PASSWORD: gridpass
-      POSTGRES_DB: gridbot
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+✅ **Implementado**
+- FastAPI app y estructura modular.
+- Conexión y persistencia en PostgreSQL vía SQLAlchemy.
+- Modelo de operaciones (Trade) y configuración de grid (GridConfig).
+- Endpoints REST:
+  - `/order` (ejecutar orden y registrar en DB)
+  - `/balances` (consulta de saldos Binance)
+  - `/price/{symbol}` (precio actual)
+  - `/run_grid` (ejecutar estrategia grid)
+  - `/grid_config` (consultar/actualizar config grid)
+  - `/trades` (historial de operaciones, con filtros)
+- Scheduler automático con APScheduler para grid trading.
+- Logging básico de eventos y errores.
+- Tests automatizados de imports, endpoints y lógica base.
+- Dockerización completa (app + db).
 
-  api:
-    build: ./docker
-    container_name: gridbot_api
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-    env_file:
-      - .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-volumes:
-  pgdata:
-🚀 Roadmap del desarrollo
-Fase	Tarea	Entregable
-1	Setup base del proyecto	FastAPI app + conexión DB + endpoints iniciales
-2	Modelo de datos	SQLAlchemy models para operaciones, órdenes, logs
-3	Bot simulador	Servicio que corre un grid virtual y registra resultados
-4	Conexión Binance	API trading con claves seguras
-5	Scheduler	Ejecución automática del bot en intervalos definidos
-6	Dashboard (opcional)	Ver operaciones, ganancias, logs
-7	Telegram Bot (opcional)	Notificaciones por operación / alertas
+🚧 **Pendiente**
+- Dashboard web para visualizar operaciones y métricas.
+- Alertas/Notificaciones (Telegram Bot).
+- Monitoreo avanzado (Prometheus/Grafana).
+- Estrategias adicionales (Trailing Stop, Scalping, RSI/MACD).
+- Mejoras de seguridad y validación avanzada de parámetros.
+- Paginación y filtros avanzados en `/trades`.
+- Análisis de rendimiento y reportes.
+- Documentación de endpoints y ejemplos de uso.
 
 Binance 
 BINANCE_API_KEY=tu_api_key
