@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 SQLAlchemy
 psycopg2-binary
+asyncpg
 python-dotenv
 pytest
 pytest-asyncio
@@ -11,3 +12,4 @@ python-multipart
 python-binance
 APScheduler
 numpy
+prometheus-client==0.19.0

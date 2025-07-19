@@ -4,56 +4,63 @@ from binance import Client
 import os
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from app.scheduler.grid_job import update_grid_config, get_grid_config
-from app.services.binance_service import log_trade
+from app.services.binance_service import BinanceService
+from sqlalchemy.orm import Session
+from app.models.trade import Trade
+from datetime import datetime
 from app.db.session import SessionLocal
 from sqlalchemy.orm import Session
 from app.models.trade import Trade
 from typing import List, Optional
 from fastapi import Query
+from app.services.telegram_alert import send_telegram_alert
+from app.core.auth import require_auth
+from app.schemas.validation import OrderRequest, GridParams
 
 router = APIRouter()
 
-class OrderRequest(BaseModel):
-    symbol: str
-    side: str  # 'BUY' o 'SELL'
-    quantity: float
-    type: str = 'MARKET'  # 'MARKET' o 'LIMIT'
-    price: float | None = None  # Solo para órdenes LIMIT
+# Instancia global del servicio de Binance
+binance_service = BinanceService()
 
-class GridParams(BaseModel):
-    symbol: str = 'BTCUSDT'
-    min_price: float = 20000
-    max_price: float = 30000
-    grids: int = 5
-    quantity: float = 0.001
-    last_action: str | None = None
-
-# Utilidad síncrona para ejemplo simple (puedes migrar a async si lo deseas)
-def get_binance_price(symbol: str) -> float:
-    api_key = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
-    client = Client(api_key, api_secret)
-    try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        return float(ticker["price"])
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error consultando Binance: {e}")
+def log_trade(
+    db: Session,
+    symbol: str,
+    side: str,
+    quantity: float,
+    entry_price: float,
+    exit_price: Optional[float] = None,
+    profit_loss: Optional[float] = None,
+    timestamp: Optional[datetime] = None
+) -> Trade:
+    trade = Trade(
+        symbol=symbol,
+        side=side,
+        quantity=quantity,
+        entry_price=entry_price,
+        exit_price=exit_price,
+        profit_loss=profit_loss,
+        timestamp=timestamp or datetime.utcnow()
+    )
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    return trade
 
 @router.get("/price/{symbol}")
 def get_price(symbol: str):
-    price = get_binance_price(symbol.upper())
-    return {"symbol": symbol.upper(), "price": price}
+    try:
+        price = binance_service.get_current_price(symbol.upper())
+        return {"symbol": symbol.upper(), "price": price}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error consultando Binance: {e}")
 
 @router.get("/balances")
 def get_balances():
-    api_key = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
-    client = Client(api_key, api_secret)
     try:
-        account = client.get_account()
+        account_info = binance_service.get_account_info()
         balances = {
             b["asset"]: float(b["free"])
-            for b in account["balances"]
+            for b in account_info["balances"]
             if float(b["free"]) > 0
         }
         return balances
@@ -67,11 +74,31 @@ def get_db():
     finally:
         db.close()
 
+@router.get("/trades")
+def get_trades(
+    symbol: Optional[str] = Query(None, description="Filtrar por símbolo"),
+    side: Optional[str] = Query(None, description="Filtrar por lado (BUY/SELL)"),
+    limit: int = Query(10, ge=1, le=100, description="Número de resultados"),
+    offset: int = Query(0, ge=0, description="Número de resultados a saltar"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Trade)
+    if symbol:
+        query = query.filter(Trade.symbol == symbol.upper())
+    if side:
+        query = query.filter(Trade.side == side.upper())
+    trades = query.offset(offset).limit(limit).all()
+    return trades
+
 @router.post("/order")
-def place_order(order: OrderRequest = Body(...), db=Depends(get_db)):
-    api_key = os.getenv("BINANCE_API_KEY", "")
+def place_order(
+    order: OrderRequest = Body(...), 
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_auth)
+):
+    api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
-    client = Client(api_key, api_secret)
+    client = Client(api_key_binance, api_secret)
     try:
         if order.type == 'MARKET':
             if order.side == 'BUY':
@@ -99,15 +126,20 @@ def place_order(order: OrderRequest = Body(...), db=Depends(get_db)):
             quantity=order.quantity,
             entry_price=float(result['fills'][0]['price']) if 'fills' in result and result['fills'] else None
         )
+        send_telegram_alert(f"✅ Orden ejecutada: {order.side} {order.quantity} {order.symbol} ({order.type})")
         return {"order": result}
     except Exception as e:
+        send_telegram_alert(f"❌ Error ejecutando orden: {order.side} {order.quantity} {order.symbol} - {e}")
         raise HTTPException(status_code=400, detail=f"Error ejecutando orden: {e}")
 
 @router.post("/run_grid")
-def run_grid(params: GridParams = Body(...)):
-    api_key = os.getenv("BINANCE_API_KEY", "")
+def run_grid(
+    params: GridParams = Body(...),
+    api_key: str = Depends(require_auth)
+):
+    api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
-    client = Client(api_key, api_secret)
+    client = Client(api_key_binance, api_secret)
     try:
         # 1. Calcular niveles de la grilla
         grid_levels = calculate_grid_levels(params.min_price, params.max_price, params.grids)
@@ -129,36 +161,13 @@ def run_grid(params: GridParams = Body(...)):
         raise HTTPException(status_code=400, detail=f"Error en grid trading: {e}")
 
 @router.get("/grid_config")
-def api_get_grid_config():
+def get_grid_config_endpoint():
     return get_grid_config()
 
 @router.post("/grid_config")
-def api_update_grid_config(params: GridParams = Body(...)):
-    update_grid_config(params.dict())
-    return {"message": "Configuración actualizada", "config": get_grid_config()}
-
-@router.get("/trades", response_model=List[dict])
-def get_trades(
-    symbol: Optional[str] = Query(None),
-    side: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+def update_grid_config_endpoint(
+    config: GridParams = Body(...),
+    api_key: str = Depends(require_auth)
 ):
-    query = db.query(Trade)
-    if symbol:
-        query = query.filter(Trade.symbol == symbol.upper())
-    if side:
-        query = query.filter(Trade.side == side.upper())
-    trades = query.order_by(Trade.timestamp.desc()).all()
-    return [
-        {
-            "id": t.id,
-            "symbol": t.symbol,
-            "side": t.side,
-            "quantity": t.quantity,
-            "entry_price": t.entry_price,
-            "exit_price": t.exit_price,
-            "profit_loss": t.profit_loss,
-            "timestamp": t.timestamp.isoformat() if t.timestamp else None
-        }
-        for t in trades
-    ]
+    update_grid_config(config.dict())
+    return {"message": "Configuración actualizada", "config": config.dict()}

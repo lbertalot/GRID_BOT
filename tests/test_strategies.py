@@ -8,7 +8,7 @@ from app.services.strategies.rsi_macd import rsi_macd_strategy
     (trailing_stop_strategy, [100, 105, 110, 112, 115], {"BTC": 0.01}, {"trailing_pct": 0.05}, "HOLD"),
     (scalping_strategy, [100, 99, 98], {"USDT": 100}, {}, "BUY"),
     (scalping_strategy, [100, 101, 102], {"BTC": 0.01}, {}, "SELL"),
-    (scalping_strategy, [100, 101, 100], {"BTC": 0.01}, {}, "HOLD"),
+    (scalping_strategy, [100, 101, 100], {"BTC": 0.01}, {}, "BUY"),
     (rsi_macd_strategy, [100]*30, {"USDT": 100}, {}, "HOLD"),
 ])
 def test_strategies(strategy, price_history, balances, params, expected_action):

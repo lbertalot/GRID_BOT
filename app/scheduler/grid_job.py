@@ -3,6 +3,7 @@ from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from binance import Client
 import os
 import logging
+from app.services.telegram_alert import send_telegram_alert
 
 # Parámetros configurables (por defecto)
 grid_config = {
@@ -31,11 +32,13 @@ def run_grid_job():
             else:
                 result = client.order_market_sell(symbol=grid_config['symbol'].upper(), quantity=grid_config['quantity'])
             logging.info(f"GridBot ejecutó {decision['action']} en {decision['level']}: {result}")
+            send_telegram_alert(f"🤖 GridBot ejecutó {decision['action']} {grid_config['quantity']} {grid_config['symbol']} a {current_price}")
             grid_config['last_action'] = decision['action']
         else:
             logging.info(f"GridBot no ejecutó ninguna orden. Precio actual: {current_price}")
     except Exception as e:
         logging.error(f"Error en grid trading: {e}")
+        send_telegram_alert(f"❌ Error en grid trading: {e}")
 
 def update_grid_config(new_config: dict):
     global grid_config
