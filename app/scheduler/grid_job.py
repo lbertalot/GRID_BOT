@@ -13,7 +13,7 @@ grid_config = {
     'min_price': 700,
     'max_price': 800,
     'grids': 8,
-    'quantity': 0.008,  # Cantidad ajustada a stepSize 0.001
+    'quantity': 0.002,  # Cantidad ajustada al balance disponible (0.00243376 BNB)
     'last_action': None
 }
 

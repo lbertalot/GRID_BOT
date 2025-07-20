@@ -1,0 +1,17 @@
+{
+  "all_assets_grids": [
+    {
+      "symbol": "BNBUSDT",
+      "quantity": 0.03146388,
+      "estimated_price": 735,
+      "min_price": 588.0,
+      "max_price": 882.0,
+      "balance": 0.12585552,
+      "usdt_value": 23.1259518,
+      "reason": "Alta liquidez, trading activo"
+    }
+  ],
+  "setup_timestamp": "2025-07-19 22:57:25",
+  "total_assets": 1,
+  "total_usdt_value": 23.1259518
+}

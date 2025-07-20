@@ -1,0 +1,445 @@
+{
+  "initial_balance": {
+    "balances": {
+      "BNB": 0.01043976,
+      "USDT": 144.05992,
+      "LDBNB": 0.00342031,
+      "ARS": 300599.6,
+      "ANIME": 0.09545515,
+      "BERA": 0.00202736,
+      "LAYER": 0.00725106,
+      "KAITO": 0.00402431,
+      "NIL": 0.00515681,
+      "RED": 0.00578295,
+      "SHELL": 0.00501078,
+      "GPS": 0.05982469,
+      "BMT": 0.00600764,
+      "GUN": 0.0589074,
+      "PARTI": 0.00602232,
+      "BABY": 0.01505946,
+      "INIT": 0.00470308,
+      "WCT": 0.00628896,
+      "SOPH": 0.03004686,
+      "HYPER": 0.00399863,
+      "SIGN": 0.03993384,
+      "STO": 0.00300564,
+      "SXT": 0.0192797,
+      "NXPC": 0.00589611,
+      "HAEDAL": 0.00600753,
+      "HUMA": 0.03826864,
+      "RESOLV": 0.00392654,
+      "HOME": 0.03942478,
+      "SPK": 0.03968269,
+      "NEWT": 0.00248361,
+      "SAHARA": 0.0248245,
+      "LA": 0.00298659,
+      "ERA": 0.00396837,
+      "C": 0.0039581
+    },
+    "portfolio_value": {
+      "total_value_usdt": 144.05992,
+      "asset_values": {
+        "BNB": {
+          "amount": 0.01043976,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "USDT": {
+          "amount": 144.05992,
+          "value_usdt": 144.05992,
+          "price_usdt": 0.0
+        },
+        "LDBNB": {
+          "amount": 0.00342031,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ARS": {
+          "amount": 300599.6,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ANIME": {
+          "amount": 0.09545515,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BERA": {
+          "amount": 0.00202736,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "LAYER": {
+          "amount": 0.00725106,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "KAITO": {
+          "amount": 0.00402431,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NIL": {
+          "amount": 0.00515681,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "RED": {
+          "amount": 0.00578295,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SHELL": {
+          "amount": 0.00501078,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "GPS": {
+          "amount": 0.05982469,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BMT": {
+          "amount": 0.00600764,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "GUN": {
+          "amount": 0.0589074,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "PARTI": {
+          "amount": 0.00602232,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BABY": {
+          "amount": 0.01505946,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "INIT": {
+          "amount": 0.00470308,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "WCT": {
+          "amount": 0.00628896,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SOPH": {
+          "amount": 0.03004686,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HYPER": {
+          "amount": 0.00399863,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SIGN": {
+          "amount": 0.03993384,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "STO": {
+          "amount": 0.00300564,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SXT": {
+          "amount": 0.0192797,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NXPC": {
+          "amount": 0.00589611,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HAEDAL": {
+          "amount": 0.00600753,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HUMA": {
+          "amount": 0.03826864,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "RESOLV": {
+          "amount": 0.00392654,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HOME": {
+          "amount": 0.03942478,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SPK": {
+          "amount": 0.03968269,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NEWT": {
+          "amount": 0.00248361,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SAHARA": {
+          "amount": 0.0248245,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "LA": {
+          "amount": 0.00298659,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ERA": {
+          "amount": 0.00396837,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "C": {
+          "amount": 0.0039581,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        }
+      },
+      "timestamp": "2025-07-20T01:19:45.806860"
+    },
+    "timestamp": "2025-07-20T01:19:45.806875"
+  },
+  "current_balance": {
+    "balances": {
+      "BNB": 0.01043976,
+      "USDT": 144.05992,
+      "LDBNB": 0.00342031,
+      "ARS": 300599.6,
+      "ANIME": 0.09545515,
+      "BERA": 0.00202736,
+      "LAYER": 0.00725106,
+      "KAITO": 0.00402431,
+      "NIL": 0.00515681,
+      "RED": 0.00578295,
+      "SHELL": 0.00501078,
+      "GPS": 0.05982469,
+      "BMT": 0.00600764,
+      "GUN": 0.0589074,
+      "PARTI": 0.00602232,
+      "BABY": 0.01505946,
+      "INIT": 0.00470308,
+      "WCT": 0.00628896,
+      "SOPH": 0.03004686,
+      "HYPER": 0.00399863,
+      "SIGN": 0.03993384,
+      "STO": 0.00300564,
+      "SXT": 0.0192797,
+      "NXPC": 0.00589611,
+      "HAEDAL": 0.00600753,
+      "HUMA": 0.03826864,
+      "RESOLV": 0.00392654,
+      "HOME": 0.03942478,
+      "SPK": 0.03968269,
+      "NEWT": 0.00248361,
+      "SAHARA": 0.0248245,
+      "LA": 0.00298659,
+      "ERA": 0.00396837,
+      "C": 0.0039581
+    },
+    "portfolio_value": {
+      "total_value_usdt": 144.05992,
+      "asset_values": {
+        "BNB": {
+          "amount": 0.01043976,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "USDT": {
+          "amount": 144.05992,
+          "value_usdt": 144.05992,
+          "price_usdt": 0.0
+        },
+        "LDBNB": {
+          "amount": 0.00342031,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ARS": {
+          "amount": 300599.6,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ANIME": {
+          "amount": 0.09545515,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BERA": {
+          "amount": 0.00202736,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "LAYER": {
+          "amount": 0.00725106,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "KAITO": {
+          "amount": 0.00402431,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NIL": {
+          "amount": 0.00515681,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "RED": {
+          "amount": 0.00578295,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SHELL": {
+          "amount": 0.00501078,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "GPS": {
+          "amount": 0.05982469,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BMT": {
+          "amount": 0.00600764,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "GUN": {
+          "amount": 0.0589074,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "PARTI": {
+          "amount": 0.00602232,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "BABY": {
+          "amount": 0.01505946,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "INIT": {
+          "amount": 0.00470308,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "WCT": {
+          "amount": 0.00628896,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SOPH": {
+          "amount": 0.03004686,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HYPER": {
+          "amount": 0.00399863,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SIGN": {
+          "amount": 0.03993384,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "STO": {
+          "amount": 0.00300564,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SXT": {
+          "amount": 0.0192797,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NXPC": {
+          "amount": 0.00589611,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HAEDAL": {
+          "amount": 0.00600753,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HUMA": {
+          "amount": 0.03826864,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "RESOLV": {
+          "amount": 0.00392654,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "HOME": {
+          "amount": 0.03942478,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SPK": {
+          "amount": 0.03968269,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "NEWT": {
+          "amount": 0.00248361,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "SAHARA": {
+          "amount": 0.0248245,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "LA": {
+          "amount": 0.00298659,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "ERA": {
+          "amount": 0.00396837,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        },
+        "C": {
+          "amount": 0.0039581,
+          "value_usdt": 0.0,
+          "price_usdt": 0.0
+        }
+      },
+      "timestamp": "2025-07-20T01:19:47.933283"
+    },
+    "timestamp": "2025-07-20T01:19:47.933321"
+  },
+  "trades": [],
+  "strategies": {},
+  "daily_pnl": {
+    "2025-07-20": [
+      {
+        "timestamp": "2025-07-20T01:19:47.933353",
+        "value_usdt": 144.05992,
+        "pnl_absolute": 0.0,
+        "pnl_percentage": 0.0
+      }
+    ]
+  },
+  "total_pnl": 0.0
+}

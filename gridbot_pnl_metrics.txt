@@ -1,0 +1,18 @@
+# HELP gridbot_total_pnl_usdt Total P&L in USDT
+# TYPE gridbot_total_pnl_usdt gauge
+gridbot_total_pnl_usdt 67.0255455399801
+# HELP gridbot_pnl_percentage P&L percentage
+# TYPE gridbot_pnl_percentage gauge
+gridbot_pnl_percentage 67.0255455399801
+# HELP gridbot_portfolio_value_usdt Portfolio value in USDT
+# TYPE gridbot_portfolio_value_usdt gauge
+gridbot_portfolio_value_usdt 167.0255455399801
+# HELP gridbot_trading_status Trading status (0=losing, 1=neutral, 2=winning)
+# TYPE gridbot_trading_status gauge
+gridbot_trading_status 2
+# HELP gridbot_asset_value_usdt Asset value in USDT
+# TYPE gridbot_asset_value_usdt gauge
+gridbot_asset_value_usdt{asset="BNB"} 5.217888182
+# HELP gridbot_asset_value_usdt Asset value in USDT
+# TYPE gridbot_asset_value_usdt gauge
+gridbot_asset_value_usdt{asset="USDT"} 161.74656

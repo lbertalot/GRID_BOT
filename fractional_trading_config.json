@@ -1,0 +1,96 @@
+{
+  "fractional_trading_grids": [
+    {
+      "symbol": "BNBUSDT",
+      "quantity": 0.037756656,
+      "estimated_price": 735,
+      "min_price": 551.25,
+      "max_price": 918.75,
+      "balance": 0.12585552,
+      "usdt_value": 27.75114216,
+      "reason": "Alta liquidez, trading activo",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "ANIMEUSDT",
+      "quantity": 0.028636545,
+      "estimated_price": 0.0005,
+      "min_price": 0.000375,
+      "max_price": 0.000625,
+      "balance": 0.09545515,
+      "usdt_value": 1.43182725e-05,
+      "reason": "Token emergente, volatilidad alta",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "GPSUSDT",
+      "quantity": 0.017947407,
+      "estimated_price": 0.0003,
+      "min_price": 0.000225,
+      "max_price": 0.00037499999999999995,
+      "balance": 0.05982469,
+      "usdt_value": 5.384222099999999e-06,
+      "reason": "Tecnolog\u00eda GPS, potencial de crecimiento",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "GUNUSDT",
+      "quantity": 0.01767222,
+      "estimated_price": 0.0004,
+      "min_price": 0.00030000000000000003,
+      "max_price": 0.0005,
+      "balance": 0.0589074,
+      "usdt_value": 7.068888e-06,
+      "reason": "Gaming, comunidad activa",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "SIGNUSDT",
+      "quantity": 0.011980151999999999,
+      "estimated_price": 0.0002,
+      "min_price": 0.00015000000000000001,
+      "max_price": 0.00025,
+      "balance": 0.03993384,
+      "usdt_value": 2.3960303999999998e-06,
+      "reason": "Se\u00f1ales de trading, DeFi",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "SPKUSDT",
+      "quantity": 0.011904807,
+      "estimated_price": 0.0003,
+      "min_price": 0.000225,
+      "max_price": 0.00037499999999999995,
+      "balance": 0.03968269,
+      "usdt_value": 3.5714420999999996e-06,
+      "reason": "Speak protocol, comunicaci\u00f3n",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "HOMEUSDT",
+      "quantity": 0.011827434,
+      "estimated_price": 0.0002,
+      "min_price": 0.00015000000000000001,
+      "max_price": 0.00025,
+      "balance": 0.03942478,
+      "usdt_value": 2.3654868e-06,
+      "reason": "Real estate, tokenizaci\u00f3n",
+      "status": "READY_FOR_TRADING"
+    },
+    {
+      "symbol": "HUMAUSDT",
+      "quantity": 0.011480592,
+      "estimated_price": 0.0003,
+      "min_price": 0.000225,
+      "max_price": 0.00037499999999999995,
+      "balance": 0.03826864,
+      "usdt_value": 3.4441775999999996e-06,
+      "reason": "Human protocol, innovaci\u00f3n",
+      "status": "READY_FOR_TRADING"
+    }
+  ],
+  "setup_timestamp": "2025-07-19 22:58:10",
+  "total_assets": 8,
+  "total_usdt_value": 27.7511807085195,
+  "trading_status": "ACTIVE"
+}

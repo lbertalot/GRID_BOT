@@ -1,0 +1,64 @@
+{
+  "distribution_summary": {
+    "total_ars": 280599.6,
+    "total_usdt_equivalent": 233.83299999999997,
+    "successful_purchases": 0,
+    "failed_purchases": 10,
+    "total_invested": 0,
+    "total_failed": 280.59959999999995
+  },
+  "successful_purchases": [],
+  "failed_purchases": [
+    {
+      "asset": "BNB",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 58.45824999999999
+    },
+    {
+      "asset": "BTC",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 46.7666
+    },
+    {
+      "asset": "ETH",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 46.7666
+    },
+    {
+      "asset": "LTC",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 35.074949999999994
+    },
+    {
+      "asset": "LINK",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 23.3833
+    },
+    {
+      "asset": "DOT",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 23.3833
+    },
+    {
+      "asset": "ADA",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 11.69165
+    },
+    {
+      "asset": "XRP",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 11.69165
+    },
+    {
+      "asset": "MATIC",
+      "error": "Error ejecutando orden: APIError(code=-1013): Market is closed.",
+      "usdt_value": 11.69165
+    },
+    {
+      "asset": "AVAX",
+      "error": "Error ejecutando orden: APIError(code=-1013): Filter failure: LOT_SIZE",
+      "usdt_value": 11.69165
+    }
+  ],
+  "timestamp": "2025-07-19 22:47:56"
+}

@@ -12,8 +12,12 @@ from app.core.error_handlers import (
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi import HTTPException
+from app.core.metrics import MetricsMiddleware
 
 app = FastAPI()
+
+# Agregar middleware de métricas
+app.add_middleware(MetricsMiddleware)
 
 # Plantillas Jinja2 para la interfaz web mínima
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
