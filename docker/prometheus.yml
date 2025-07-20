@@ -12,36 +12,12 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # GridBot API
+  # GridBot API - Métricas principales
   - job_name: 'gridbot-api'
     static_configs:
       - targets: ['api:8000']
     metrics_path: '/api/metrics/metrics/'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-  # Binance API (para monitorear latencia)
-  - job_name: 'binance-api'
-    static_configs:
-      - targets: ['api:8000']
-    metrics_path: '/api/metrics/metrics/binance'
-    scrape_interval: 30s
-    scrape_timeout: 10s
-
-  # Métricas de trading
-  - job_name: 'trading-metrics'
-    static_configs:
-      - targets: ['api:8000']
-    metrics_path: '/api/metrics/metrics/trading'
     scrape_interval: 15s
-    scrape_timeout: 5s
-
-  # Métricas de estrategias
-  - job_name: 'strategy-metrics'
-    static_configs:
-      - targets: ['api:8000']
-    metrics_path: '/api/metrics/metrics/strategies'
-    scrape_interval: 20s
     scrape_timeout: 5s
 
 alerting:

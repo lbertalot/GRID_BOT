@@ -1,0 +1,266 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "GridBot Trading Dashboard",
+    "tags": ["gridbot", "trading", "strategies"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Estado General del Sistema",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"gridbot-api\"}",
+            "legendFormat": "API Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "OFFLINE", "color": "red"},
+                  "1": {"text": "ONLINE", "color": "green"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Estado de Conexión Binance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_binance_connection_status",
+            "legendFormat": "Connection Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "DISCONNECTED", "color": "red"},
+                  "1": {"text": "CONNECTED", "color": "green"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Uso de CPU (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_cpu_usage_percent",
+            "legendFormat": "CPU Usage"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 50},
+                {"color": "red", "value": 80}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Uso de Memoria (MB)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_memory_usage_bytes / 1024 / 1024",
+            "legendFormat": "Memory Usage"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "MB",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 100},
+                {"color": "red", "value": 200}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Llamadas API Binance (Última Hora)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "increase(gridbot_binance_api_calls_total[1h])",
+            "legendFormat": "{{endpoint}} - {{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 6,
+        "title": "Latencia API Binance (Promedio 5m)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(gridbot_binance_api_latency_seconds_sum[5m]) / rate(gridbot_binance_api_latency_seconds_count[5m])",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 7,
+        "title": "Uso de CPU (Tiempo Real)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_cpu_usage_percent",
+            "legendFormat": "CPU Usage %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 8,
+        "title": "Uso de Memoria (Tiempo Real)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_memory_usage_bytes / 1024 / 1024",
+            "legendFormat": "Memory Usage MB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "MB"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Estado de Conexión Binance (Tiempo Real)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_binance_connection_status",
+            "legendFormat": "Connection Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
+      },
+      {
+        "id": 10,
+        "title": "Llamadas API Binance (Tiempo Real)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_binance_api_calls_total",
+            "legendFormat": "{{endpoint}} - {{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "links": [],
+    "liveNow": false,
+    "schemaVersion": 30,
+    "style": "dark",
+    "templating": {
+      "list": []
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "GridBot Trading Dashboard",
+    "uid": "gridbot-trading-working",
+    "version": 1
+  }
+} 

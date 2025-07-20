@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List
 from binance import Client
 from binance.exceptions import BinanceAPIException
 from app.core.metrics import record_binance_api_call, binance_connection_status
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,17 @@ class BinanceService:
     """Servicio para interactuar con la API de Binance"""
     
     def __init__(self):
-        self.api_key = os.getenv("BINANCE_API_KEY")
-        self.api_secret = os.getenv("BINANCE_API_SECRET")
-        self.client = None
+        self.api_key = os.getenv("BINANCE_API_KEY", "")
+        self.api_secret = os.getenv("BINANCE_API_SECRET", "")
+        self.client = Client(self.api_key, self.api_secret)
+        
+        # Cache para información de símbolos
+        self._symbol_info_cache = {}
+        
+        # Inicializar modo simulación
         self.simulation_mode = False
+        
+        # Inicializar cliente automáticamente
         self._initialize_client()
     
     def _initialize_client(self):
@@ -95,31 +103,124 @@ class BinanceService:
             logger.error(f"Error obteniendo balance de {asset}: {e}")
             raise
     
-    def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
-        """Obtiene información de un símbolo"""
-        if self.simulation_mode:
-            logger.info(f"🔄 Modo simulación: Retornando información simulada para {symbol}")
-            return self._get_simulated_symbol_info(symbol)
-        
+    def get_symbol_info(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Obtiene información detallada de un símbolo incluyendo stepSize y minQty"""
         try:
-            start_time = time.time()
-            exchange_info = self.client.get_exchange_info()
-            duration = time.time() - start_time
-            
-            record_binance_api_call("get_exchange_info", "success", duration)
-            
-            # Buscar el símbolo específico
-            for symbol_info in exchange_info['symbols']:
-                if symbol_info['symbol'] == symbol:
-                    return symbol_info
-            
-            raise ValueError(f"Símbolo {symbol} no encontrado")
-            
-        except BinanceAPIException as e:
-            record_binance_api_call("get_exchange_info", f"error_{e.code}", 0)
-            logger.error(f"Error obteniendo información de símbolo {symbol}: {e}")
-            raise
+            if symbol not in self._symbol_info_cache:
+                exchange_info = self.client.get_exchange_info()
+                for s in exchange_info['symbols']:
+                    if s['symbol'] == symbol.upper():
+                        # Extraer filtros importantes
+                        filters = {f['filterType']: f for f in s['filters']}
+                        self._symbol_info_cache[symbol] = {
+                            'symbol': s['symbol'],
+                            'baseAsset': s['baseAsset'],
+                            'quoteAsset': s['quoteAsset'],
+                            'stepSize': float(filters.get('LOT_SIZE', {}).get('stepSize', '0.001')),
+                            'minQty': float(filters.get('LOT_SIZE', {}).get('minQty', '0.001')),
+                            'minNotional': float(filters.get('MIN_NOTIONAL', {}).get('minNotional', '5.0')),
+                            'pricePrecision': s['quotePrecision'],
+                            'quantityPrecision': s['baseAssetPrecision']
+                        }
+                        break
+            return self._symbol_info_cache.get(symbol)
+        except Exception as e:
+            logging.error(f"Error obteniendo información del símbolo {symbol}: {e}")
+            return None
     
+    def adjust_quantity_precision(self, quantity: float, symbol: str) -> Dict[str, Any]:
+        """Ajusta la cantidad a la precisión requerida por Binance y retorna información detallada"""
+        try:
+            symbol_info = self.get_symbol_info(symbol)
+            if not symbol_info:
+                # Fallback a valores por defecto
+                step_size = 0.001
+                min_qty = 0.001
+                min_notional = 5.0
+            else:
+                step_size = symbol_info['stepSize']
+                min_qty = symbol_info['minQty']
+                min_notional = symbol_info['minNotional']
+            
+            # Ajustar a la precisión requerida
+            adjusted_quantity = math.floor(quantity / step_size) * step_size
+            
+            # Asegurar que no sea menor que el mínimo
+            if adjusted_quantity < min_qty:
+                adjusted_quantity = min_qty
+            
+            # Redondear a la precisión correcta
+            precision = int(-math.log10(step_size))
+            adjusted_quantity = round(adjusted_quantity, precision)
+            
+            return {
+                'original_quantity': quantity,
+                'adjusted_quantity': adjusted_quantity,
+                'step_size': step_size,
+                'min_qty': min_qty,
+                'min_notional': min_notional,
+                'precision': precision,
+                'symbol_info': symbol_info
+            }
+        except Exception as e:
+            logging.error(f"Error ajustando precisión de cantidad: {e}")
+            return {
+                'original_quantity': quantity,
+                'adjusted_quantity': quantity,
+                'step_size': 0.001,
+                'min_qty': 0.001,
+                'min_notional': 5.0,
+                'precision': 3,
+                'symbol_info': None,
+                'error': str(e)
+            }
+    
+    def validate_order_parameters(self, symbol: str, quantity: float, side: str, order_type: str = 'MARKET') -> Dict[str, Any]:
+        """Valida los parámetros de una orden antes de ejecutarla"""
+        try:
+            # Ajustar cantidad
+            quantity_info = self.adjust_quantity_precision(quantity, symbol)
+            
+            # Obtener precio actual para validaciones
+            current_price = self.get_current_price(symbol)
+            
+            # Calcular valor notional
+            notional_value = quantity_info['adjusted_quantity'] * current_price
+            
+            # Validaciones
+            errors = []
+            warnings = []
+            
+            if quantity_info['adjusted_quantity'] < quantity_info['min_qty']:
+                errors.append(f"Cantidad {quantity_info['adjusted_quantity']} es menor al mínimo {quantity_info['min_qty']}")
+            
+            if notional_value < quantity_info['min_notional']:
+                errors.append(f"Valor notional ${notional_value:.2f} es menor al mínimo ${quantity_info['min_notional']}")
+            
+            if quantity_info['original_quantity'] != quantity_info['adjusted_quantity']:
+                warnings.append(f"Cantidad ajustada de {quantity_info['original_quantity']} a {quantity_info['adjusted_quantity']} por precisión")
+            
+            return {
+                'is_valid': len(errors) == 0,
+                'errors': errors,
+                'warnings': warnings,
+                'quantity_info': quantity_info,
+                'current_price': current_price,
+                'notional_value': notional_value,
+                'recommended_quantity': quantity_info['adjusted_quantity']
+            }
+        except Exception as e:
+            logging.error(f"Error validando parámetros de orden: {e}")
+            return {
+                'is_valid': False,
+                'errors': [f"Error en validación: {e}"],
+                'warnings': [],
+                'quantity_info': None,
+                'current_price': None,
+                'notional_value': None,
+                'recommended_quantity': None
+            }
+
     def get_current_price(self, symbol: str) -> float:
         """Obtiene el precio actual de un símbolo"""
         if self.simulation_mode:
@@ -128,7 +229,7 @@ class BinanceService:
         
         try:
             start_time = time.time()
-            ticker = self.client.get_symbol_ticker(symbol=symbol)
+            ticker = self.client.get_symbol_ticker(symbol=symbol.upper())
             duration = time.time() - start_time
             
             record_binance_api_call("get_symbol_ticker", "success", duration)

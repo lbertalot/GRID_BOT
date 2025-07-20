@@ -5,6 +5,7 @@ import os
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from app.scheduler.grid_job import update_grid_config, get_grid_config
 from app.services.binance_service import BinanceService
+from app.services.order_validation import OrderValidator
 from sqlalchemy.orm import Session
 from app.models.trade import Trade
 from datetime import datetime
@@ -119,12 +120,13 @@ def place_order(
         else:
             raise HTTPException(status_code=400, detail="Tipo de orden inválido (debe ser MARKET o LIMIT)")
         # Registro en base de datos
+        entry_price = float(result['fills'][0]['price']) if 'fills' in result and result['fills'] else 0.0
         log_trade(
             db=db,
             symbol=order.symbol.upper(),
             side=order.side,
             quantity=order.quantity,
-            entry_price=float(result['fills'][0]['price']) if 'fills' in result and result['fills'] else None
+            entry_price=entry_price
         )
         send_telegram_alert(f"✅ Orden ejecutada: {order.side} {order.quantity} {order.symbol} ({order.type})")
         return {"order": result}
@@ -140,24 +142,110 @@ def run_grid(
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
     client = Client(api_key_binance, api_secret)
+    
+    # Crear validador de órdenes
+    order_validator = OrderValidator(client)
+    
     try:
-        # 1. Calcular niveles de la grilla
+        # 1. Verificar balance antes de ejecutar
+        account_info = client.get_account()
+        balances = {b["asset"]: float(b["free"]) for b in account_info["balances"]}
+        
+        # Extraer el asset base del símbolo (ej: BTCUSDT -> BTC)
+        base_asset = params.symbol.replace("USDT", "").replace("BTC", "BTC").replace("BNB", "BNB")
+        quote_asset = "USDT"
+        
+        # 2. Calcular niveles de la grilla
         grid_levels = calculate_grid_levels(params.min_price, params.max_price, params.grids)
-        # 2. Obtener precio actual
+        
+        # 3. Obtener precio actual
         ticker = client.get_symbol_ticker(symbol=params.symbol.upper())
         current_price = float(ticker["price"])
-        # 3. Decidir acción
-        decision = decide_grid_action(current_price, grid_levels, params.last_action)
+        
+        # 4. Decidir acción
+        last_action = params.last_action or "NONE"
+        decision = decide_grid_action(current_price, grid_levels, last_action)
+        
         if decision["action"]:
-            # 4. Ejecutar orden
-            if decision["action"] == "BUY":
-                result = client.order_market_buy(symbol=params.symbol.upper(), quantity=params.quantity)
-            else:
-                result = client.order_market_sell(symbol=params.symbol.upper(), quantity=params.quantity)
-            return {"decision": decision, "order_result": result}
+            # 5. Verificar balance específico para la acción
+            action = decision["action"]
+            quantity = params.quantity
+            symbol = params.symbol.upper()
+            
+            # Calcular valor estimado de la operación
+            estimated_value = quantity * current_price
+            
+            # Verificar balance según la acción
+            if action == "BUY":
+                required_usdt = estimated_value
+                available_usdt = balances.get(quote_asset, 0)
+                
+                if available_usdt < required_usdt:
+                    error_msg = f"❌ Balance insuficiente para COMPRA\n" \
+                               f"📊 Símbolo: {symbol}\n" \
+                               f"💰 Cantidad: {quantity}\n" \
+                               f"💵 Precio actual: ${current_price:.2f}\n" \
+                               f"💸 Valor requerido: ${required_usdt:.2f}\n" \
+                               f"💳 USDT disponible: ${available_usdt:.2f}\n" \
+                               f"📉 Déficit: ${(required_usdt - available_usdt):.2f}"
+                    send_telegram_alert(error_msg)
+                    raise HTTPException(status_code=400, detail=f"Balance insuficiente: Necesitas ${required_usdt:.2f} USDT, tienes ${available_usdt:.2f}")
+                
+            elif action == "SELL":
+                required_asset = quantity
+                available_asset = balances.get(base_asset, 0)
+                
+                if available_asset < required_asset:
+                    error_msg = f"❌ Balance insuficiente para VENTA\n" \
+                               f"📊 Símbolo: {symbol}\n" \
+                               f"💰 Cantidad requerida: {required_asset}\n" \
+                               f"💳 {base_asset} disponible: {available_asset}\n" \
+                               f"📉 Déficit: {(required_asset - available_asset):.6f} {base_asset}\n" \
+                               f"💵 Valor estimado: ${estimated_value:.2f}"
+                    send_telegram_alert(error_msg)
+                    raise HTTPException(status_code=400, detail=f"Balance insuficiente: Necesitas {required_asset} {base_asset}, tienes {available_asset}")
+            
+            # 6. Ejecutar orden con validación mejorada
+            try:
+                result = order_validator.place_market_order_with_validation(symbol, action, quantity)
+                
+                # 7. Enviar alerta de éxito con detalles
+                action_details = result['action_details']
+                success_msg = f"✅ Grid Trading Exitoso\n" \
+                             f"📊 Símbolo: {action_details['symbol']}\n" \
+                             f"🔄 Acción: {action_details['side']}\n" \
+                             f"💰 Cantidad original: {action_details['original_quantity']}\n" \
+                             f"🔧 Cantidad ajustada: {action_details['adjusted_quantity']}\n" \
+                             f"💵 Precio: ${action_details['current_price']:.2f}\n" \
+                             f"💸 Valor: ${action_details['notional_value']:.2f}\n" \
+                             f"📋 Orden ID: {result['order'].get('orderId', 'N/A')}"
+                send_telegram_alert(success_msg)
+                
+                return {"decision": decision, "order_result": result['order'], "validation": result['validation']}
+                
+            except ValueError as ve:
+                # Error de validación o precisión
+                send_telegram_alert(str(ve))
+                raise HTTPException(status_code=400, detail=str(ve))
+                
         else:
             return {"decision": decision, "message": "No se ejecutó ninguna orden"}
+            
     except Exception as e:
+        # Manejo detallado de errores
+        error_code = getattr(e, 'code', 'N/A')
+        error_message = getattr(e, 'message', str(e))
+        
+        detailed_error = f"❌ Error en Grid Trading\n" \
+                        f"📊 Símbolo: {params.symbol.upper()}\n" \
+                        f"🔢 Código de error: {error_code}\n" \
+                        f"📝 Mensaje: {error_message}\n" \
+                        f"💰 Cantidad: {params.quantity}\n" \
+                        f"📈 Precio min: ${params.min_price}\n" \
+                        f"📉 Precio max: ${params.max_price}\n" \
+                        f"🔗 Grids: {params.grids}"
+        
+        send_telegram_alert(detailed_error)
         raise HTTPException(status_code=400, detail=f"Error en grid trading: {e}")
 
 @router.get("/grid_config")

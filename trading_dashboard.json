@@ -1,0 +1,312 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "GridBot Trading Dashboard",
+    "tags": ["gridbot", "trading", "strategies"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Estado General del Sistema",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"gridbot-api\"}",
+            "legendFormat": "API Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "OFFLINE", "color": "red"},
+                  "1": {"text": "ONLINE", "color": "green"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Balance Total USDT",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_balance_total{asset=\"USDT\"}",
+            "legendFormat": "USDT Balance"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "gradient-gauge"
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Balance Total BNB",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_balance_total{asset=\"BNB\"}",
+            "legendFormat": "BNB Balance"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "gradient-gauge"
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Estrategias Activas",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(gridbot_active_strategies)",
+            "legendFormat": "Active Strategies"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 3}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Órdenes Ejecutadas (Últimas 24h)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "increase(gridbot_orders_executed_total[24h])",
+            "legendFormat": "{{symbol}} - {{side}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 6,
+        "title": "Volumen de Trading (Últimas 24h)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "increase(gridbot_trading_volume_total[24h])",
+            "legendFormat": "{{symbol}} - {{side}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 7,
+        "title": "Ganancias/Pérdidas por Estrategia",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_profit_loss",
+            "legendFormat": "{{strategy}} - {{symbol}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": -1000},
+                {"color": "yellow", "value": 0},
+                {"color": "green", "value": 1000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 8,
+        "title": "Niveles de Grid Activos",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gridbot_grid_levels_active",
+            "legendFormat": "{{symbol}} - {{strategy_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Llamadas API Binance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "increase(gridbot_binance_api_calls_total[1h])",
+            "legendFormat": "{{endpoint}} - {{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
+      },
+      {
+        "id": 10,
+        "title": "Latencia API Binance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(gridbot_binance_api_latency_seconds_sum[5m]) / rate(gridbot_binance_api_latency_seconds_count[5m])",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+      },
+      {
+        "id": 11,
+        "title": "Estado de Conexión Binance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gridbot_binance_connection_status",
+            "legendFormat": "Connection Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "DISCONNECTED", "color": "red"},
+                  "1": {"text": "CONNECTED", "color": "green"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 28}
+      },
+      {
+        "id": 12,
+        "title": "Uso de CPU",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"gridbot-api\"}[5m]) * 100",
+            "legendFormat": "CPU Usage %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 28}
+      },
+      {
+        "id": 13,
+        "title": "Uso de Memoria",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"gridbot-api\"} / 1024 / 1024",
+            "legendFormat": "Memory Usage MB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "MB"
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 18, "y": 28}
+      }
+    ],
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "links": [],
+    "liveNow": false,
+    "schemaVersion": 30,
+    "style": "dark",
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "GridBot Trading Dashboard",
+    "uid": "gridbot-trading",
+    "version": 1
+  }
+} 

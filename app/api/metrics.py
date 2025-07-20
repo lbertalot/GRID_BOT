@@ -21,18 +21,34 @@ async def metrics():
     return get_metrics()
 
 @router.get("/trading")
-async def trading_metrics(current_user: str = Depends(get_api_key)):
+async def trading_metrics(api_key: str = Depends(get_api_key)):
     """Métricas específicas de trading"""
     return get_trading_metrics()
 
 @router.get("/binance")
-async def binance_metrics(current_user: str = Depends(get_api_key)):
+async def binance_metrics(api_key: str = Depends(get_api_key)):
     """Métricas de la API de Binance"""
     return get_binance_metrics()
 
 @router.get("/strategies")
-async def strategy_metrics(current_user: str = Depends(get_api_key)):
+async def strategy_metrics(api_key: str = Depends(get_api_key)):
     """Métricas de estrategias"""
+    return get_strategy_metrics()
+
+# Endpoints públicos para Prometheus (sin autenticación)
+@router.get("/prometheus/trading")
+async def prometheus_trading_metrics():
+    """Métricas de trading para Prometheus (sin autenticación)"""
+    return get_trading_metrics()
+
+@router.get("/prometheus/binance")
+async def prometheus_binance_metrics():
+    """Métricas de Binance para Prometheus (sin autenticación)"""
+    return get_binance_metrics()
+
+@router.get("/prometheus/strategies")
+async def prometheus_strategy_metrics():
+    """Métricas de estrategias para Prometheus (sin autenticación)"""
     return get_strategy_metrics()
 
 @router.post("/record-order")
@@ -45,7 +61,7 @@ async def record_order(
     price: float,
     success: bool = True,
     error_type: str = "",
-    current_user: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key)
 ):
     """Registra una orden para métricas"""
     if success:
@@ -60,7 +76,7 @@ async def update_balance_metric(
     asset: str,
     free: float,
     locked: float,
-    current_user: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key)
 ):
     """Actualiza métricas de balance"""
     update_balance(asset, free, locked)
@@ -70,7 +86,7 @@ async def update_balance_metric(
 async def update_strategy_metric(
     strategy_type: str,
     active_count: int,
-    current_user: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key)
 ):
     """Actualiza métricas de estrategias"""
     update_strategy_status(strategy_type, active_count)
@@ -81,7 +97,7 @@ async def update_pnl_metric(
     symbol: str,
     strategy: str,
     pnl: float,
-    current_user: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key)
 ):
     """Actualiza métricas de ganancias/pérdidas"""
     update_profit_loss(symbol, strategy, pnl)
