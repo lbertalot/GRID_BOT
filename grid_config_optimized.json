@@ -1,0 +1,79 @@
+{
+  "BNBUSDT": {
+    "symbol": "BNBUSDT",
+    "min_price": 760.6858000000001,
+    "max_price": 791.7342,
+    "grids": 6,
+    "quantity": 0.007,
+    "last_action": null,
+    "is_active": true
+  },
+  "ANIMEUSDT": {
+    "symbol": "ANIMEUSDT",
+    "min_price": 0.022716399999999998,
+    "max_price": 0.0236436,
+    "grids": 6,
+    "quantity": 0.1,
+    "last_action": null,
+    "is_active": true
+  },
+  "GPSUSDT": {
+    "symbol": "GPSUSDT",
+    "min_price": 0.0225792,
+    "max_price": 0.023500800000000002,
+    "grids": 6,
+    "quantity": 0.1,
+    "last_action": null,
+    "is_active": true
+  },
+  "GUNUSDT": {
+    "symbol": "GUNUSDT",
+    "min_price": 0.0340452,
+    "max_price": 0.0354348,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true
+  },
+  "SIGNUSDT": {
+    "symbol": "SIGNUSDT",
+    "min_price": 0.0782432,
+    "max_price": 0.08143679999999999,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true
+  },
+  "SPKUSDT": {
+    "symbol": "SPKUSDT",
+    "min_price": 0.04228798,
+    "max_price": 0.04401402,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true
+  },
+  "HOMEUSDT": {
+    "symbol": "HOMEUSDT",
+    "min_price": 0.02548,
+    "max_price": 0.02652,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true
+  },
+  "HUMAUSDT": {
+    "symbol": "HUMAUSDT",
+    "min_price": 0.037818199999999996,
+    "max_price": 0.0393618,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true
+  },
+  "_optimization_metadata": {
+    "optimized_at": "2025-07-21 13:39:25",
+    "optimization_version": "5.0",
+    "ajuste_tipo": "Rangos ajustados a precios actuales con un 2.0% de margen."
+  }
+}

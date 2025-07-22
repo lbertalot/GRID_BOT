@@ -1,6 +1,7 @@
 import math
 import logging
 from typing import Dict, Any, Optional
+
 from binance import Client
 from binance.exceptions import BinanceAPIException
 
@@ -10,6 +11,7 @@ class OrderValidator:
     """Clase para validar y ajustar parámetros de órdenes de trading"""
     
     def __init__(self, client: Client):
+        """Ejecuta __init__."""
         self.client = client
         self._symbol_info_cache = {}
     

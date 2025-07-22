@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16
@@ -25,6 +23,8 @@ services:
       - db
     env_file:
       - .env
+    volumes:
+      - ./grid_config_optimized.json:/app/grid_config_optimized.json
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   prometheus:
@@ -58,6 +58,19 @@ services:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gridbot_frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    restart: unless-stopped
 
 volumes:
   pgdata:

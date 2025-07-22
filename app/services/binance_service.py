@@ -2,10 +2,12 @@ import os
 import time
 import logging
 from typing import Dict, Any, Optional, List
+import math
+
 from binance import Client
 from binance.exceptions import BinanceAPIException
+
 from app.core.metrics import record_binance_api_call, binance_connection_status
-import math
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,7 @@ class BinanceService:
     """Servicio para interactuar con la API de Binance"""
     
     def __init__(self):
+        """Ejecuta __init__."""
         self.api_key = os.getenv("BINANCE_API_KEY", "")
         self.api_secret = os.getenv("BINANCE_API_SECRET", "")
         self.client = Client(self.api_key, self.api_secret)
@@ -240,7 +243,7 @@ class BinanceService:
             logger.error(f"Error obteniendo precio de {symbol}: {e}")
             raise
     
-    def place_order(self, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
+    def execute_trading_order(self, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
         """Coloca una orden en Binance"""
         if self.simulation_mode:
             logger.info(f"🔄 Modo simulación: Simulando orden {side} {quantity} {symbol} @ {price}")
@@ -261,13 +264,13 @@ class BinanceService:
                     order = self.client.order_limit_sell(symbol=symbol, quantity=quantity, price=str(price))
             
             duration = time.time() - start_time
-            record_binance_api_call("place_order", "success", duration)
+            record_binance_api_call("execute_trading_order", "success", duration)
             
             logger.info(f"✅ Orden colocada exitosamente: {order['orderId']}")
             return order
             
         except BinanceAPIException as e:
-            record_binance_api_call("place_order", f"error_{e.code}", 0)
+            record_binance_api_call("execute_trading_order", f"error_{e.code}", 0)
             logger.error(f"Error colocando orden: {e}")
             raise
     
