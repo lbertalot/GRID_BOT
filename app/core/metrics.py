@@ -127,51 +127,72 @@ balance_locked = Gauge(
 
 def record_order_execution(symbol: str, side: str, order_type: str, strategy: str, quantity: float, price: float):
     """Registra una orden ejecutada exitosamente"""
-    orders_executed.labels(symbol=symbol, side=side, type=order_type, strategy=strategy).inc()
-    
-    # Calcular volumen
-    volume = quantity * price
-    trading_volume.labels(symbol=symbol, side=side).inc(volume)
-    
-    # Actualizar balance estimado
-    if side == "BUY":
-        # Compra: reducir USDT, aumentar asset
-        balance_total.labels(asset="USDT").dec(volume)
-        balance_total.labels(asset=symbol.replace("USDT", "")).inc(quantity)
-    else:
-        # Venta: aumentar USDT, reducir asset
-        balance_total.labels(asset="USDT").inc(volume)
-        balance_total.labels(asset=symbol.replace("USDT", "")).dec(quantity)
-    
-    print(f"📊 Métrica registrada: Orden {side} {quantity} {symbol} @ ${price}")
+    try:
+        orders_executed.labels(symbol=symbol, side=side, type=order_type, strategy=strategy).inc()
+        
+        # Calcular volumen
+        volume = quantity * price
+        trading_volume.labels(symbol=symbol, side=side).inc(volume)
+        
+        # Actualizar balance estimado
+        if side == "BUY":
+            # Compra: reducir USDT, aumentar asset
+            balance_total.labels(asset="USDT").dec(volume)
+            balance_total.labels(asset=symbol.replace("USDT", "")).inc(quantity)
+        else:
+            # Venta: aumentar USDT, reducir asset
+            balance_total.labels(asset="USDT").inc(volume)
+            balance_total.labels(asset=symbol.replace("USDT", "")).dec(quantity)
+        
+        print(f"📊 Métrica registrada: Orden {side} {quantity} {symbol} @ ${price}")
+    except Exception as e:
+        print(f"❌ Error registrando métrica de orden: {e}")
 
 def record_order_failure(symbol: str, side: str, order_type: str, error_type: str):
     """Registra una orden fallida"""
-    orders_failed.labels(symbol=symbol, side=side, type=order_type, error_type=error_type).inc()
-    print(f"📊 Métrica registrada: Orden fallida {side} {symbol} - {error_type}")
+    try:
+        orders_failed.labels(symbol=symbol, side=side, type=order_type, error_type=error_type).inc()
+        print(f"📊 Métrica registrada: Orden fallida {side} {symbol} - {error_type}")
+    except Exception as e:
+        print(f"❌ Error registrando métrica de orden fallida: {e}")
 
 def record_api_request(method: str, endpoint: str, status: int, duration: float):
     """Registra una petición API"""
-    api_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
-    api_request_duration.labels(method=method, endpoint=endpoint).observe(duration)
+    try:
+        api_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
+        api_request_duration.labels(method=method, endpoint=endpoint).observe(duration)
+    except Exception as e:
+        print(f"❌ Error registrando métrica de API: {e}")
 
 def record_binance_api_call(endpoint: str, status: str, duration: float):
     """Registra una llamada a la API de Binance"""
-    binance_api_calls.labels(endpoint=endpoint, status=status).inc()
-    binance_api_latency.labels(endpoint=endpoint).observe(duration)
+    try:
+        binance_api_calls.labels(endpoint=endpoint, status=status).inc()
+        binance_api_latency.labels(endpoint=endpoint).observe(duration)
+    except Exception as e:
+        print(f"❌ Error registrando métrica de Binance: {e}")
 
 def update_balance(asset: str, free: float, locked: float):
     """Actualiza métricas de balance"""
-    balance_total.labels(asset=asset).set(free)
-    balance_locked.labels(asset=asset).set(locked)
+    try:
+        balance_total.labels(asset=asset).set(free)
+        balance_locked.labels(asset=asset).set(locked)
+    except Exception as e:
+        print(f"❌ Error actualizando métrica de balance: {e}")
 
 def update_strategy_status(strategy_type: str, active_count: int):
     """Actualiza el estado de las estrategias"""
-    active_strategies.labels(strategy_type=strategy_type).set(active_count)
+    try:
+        active_strategies.labels(strategy_type=strategy_type).set(active_count)
+    except Exception as e:
+        print(f"❌ Error actualizando métrica de estrategia: {e}")
 
 def update_profit_loss(symbol: str, strategy: str, pnl: float):
     """Actualiza ganancias/pérdidas"""
-    profit_loss.labels(symbol=symbol, strategy=strategy).set(pnl)
+    try:
+        profit_loss.labels(symbol=symbol, strategy=strategy).set(pnl)
+    except Exception as e:
+        print(f"❌ Error actualizando métrica de P&L: {e}")
 
 # ============================================================================
 # ENDPOINTS DE MÉTRICAS
@@ -179,10 +200,17 @@ def update_profit_loss(symbol: str, strategy: str, pnl: float):
 
 def get_metrics() -> Response:
     """Endpoint para obtener métricas de Prometheus"""
-    return Response(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST
-    )
+    try:
+        return Response(
+            content=generate_latest(),
+            media_type=CONTENT_TYPE_LATEST
+        )
+    except Exception as e:
+        print(f"❌ Error generando métricas: {e}")
+        return Response(
+            content="",
+            media_type=CONTENT_TYPE_LATEST
+        )
 
 def get_trading_metrics() -> Dict[str, Any]:
     """Endpoint para obtener métricas específicas de trading"""
@@ -232,11 +260,11 @@ def get_strategy_metrics() -> Dict[str, Any]:
     }
 
 # ============================================================================
-# MIDDLEWARE PARA MÉTRICAS AUTOMÁTICAS
+# MIDDLEWARE SIMPLIFICADO PARA MÉTRICAS
 # ============================================================================
 
 class MetricsMiddleware:
-    """Middleware para registrar métricas automáticamente"""
+    """Middleware simplificado para registrar métricas automáticamente"""
     
     def __init__(self, app):
         self.app = app
@@ -249,20 +277,22 @@ class MetricsMiddleware:
             # Registrar inicio de petición
             start_time = time.time()
             
-            # Crear wrapper para capturar status
-            status_code = [200]  # Default
-            
+            # Wrapper para capturar la respuesta
             async def send_wrapper(message):
                 if message["type"] == "http.response.start":
-                    status_code[0] = message["status"]
+                    # Calcular duración
+                    duration = time.time() - start_time
+                    status = message.get("status", 500)
+                    
+                    # Registrar métrica de forma segura
+                    try:
+                        record_api_request(method, path, status, duration)
+                    except Exception as e:
+                        print(f"❌ Error en middleware de métricas: {e}")
+                
                 await send(message)
             
-            # Procesar petición
+            # Continuar con la petición
             await self.app(scope, receive, send_wrapper)
-            
-            # Registrar métricas
-            duration = time.time() - start_time
-            record_api_request(method, path, status_code[0], duration)
-        
         else:
             await self.app(scope, receive, send) 

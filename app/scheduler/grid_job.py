@@ -1,20 +1,88 @@
-from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
-from app.services.order_validation import OrderValidator
-from binance import Client
 import os
 import logging
 import math
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from binance import Client
+
+from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
+from app.services.order_validation import OrderValidator
 from app.services.telegram_alert import send_telegram_alert
 
-# Parámetros configurables (por defecto)
-grid_config = {
-    'symbol': 'BNBUSDT',  # Cambiado a BNBUSDT para usar el balance disponible
-    'min_price': 700,
-    'max_price': 800,
-    'grids': 8,
-    'quantity': 0.002,  # Cantidad ajustada al balance disponible (0.00243376 BNB)
-    'last_action': None
+# Configuración multi-activo final ajustada según requisitos Binance
+multi_asset_grid_config = {
+    'BNBUSDT': {
+        'symbol': 'BNBUSDT',
+        'min_price': 706.58,
+        'max_price': 780.96,
+        'grids': 8,
+        'quantity': 0.007,  # Ajustado para cumplir mínimo notional $5
+        'last_action': None,
+        'is_active': True,
+    },
+    'ANIMEUSDT': {
+        'symbol': 'ANIMEUSDT',
+        'min_price': 0.018,
+        'max_price': 0.02,
+        'grids': 6,
+        'quantity': 0.1,
+        'last_action': None,
+        'is_active': True,
+    },
+    'GPSUSDT': {
+        'symbol': 'GPSUSDT',
+        'min_price': 0.022,
+        'max_price': 0.025,
+        'grids': 6,
+        'quantity': 0.1,
+        'last_action': None,
+        'is_active': True,
+    },
+    'GUNUSDT': {
+        'symbol': 'GUNUSDT',
+        'min_price': 0.034,
+        'max_price': 0.037,
+        'grids': 6,
+        'quantity': 1.0,
+        'last_action': None,
+        'is_active': True,
+    },
+    'SIGNUSDT': {
+        'symbol': 'SIGNUSDT',
+        'min_price': 0.072,
+        'max_price': 0.08,
+        'grids': 6,
+        'quantity': 1.0,
+        'last_action': None,
+        'is_active': True,
+    },
+    'SPKUSDT': {
+        'symbol': 'SPKUSDT',
+        'min_price': 0.036,
+        'max_price': 0.04,
+        'grids': 6,
+        'quantity': 1.0,
+        'last_action': None,
+        'is_active': True,
+    },
+    'HOMEUSDT': {
+        'symbol': 'HOMEUSDT',
+        'min_price': 0.024,
+        'max_price': 0.027,
+        'grids': 6,
+        'quantity': 1.0,
+        'last_action': None,
+        'is_active': True,
+    },
+    'HUMAUSDT': {
+        'symbol': 'HUMAUSDT',
+        'min_price': 0.034,
+        'max_price': 0.038,
+        'grids': 6,
+        'quantity': 1.0,
+        'last_action': None,
+        'is_active': True,
+    },
 }
 
 def adjust_quantity_precision(quantity: float, symbol: str = "BNBUSDT") -> float:
@@ -23,6 +91,13 @@ def adjust_quantity_precision(quantity: float, symbol: str = "BNBUSDT") -> float
     # Step sizes por símbolo (en producción se obtendrían de la API)
     step_sizes = {
         "BNBUSDT": 0.001,
+        "ANIMEUSDT": 0.1,
+        "GPSUSDT": 0.1,
+        "GUNUSDT": 1.0,
+        "SIGNUSDT": 1.0,
+        "SPKUSDT": 1.0,
+        "HOMEUSDT": 1.0,
+        "HUMAUSDT": 1.0,
         "BTCUSDT": 0.00001,
         "ETHUSDT": 0.001,
         "LTCUSDT": 0.01,
@@ -44,7 +119,8 @@ def adjust_quantity_precision(quantity: float, symbol: str = "BNBUSDT") -> float
 
 scheduler = None
 
-def run_grid_job():
+def execute_grid_trading_job():
+    """Ejecuta execute_grid_trading_job."""
     api_key = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
     client = Client(api_key, api_secret)
@@ -57,90 +133,106 @@ def run_grid_job():
         account_info = client.get_account()
         balances = {b["asset"]: float(b["free"]) for b in account_info["balances"]}
         
-        symbol = grid_config['symbol']
-        base_asset = symbol.replace("USDT", "")
-        
-        # Verificar si tenemos suficiente balance
-        if base_asset in balances and balances[base_asset] >= grid_config['quantity']:
-            grid_levels = calculate_grid_levels(grid_config['min_price'], grid_config['max_price'], grid_config['grids'])
-            ticker = client.get_symbol_ticker(symbol=symbol.upper())
-            current_price = float(ticker["price"])
-            
-            last_action = grid_config['last_action'] or "NONE"
-            decision = decide_grid_action(current_price, grid_levels, last_action)
-            
-            if decision["action"]:
-                action = decision["action"]
-                quantity = grid_config['quantity']
+        # Ejecutar grid trading para cada activo configurado
+        for symbol, config in multi_asset_grid_config.items():
+            if not config.get('is_active', True):
+                continue
                 
-                # Verificar balance específico para la acción
-                if action == "BUY":
-                    # Verificar USDT para compra
-                    required_usdt = quantity * current_price
-                    if balances.get('USDT', 0) >= required_usdt:
-                        try:
-                            result = order_validator.place_market_order_with_validation(symbol, action, quantity)
+            try:
+                # Obtener precio actual
+                ticker = client.get_symbol_ticker(symbol=symbol)
+                current_price = float(ticker['price'])
+                
+                # Calcular niveles de grid
+                grid_levels = calculate_grid_levels(
+                    config['min_price'],
+                    config['max_price'],
+                    config['grids']
+                )
+                
+                # Decidir acción
+                decision = decide_grid_action(
+                    current_price,
+                    grid_levels,
+                    config.get('last_action', 'NONE')
+                )
+                
+                if decision['action']:
+                    # Ajustar cantidad a la precisión requerida
+                    adjusted_quantity = adjust_quantity_precision(config['quantity'], symbol)
+                    
+                    # Verificar balance suficiente
+                    base_asset = symbol.replace('USDT', '')
+                    available_balance = balances.get(base_asset, 0)
+                    
+                    if decision['action'] == 'BUY':
+                        # Para compras, verificar USDT disponible
+                        usdt_needed = adjusted_quantity * current_price
+                        if balances.get('USDT', 0) < usdt_needed:
+                            logging.warning(f"USDT insuficiente para {symbol}: {usdt_needed} USDT necesarios")
+                            continue
+                    else:  # SELL
+                        # Para ventas, verificar activo disponible
+                        if available_balance < adjusted_quantity:
+                            logging.warning(f"Balance insuficiente para {symbol}: {adjusted_quantity} {base_asset} necesarios")
+                            continue
+                    
+                    # Ejecutar orden
+                    result = order_validator.place_market_order_with_validation(
+                        symbol, decision['action'], adjusted_quantity
+                    )
+                    
+                    if result.get('success'):
+                        # Actualizar última acción
+                        config['last_action'] = decision['action']
+                        
+                        # Enviar notificación
+                        order_info = result.get('order', {})
+                        fills = order_info.get('fills', [])
+                        
+                        if fills:
+                            executed_price = float(fills[0]['price'])
+                            executed_qty = float(fills[0]['qty'])
                             
-                            # Enviar alerta de éxito con detalles
-                            action_details = result['action_details']
-                            success_msg = f"🤖 GridBot ejecutó {action_details['side']} {action_details['adjusted_quantity']} {action_details['symbol']} a ${action_details['current_price']:.2f}\n" \
-                                         f"💰 Cantidad original: {action_details['original_quantity']}\n" \
-                                         f"💸 Valor: ${action_details['notional_value']:.2f}\n" \
-                                         f"📋 Orden ID: {result['order'].get('orderId', 'N/A')}"
-                            send_telegram_alert(success_msg)
-                            
-                            grid_config['last_action'] = action
-                            logging.info(f"GridBot ejecutó {action} en {decision['level']}: {result['order']}")
-                            
-                        except ValueError as ve:
-                            # Error de validación o precisión
-                            send_telegram_alert(str(ve))
-                            logging.error(f"Error de validación en grid trading: {ve}")
+                            message = (
+                                f"🤖 GridBot ejecutó {decision['action']} {executed_qty} {symbol} "
+                                f"a ${executed_price:.6f}\n"
+                                f"💰 Cantidad original: {adjusted_quantity}\n"
+                                f"💸 Valor: ${executed_price * executed_qty:.2f}\n"
+                                f"📋 Orden ID: {order_info.get('orderId', 'N/A')}"
+                            )
+                        else:
+                            message = (
+                                f"🤖 GridBot ejecutó {decision['action']} {adjusted_quantity} {symbol}\n"
+                                f"📋 Orden ID: {order_info.get('orderId', 'N/A')}"
+                            )
+                        
+                        send_telegram_alert(message)
+                        logging.info(f"GridBot ejecutó {decision['action']} en {decision['price']}: {order_info}")
                     else:
-                        logging.warning(f"Balance USDT insuficiente para compra: {balances.get('USDT', 0)} < {required_usdt}")
-                else:
-                    # Verificar asset para venta
-                    if balances.get(base_asset, 0) >= quantity:
-                        try:
-                            result = order_validator.place_market_order_with_validation(symbol, action, quantity)
-                            
-                            # Enviar alerta de éxito con detalles
-                            action_details = result['action_details']
-                            success_msg = f"🤖 GridBot ejecutó {action_details['side']} {action_details['adjusted_quantity']} {action_details['symbol']} a ${action_details['current_price']:.2f}\n" \
-                                         f"💰 Cantidad original: {action_details['original_quantity']}\n" \
-                                         f"💸 Valor: ${action_details['notional_value']:.2f}\n" \
-                                         f"📋 Orden ID: {result['order'].get('orderId', 'N/A')}"
-                            send_telegram_alert(success_msg)
-                            
-                            grid_config['last_action'] = action
-                            logging.info(f"GridBot ejecutó {action} en {decision['level']}: {result['order']}")
-                            
-                        except ValueError as ve:
-                            # Error de validación o precisión
-                            send_telegram_alert(str(ve))
-                            logging.error(f"Error de validación en grid trading: {ve}")
-                    else:
-                        logging.warning(f"Balance {base_asset} insuficiente para venta: {balances.get(base_asset, 0)} < {quantity}")
-            else:
-                logging.info(f"GridBot no ejecutó ninguna orden. Precio actual: ${current_price:.2f}")
-        else:
-            logging.warning(f"Balance insuficiente de {base_asset}: {balances.get(base_asset, 0)} < {grid_config['quantity']}")
-            
+                        logging.error(f"Error ejecutando orden para {symbol}: {result.get('error')}")
+                        
+            except Exception as e:
+                logging.error(f"Error procesando {symbol}: {e}")
+                continue
+                
     except Exception as e:
-        logging.error(f"Error en grid trading: {e}")
-        send_telegram_alert(f"❌ Error en grid trading: {e}")
+        logging.error(f"Error en grid job: {e}")
 
 def update_grid_config(new_config: dict):
-    global grid_config
-    grid_config.update(new_config)
-    logging.info(f"GridBot config actualizada: {grid_config}")
+    """Actualizar configuración del grid"""
+    global multi_asset_grid_config
+    multi_asset_grid_config.update(new_config)
 
 def get_grid_config() -> dict:
-    return grid_config.copy()
+    """Obtener configuración actual del grid"""
+    return multi_asset_grid_config
 
 def start_scheduler():
+    """Iniciar el scheduler de GridBot"""
     global scheduler
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_grid_job, 'interval', seconds=60)
-    scheduler.start()
-    logging.info("Scheduler de GridBot iniciado.") 
+    if scheduler is None:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(execute_grid_trading_job, 'interval', seconds=60, id='grid_trading_job')
+        scheduler.start()
+        logging.info("Scheduler de GridBot multi-activo iniciado.") 

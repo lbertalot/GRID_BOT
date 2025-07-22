@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel
 from binance import Client
 import os
+import json
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from app.scheduler.grid_job import update_grid_config, get_grid_config
 from app.services.binance_service import BinanceService
@@ -250,7 +251,12 @@ def run_grid(
 
 @router.get("/grid_config")
 def get_grid_config_endpoint():
-    return get_grid_config()
+    try:
+        with open('grid_config_optimized.json', 'r') as f:
+            config = json.load(f)
+        return config
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading config: {e}")
 
 @router.post("/grid_config")
 def update_grid_config_endpoint(

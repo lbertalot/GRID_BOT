@@ -18,57 +18,92 @@ import asyncio
 from binance import Client
 import os
 from dotenv import load_dotenv
+import time
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 @router.get("/")
 async def metrics():
     """Endpoint principal de métricas de Prometheus"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/metrics/metrics/", 200)
-    return get_metrics()
+    start_time = time.time()
+    try:
+        result = get_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/metrics/", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/metrics/", 500, duration)
+        raise e
 
 @router.get("/health")
 async def metrics_health():
     """Health check de métricas"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/metrics/health", 200)
-    return {
-        "status": "healthy",
-        "metrics_endpoints": {
-            "prometheus": "/api/metrics/metrics/",
-            "trading": "/api/metrics/trading",
-            "binance": "/api/metrics/binance",
-            "strategies": "/api/metrics/strategies"
+    start_time = time.time()
+    try:
+        result = {
+            "status": "healthy",
+            "metrics_endpoints": {
+                "prometheus": "/api/metrics/metrics/",
+                "trading": "/api/metrics/trading",
+                "binance": "/api/metrics/binance",
+                "strategies": "/api/metrics/strategies"
+            }
         }
-    }
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/health", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/health", 500, duration)
+        raise e
 
 @router.get("/trading")
 async def trading_metrics():
     """Métricas de trading"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/metrics/trading", 200)
-    return get_trading_metrics()
+    start_time = time.time()
+    try:
+        result = get_trading_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/trading", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/trading", 500, duration)
+        raise e
 
 @router.get("/binance")
 async def binance_metrics():
     """Métricas de Binance"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/metrics/binance", 200)
-    return get_binance_metrics()
+    start_time = time.time()
+    try:
+        result = get_binance_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/binance", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/binance", 500, duration)
+        raise e
 
 @router.get("/strategies")
 async def strategy_metrics():
     """Métricas de estrategias"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/metrics/strategies", 200)
-    return get_strategy_metrics()
+    start_time = time.time()
+    try:
+        result = get_strategy_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/strategies", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/strategies", 500, duration)
+        raise e
 
 @router.post("/update-pnl")
 async def update_pnl_metrics():
     """Actualizar métricas de P&L en tiempo real"""
-    # Registrar métrica de API request
-    record_api_request("POST", "/api/metrics/update-pnl", 200)
+    start_time = time.time()
     try:
         # Cargar variables de entorno
         load_dotenv()
@@ -76,6 +111,8 @@ async def update_pnl_metrics():
         api_secret = os.getenv("BINANCE_API_SECRET")
         
         if not api_key or not api_secret:
+            duration = time.time() - start_time
+            record_api_request("POST", "/api/metrics/update-pnl", 400, duration)
             return {"error": "Credenciales de Binance no configuradas"}
         
         # Conectar a Binance
@@ -139,7 +176,7 @@ async def update_pnl_metrics():
                     'value_usdt': data['value_usdt']
                 })
         
-        return {
+        result = {
             "success": True,
             "data": {
                 "total_value_usdt": total_value_usdt,
@@ -152,32 +189,57 @@ async def update_pnl_metrics():
             }
         }
         
+        duration = time.time() - start_time
+        record_api_request("POST", "/api/metrics/update-pnl", 200, duration)
+        return result
+        
     except Exception as e:
-        # Registrar métrica de error
-        record_api_request("POST", "/api/metrics/update-pnl", 500)
+        duration = time.time() - start_time
+        record_api_request("POST", "/api/metrics/update-pnl", 500, duration)
         return {"error": f"Error calculando P&L: {str(e)}"}
 
 # Endpoints públicos para Prometheus (sin autenticación)
 @router.get("/prometheus/trading")
 async def prometheus_trading_metrics():
     """Métricas de trading para Prometheus (sin autenticación)"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/prometheus/trading", 200)
-    return get_trading_metrics()
+    start_time = time.time()
+    try:
+        result = get_trading_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/trading", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/trading", 500, duration)
+        raise e
 
 @router.get("/prometheus/binance")
 async def prometheus_binance_metrics():
     """Métricas de Binance para Prometheus (sin autenticación)"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/prometheus/binance", 200)
-    return get_binance_metrics()
+    start_time = time.time()
+    try:
+        result = get_binance_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/binance", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/binance", 500, duration)
+        raise e
 
 @router.get("/prometheus/strategies")
 async def prometheus_strategy_metrics():
     """Métricas de estrategias para Prometheus (sin autenticación)"""
-    # Registrar métrica de API request
-    record_api_request("GET", "/api/prometheus/strategies", 200)
-    return get_strategy_metrics()
+    start_time = time.time()
+    try:
+        result = get_strategy_metrics()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/strategies", 200, duration)
+        return result
+    except Exception as e:
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/prometheus/strategies", 500, duration)
+        raise e
 
 @router.post("/record-order")
 async def record_order(

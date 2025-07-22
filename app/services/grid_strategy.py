@@ -1,6 +1,7 @@
 from typing import List, Dict
 
 def calculate_grid_levels(min_price: float, max_price: float, grids: int) -> List[float]:
+    """Ejecuta calculate_grid_levels."""
     if grids < 2:
         raise ValueError("El número de grillas debe ser al menos 2")
     step = (max_price - min_price) / (grids - 1)
