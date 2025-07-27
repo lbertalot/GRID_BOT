@@ -1,0 +1,41 @@
+{
+  "sprint": "1.2 - Dashboard de Rendimiento Avanzado",
+  "timestamp": "2025-07-26T19:03:17.430608",
+  "status": "COMPLETADO",
+  "funcionalidades_implementadas": [
+    "PerformanceAnalyzer con métricas avanzadas",
+    "Cálculo de Sharpe Ratio, drawdown, volatilidad",
+    "Análisis de distribución del portafolio",
+    "Rendimiento por activo individual",
+    "API endpoints para métricas avanzadas",
+    "Dashboard web moderno con gráficos",
+    "Endpoints de riesgo y estadísticas de trading",
+    "Visualización en tiempo real"
+  ],
+  "endpoints_disponibles": [
+    "/api/v1/metrics/performance",
+    "/api/v1/metrics/allocation",
+    "/api/v1/metrics/portfolio/value",
+    "/api/v1/metrics/risk",
+    "/api/v1/metrics/trading/stats",
+    "/api/v1/metrics/health",
+    "/dashboard"
+  ],
+  "tecnologias_utilizadas": [
+    "FastAPI para API REST",
+    "Chart.js para visualizaciones",
+    "Axios para llamadas HTTP",
+    "Pandas y NumPy para análisis",
+    "HTML5/CSS3 para interfaz moderna"
+  ],
+  "metricas_calculadas": [
+    "Retorno total",
+    "Sharpe Ratio",
+    "Máximo drawdown",
+    "Volatilidad anualizada",
+    "Win rate",
+    "Profit factor",
+    "Estadísticas de trading",
+    "Distribución del portafolio"
+  ]
+}

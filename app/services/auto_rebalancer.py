@@ -1,0 +1,382 @@
+"""
+AutoRebalancer Service - Sistema de rebalanceo automático para Grid Trading Bot
+
+Este servicio resuelve el problema de saldos insuficientes detectado en el análisis:
+- Solo 1/8 activos operativos (SPKUSDT)
+- 7 activos con saldos insuficientes
+- Necesita $29.35 USDT para activar todos los activos
+"""
+
+import asyncio
+import logging
+from typing import Dict, List, Optional, Tuple
+from decimal import Decimal
+from datetime import datetime
+
+from app.services.binance_client import client
+from app.core.config import settings
+from app.models.grid_config import GridConfig
+
+logger = logging.getLogger(__name__)
+
+
+class AutoRebalancer:
+    """
+    Servicio de rebalanceo automático para mantener saldos operativos
+    en todos los activos configurados para Grid Trading.
+    """
+    
+    def __init__(self):
+        self.min_balance_threshold = 10.0  # USDT mínimo por activo
+        self.rebalance_frequency = 3600  # segundos (1 hora)
+        self.binance_client = client
+        self.is_rebalancing = False
+        
+    async def check_and_rebalance(self) -> Dict:
+        """
+        Verifica y rebalancea saldos automáticamente.
+        
+        Returns:
+            Dict con el resultado del rebalanceo
+        """
+        if self.is_rebalancing:
+            logger.warning("Rebalanceo ya en progreso, saltando ciclo")
+            return {"status": "skipped", "reason": "already_rebalancing"}
+        
+        try:
+            self.is_rebalancing = True
+            logger.info("Iniciando ciclo de rebalanceo automático")
+            
+            # Obtener balances actuales
+            balances = await self.get_current_balances()
+            logger.info(f"Balances actuales: {balances}")
+            
+            # Obtener configuración de grid
+            grid_config = await self.get_grid_config()
+            
+            # Analizar necesidades de rebalanceo
+            rebalance_needs = await self.analyze_rebalance_needs(balances, grid_config)
+            
+            if not rebalance_needs:
+                logger.info("No se requiere rebalanceo")
+                return {"status": "success", "message": "No rebalance needed"}
+            
+            # Ejecutar rebalanceo
+            results = await self.execute_rebalance(rebalance_needs)
+            
+            logger.info(f"Rebalanceo completado: {results}")
+            return {
+                "status": "success",
+                "rebalance_results": results,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en rebalanceo automático: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            self.is_rebalancing = False
+    
+    async def get_current_balances(self) -> Dict[str, float]:
+        """
+        Obtiene balances actuales de todos los activos.
+        
+        Returns:
+            Dict con balances por activo
+        """
+        try:
+            account_info = self.binance_client.get_account()
+            balances = {}
+            
+            for balance in account_info['balances']:
+                asset = balance['asset']
+                free_balance = float(balance['free'])
+                
+                if free_balance > 0:
+                    balances[asset] = free_balance
+            
+            return balances
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo balances: {e}")
+            return {}
+    
+    async def get_grid_config(self) -> Dict[str, GridConfig]:
+        """
+        Obtiene la configuración actual de grid trading.
+        
+        Returns:
+            Dict con configuración por símbolo
+        """
+        try:
+            # Cargar configuración desde archivo JSON
+            import json
+            with open('grid_config_optimized.json', 'r') as f:
+                config_data = json.load(f)
+            
+            grid_configs = {}
+            for symbol, config in config_data.items():
+                if symbol != "_optimization_metadata":
+                    # Crear un objeto simple con los datos de configuración
+                    grid_configs[symbol] = type('GridConfig', (), {
+                        'symbol': config.get('symbol'),
+                        'min_price': config.get('min_price'),
+                        'max_price': config.get('max_price'),
+                        'grids': config.get('grids'),
+                        'quantity': config.get('quantity'),
+                        'last_action': config.get('last_action'),
+                        'is_active': config.get('is_active', True)
+                    })()
+            
+            return grid_configs
+            
+        except Exception as e:
+            logger.error(f"Error cargando configuración de grid: {e}")
+            return {}
+    
+    async def analyze_rebalance_needs(self, balances: Dict[str, float], 
+                                    grid_config: Dict[str, GridConfig]) -> List[Dict]:
+        """
+        Analiza qué activos necesitan rebalanceo.
+        
+        Args:
+            balances: Balances actuales
+            grid_config: Configuración de grid
+            
+        Returns:
+            Lista de necesidades de rebalanceo
+        """
+        rebalance_needs = []
+        
+        for symbol, config in grid_config.items():
+            if not config.is_active:
+                continue
+                
+            # Extraer símbolo base (ej: BNBUSDT -> BNB)
+            base_asset = symbol.replace('USDT', '')
+            
+            # Obtener balance actual del activo
+            current_balance = balances.get(base_asset, 0.0)
+            
+            # Calcular valor actual en USDT
+            try:
+                ticker = self.binance_client.get_symbol_ticker(symbol=symbol)
+                current_price = float(ticker['price'])
+                current_value_usdt = current_balance * current_price
+                
+                # Verificar si necesita rebalanceo
+                if current_value_usdt < self.min_balance_threshold:
+                    needed_usdt = self.min_balance_threshold - current_value_usdt
+                    needed_quantity = needed_usdt / current_price
+                    
+                    rebalance_needs.append({
+                        "symbol": symbol,
+                        "base_asset": base_asset,
+                        "current_balance": current_balance,
+                        "current_value_usdt": current_value_usdt,
+                        "needed_usdt": needed_usdt,
+                        "needed_quantity": needed_quantity,
+                        "current_price": current_price
+                    })
+                    
+                    logger.info(f"Necesita rebalanceo: {symbol} - "
+                              f"Valor actual: ${current_value_usdt:.2f}, "
+                              f"Necesita: ${needed_usdt:.2f}")
+                
+            except Exception as e:
+                logger.error(f"Error analizando {symbol}: {e}")
+                continue
+        
+        return rebalance_needs
+    
+    async def execute_rebalance(self, rebalance_needs: List[Dict]) -> List[Dict]:
+        """
+        Ejecuta las transferencias necesarias para rebalancear.
+        
+        Args:
+            rebalance_needs: Lista de necesidades de rebalanceo
+            
+        Returns:
+            Lista de resultados de rebalanceo
+        """
+        results = []
+        
+        for need in rebalance_needs:
+            try:
+                symbol = need['symbol']
+                base_asset = need['base_asset']
+                needed_quantity = need['needed_quantity']
+                
+                logger.info(f"Ejecutando rebalanceo para {symbol}: {needed_quantity} {base_asset}")
+                
+                # Verificar que tenemos suficiente USDT
+                usdt_balance = await self.get_usdt_balance()
+                needed_usdt = need['needed_usdt']
+                
+                if usdt_balance < needed_usdt:
+                    logger.warning(f"USDT insuficiente para {symbol}. "
+                                 f"Disponible: ${usdt_balance:.2f}, "
+                                 f"Necesario: ${needed_usdt:.2f}")
+                    results.append({
+                        "symbol": symbol,
+                        "status": "failed",
+                        "reason": "insufficient_usdt",
+                        "needed_usdt": needed_usdt,
+                        "available_usdt": usdt_balance
+                    })
+                    continue
+                
+                # Ejecutar compra
+                order_result = await self.execute_buy_order(symbol, needed_quantity)
+                
+                results.append({
+                    "symbol": symbol,
+                    "status": "success",
+                    "quantity": needed_quantity,
+                    "usdt_spent": needed_usdt,
+                    "order_result": order_result
+                })
+                
+                logger.info(f"Rebalanceo exitoso para {symbol}")
+                
+            except Exception as e:
+                logger.error(f"Error ejecutando rebalanceo para {need['symbol']}: {e}")
+                results.append({
+                    "symbol": need['symbol'],
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        return results
+    
+    async def get_usdt_balance(self) -> float:
+        """
+        Obtiene el balance actual de USDT.
+        
+        Returns:
+            Balance de USDT
+        """
+        try:
+            balances = await self.get_current_balances()
+            return balances.get('USDT', 0.0)
+        except Exception as e:
+            logger.error(f"Error obteniendo balance USDT: {e}")
+            return 0.0
+    
+    async def execute_buy_order(self, symbol: str, quantity: float) -> Dict:
+        """
+        Ejecuta una orden de compra para rebalanceo.
+        
+        Args:
+            symbol: Símbolo a comprar (ej: BNBUSDT)
+            quantity: Cantidad a comprar
+            
+        Returns:
+            Resultado de la orden
+        """
+        try:
+            # Obtener precio actual
+            ticker = self.binance_client.get_symbol_ticker(symbol=symbol)
+            current_price = float(ticker['price'])
+            
+            # Calcular cantidad en USDT y redondear a 2 decimales
+            usdt_amount = round(quantity * current_price, 2)
+            
+            # Ejecutar orden de compra
+            order = self.binance_client.create_order(
+                symbol=symbol,
+                side="BUY",
+                type="MARKET",
+                quoteOrderQty=usdt_amount  # Cantidad en USDT
+            )
+            
+            logger.info(f"Orden de compra ejecutada: {symbol} - "
+                       f"Cantidad: {quantity}, USDT: ${usdt_amount:.2f}")
+            
+            return {
+                "order_id": order.get('orderId'),
+                "symbol": symbol,
+                "quantity": quantity,
+                "usdt_amount": usdt_amount,
+                "price": current_price,
+                "status": order.get('status')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error ejecutando orden de compra para {symbol}: {e}")
+            raise
+    
+    async def get_rebalance_status(self) -> Dict:
+        """
+        Obtiene el estado actual del rebalanceo.
+        
+        Returns:
+            Estado del rebalanceo
+        """
+        try:
+            balances = await self.get_current_balances()
+            grid_config = await self.get_grid_config()
+            rebalance_needs = await self.analyze_rebalance_needs(balances, grid_config)
+            
+            total_needed_usdt = sum(need['needed_usdt'] for need in rebalance_needs)
+            usdt_balance = await self.get_usdt_balance()
+            
+            return {
+                "is_rebalancing": self.is_rebalancing,
+                "assets_needing_rebalance": len(rebalance_needs),
+                "total_needed_usdt": total_needed_usdt,
+                "available_usdt": usdt_balance,
+                "can_rebalance": usdt_balance >= total_needed_usdt,
+                "rebalance_needs": rebalance_needs,
+                "last_check": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo estado de rebalanceo: {e}")
+            return {
+                "error": str(e),
+                "last_check": datetime.now().isoformat()
+            }
+    
+    async def manual_rebalance(self, symbol: str, usdt_amount: float) -> Dict:
+        """
+        Ejecuta rebalanceo manual para un símbolo específico.
+        
+        Args:
+            symbol: Símbolo a rebalancear
+            usdt_amount: Cantidad en USDT a invertir
+            
+        Returns:
+            Resultado del rebalanceo manual
+        """
+        try:
+            logger.info(f"Ejecutando rebalanceo manual para {symbol}: ${usdt_amount}")
+            
+            # Verificar balance USDT
+            usdt_balance = await self.get_usdt_balance()
+            if usdt_balance < usdt_amount:
+                return {
+                    "status": "error",
+                    "message": f"USDT insuficiente. Disponible: ${usdt_balance:.2f}"
+                }
+            
+            # Ejecutar compra
+            order_result = await self.execute_buy_order(symbol, usdt_amount)
+            
+            return {
+                "status": "success",
+                "symbol": symbol,
+                "usdt_amount": usdt_amount,
+                "order_result": order_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en rebalanceo manual para {symbol}: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+
+
+# Instancia global del AutoRebalancer
+auto_rebalancer = AutoRebalancer() 

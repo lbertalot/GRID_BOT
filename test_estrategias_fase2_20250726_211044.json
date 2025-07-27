@@ -1,0 +1,45 @@
+{
+  "test_date": "2025-07-26T21:10:44.174626",
+  "duration_seconds": 0.74,
+  "total_tests": 6,
+  "successful_tests": 1,
+  "success_rate_percent": 16.67,
+  "test_results": {
+    "framework_base": {
+      "status": "success",
+      "available_strategies": 2,
+      "strategies": [
+        "DCA",
+        "SCALPING"
+      ]
+    },
+    "dca_strategy": {
+      "status": "error",
+      "error": "'str' object has no attribute 'value'"
+    },
+    "scalping_strategy": {
+      "status": "error",
+      "error": "'str' object has no attribute 'value'"
+    },
+    "strategy_factory": {
+      "status": "error",
+      "error": "create_config() got multiple values for argument 'strategy_type'"
+    },
+    "multiple_strategies": {
+      "status": "error",
+      "error": "create_config() got multiple values for argument 'strategy_type'"
+    },
+    "strategy_metrics": {
+      "status": "error",
+      "error": "create_config() got multiple values for argument 'strategy_type'"
+    }
+  },
+  "summary": {
+    "framework_working": true,
+    "dca_working": false,
+    "scalping_working": false,
+    "factory_working": false,
+    "multiple_strategies_working": false,
+    "metrics_working": false
+  }
+}

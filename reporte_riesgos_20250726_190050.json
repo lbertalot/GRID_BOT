@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-07-26T19:00:50.493603",
+  "risk_status": {
+    "status": "safe",
+    "trading_enabled": true,
+    "emergency_stop": false
+  },
+  "risk_metrics": {
+    "total_exposure": "0.00%",
+    "current_daily_loss": "0.00%",
+    "largest_position": "0.00%",
+    "portfolio_volatility": "5.00%",
+    "sharpe_ratio": "1.00",
+    "max_drawdown": "5.00%",
+    "risk_score": "0.07"
+  },
+  "risk_limits": {
+    "max_daily_loss": "5.00%",
+    "max_position_size": "20.00%",
+    "max_total_exposure": "80.00%",
+    "stop_loss_percentage": "10.00%",
+    "max_drawdown": "15.00%"
+  },
+  "test_results": {
+    "basic_test": true,
+    "asset_risk_test": true,
+    "emergency_stop_test": true,
+    "alerts_test": true,
+    "stop_loss_test": true,
+    "limits_test": true
+  }
+}
