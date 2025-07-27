@@ -21,6 +21,7 @@ from app.services.telegram_alert import send_telegram_alert
 from app.services.grid_strategy import decide_grid_action, calculate_grid_levels
 from app.services.order_validation import OrderValidator
 from app.models.asset_limit import AssetLimit
+from app.services.risk_manager import risk_manager, RiskStatus
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,7 +54,7 @@ class GridManagerConfig(BaseModel):
     """Pydantic model for grid manager configuration"""
     assets: Dict[str, AssetConfig] = Field(default_factory=dict)
     update_interval: int = Field(default=60, ge=30, le=300)
-    min_notional_threshold: float = Field(default=5.0, ge=1.0)
+    min_notional_threshold: float = Field(default=10.0, ge=1.0)  # Cambiado a 10.0 por defecto
     max_concurrent_orders: int = Field(default=3, ge=1, le=10)
 
 
@@ -82,6 +83,7 @@ class OptimizedGridManager:
         self.trading_history: List[TradingResult] = []
         self.asset_limits: Dict[str, AssetLimit] = {}
         self.insufficient_funds: Dict[str, Dict] = {} # Nuevo: para registrar activos con saldo insuficiente
+        self.config_file_path: Optional[str] = None  # Para recargar configuración
         
     async def _load_asset_limits(self):
         """Load asset trading limits from the database."""
@@ -103,67 +105,97 @@ class OptimizedGridManager:
                 await conn.close()
 
     def _initialize_binance_client(self) -> Client:
-        """Initialize Binance client with proper error handling"""
+        """Initialize Binance client with API credentials"""
         try:
             api_key = os.getenv("BINANCE_API_KEY")
             api_secret = os.getenv("BINANCE_API_SECRET")
             
             if not api_key or not api_secret:
-                raise ValueError("Binance API credentials not configured")
-                
+                logger.error("Faltan credenciales de Binance en las variables de entorno.")
+                return None
+            
             return Client(api_key, api_secret)
         except Exception as e:
-            logger.error(f"Failed to initialize Binance client: {e}")
-            raise
-    
+            logger.error(f"Error inicializando cliente Binance: {e}")
+            return None
+
     async def get_asset_balances(self) -> Dict[str, float]:
-        """Get current asset balances asynchronously"""
+        """Get current asset balances from Binance"""
         try:
+            if not self.client:
+                return {}
+            
             account_info = self.client.get_account()
-            balances = {
-                b["asset"]: float(b["free"]) 
-                for b in account_info["balances"] 
-                if float(b["free"]) > 0
-            }
+            balances = {}
+            
+            for balance in account_info['balances']:
+                asset = balance['asset']
+                free_balance = float(balance['free'])
+                if free_balance > 0:
+                    balances[asset] = free_balance
+            
             return balances
         except Exception as e:
-            logger.error(f"Error fetching balances: {e}")
+            logger.error(f"Error obteniendo balances: {e}")
             return {}
-    
+
     async def get_current_prices(self, symbols: List[str]) -> Dict[str, float]:
-        """Get current prices for multiple symbols efficiently"""
+        """Get current prices for given symbols"""
         try:
+            if not self.client:
+                return {}
+            
             prices = {}
             for symbol in symbols:
-                ticker = self.client.get_symbol_ticker(symbol=symbol)
-                prices[symbol] = float(ticker["price"])
+                try:
+                    ticker = self.client.get_symbol_ticker(symbol=symbol)
+                    prices[symbol] = float(ticker['price'])
+                except Exception as e:
+                    logger.warning(f"Error obteniendo precio para {symbol}: {e}")
+                    prices[symbol] = 0
+            
             return prices
         except Exception as e:
-            logger.error(f"Error fetching prices: {e}")
+            logger.error(f"Error obteniendo precios: {e}")
             return {}
-    
+
     def calculate_optimal_quantities(self, balances: Dict[str, float], prices: Dict[str, float]) -> Dict[str, float]:
-        """Calcula las cantidades óptimas para operar, forzando el mínimo de Binance (min_notional)."""
+        """Calcula las cantidades óptimas para operar, usando la configuración del archivo."""
         optimal_quantities = {}
         self.insufficient_funds = {}
+        
         for symbol, asset_config in self.config.assets.items():
             if not asset_config.is_active:
                 continue
+                
             base_asset = symbol.replace("USDT", "")
             current_balance = balances.get(base_asset, 0)
             current_price = prices.get(symbol, 0)
+            
             if current_price <= 0:
                 continue
-            limits = self.asset_limits.get(symbol)
-            min_notional = limits.min_notional if limits else 5.0
-            min_quantity = min_notional / current_price
-            # Forzar la cantidad mínima a la de Binance, ignorando la configurada
-            quantity_to_use = min_quantity
+            
+            # Usar la cantidad configurada en el archivo
+            quantity_to_use = asset_config.quantity
+            
+            # Verificar que cumple con min_notional del sistema
+            min_notional = self.config.min_notional_threshold
+            notional_value = quantity_to_use * current_price
+            
+            if notional_value < min_notional:
+                logger.warning(f"La cantidad configurada para {symbol} no cumple min_notional. "
+                             f"Valor: {notional_value:.4f}, Mínimo: {min_notional}")
+                # Calcular cantidad mínima requerida
+                min_quantity = min_notional / current_price
+                quantity_to_use = min_quantity
+            
             # Ajustar a step_size si corresponde
+            limits = self.asset_limits.get(symbol)
             if limits and limits.step_size:
                 step_size = limits.step_size
                 precision = int(round(-math.log(step_size, 10), 0))
                 quantity_to_use = float(f"{math.floor(quantity_to_use / step_size) * step_size:.{precision}f}")
+            
             if current_balance >= quantity_to_use:
                 optimal_quantities[symbol] = quantity_to_use
             else:
@@ -175,8 +207,9 @@ class OptimizedGridManager:
                     "min_notional": min_notional,
                     "precio_actual": current_price
                 }
+        
         return optimal_quantities
-    
+
     def _adjust_quantity_to_step_size(self, symbol: str, quantity: float) -> float:
         """Adjusts the order quantity to match the symbol's step size."""
         limits = self.asset_limits.get(symbol)
@@ -192,69 +225,97 @@ class OptimizedGridManager:
         Execute a complete grid trading cycle for all configured assets
         """
         try:
-            logger.info("Enviando mensaje de prueba por Telegram al inicio del ciclo de trading...")
+            # Verificar límites de riesgo antes de ejecutar trading
+            risk_status = await risk_manager.check_portfolio_risk()
+            
+            if risk_status == RiskStatus.STOP_TRADING:
+                logger.warning("Trading detenido por límites de riesgo críticos")
+                await send_telegram_alert("🚨 Trading detenido por límites de riesgo críticos")
+                return []
+            
+            if risk_status == RiskStatus.DANGER:
+                logger.warning("Trading en modo de riesgo alto - ejecutando con precaución")
+                await send_telegram_alert("⚠️ Trading en modo de riesgo alto - ejecutando con precaución")
+            
+            # Verificar si el trading está habilitado
+            if not risk_manager.trading_enabled:
+                logger.info("Trading deshabilitado por gestión de riesgos")
+                return []
+            
+            logger.info("Iniciando ciclo de trading con verificación de riesgos...")
             balances = await self.get_asset_balances()
             symbols = [asset.symbol for asset in self.config.assets.values() if asset.is_active]
             prices = await self.get_current_prices(symbols)
             optimal_quantities = self.calculate_optimal_quantities(balances, prices)
             trading_results = []
+            
             for symbol, quantity in optimal_quantities.items():
                 asset_config = self.config.assets.get(symbol)
                 if not asset_config:
                     continue
+                
+                # Verificar riesgo específico del activo
+                asset_risk_status = await risk_manager.check_asset_risk(symbol)
+                if asset_risk_status == RiskStatus.STOP_TRADING:
+                    logger.warning(f"Trading detenido para {symbol} por riesgo crítico")
+                    continue
+                
+                if asset_risk_status == RiskStatus.DANGER:
+                    # Ejecutar stop-loss si es necesario
+                    await risk_manager.execute_stop_loss(symbol)
+                    logger.warning(f"Stop-loss ejecutado para {symbol}")
+                    continue
+                    
                 current_price = prices.get(symbol, 0)
                 if current_price <= 0:
                     logger.warning(f"Precio para {symbol} es 0 o negativo, saltando operación.")
                     continue
+                
                 action = decide_grid_action(prices.get(symbol, 0), asset_config.grid_levels, asset_config.last_action)
+                
                 if action and action.get("action"):
-                    limits = self.asset_limits.get(symbol)
-                    min_notional = limits.min_notional if limits else 5.0
-                    min_quantity = min_notional / current_price
-                    # Cantidad sugerida por la estrategia (puede ser muy baja)
-                    suggested_quantity = quantity
-                    # Usar la máxima entre la sugerida y la mínima
-                    quantity_to_use = max(suggested_quantity, min_quantity)
-                    # Ajustar a step_size
-                    if limits and limits.step_size:
-                        step_size = limits.step_size
-                        precision = int(round(-math.log(step_size, 10), 0))
-                        quantity_to_use = float(f"{math.floor(quantity_to_use / step_size) * step_size:.{precision}f}")
+                    # Usar la cantidad calculada (que ya incluye validaciones)
+                    quantity_to_use = quantity
+                    
                     # Validar saldo
                     base_asset = symbol.replace("USDT", "")
                     available_balance = balances.get(base_asset, 0)
+                    
                     if action["action"] == "SELL" and quantity_to_use > available_balance:
                         logger.warning(f"No hay suficiente saldo para vender {quantity_to_use} {base_asset}. Saldo disponible: {available_balance}")
                         continue
+                    
+                    # Verificar min_notional
                     notional_value = quantity_to_use * current_price
+                    min_notional = self.config.min_notional_threshold
+                    
                     if notional_value < min_notional:
                         logger.warning(f"La orden para {symbol} no cumple el valor nocional mínimo. "
-                                       f"Valor: {notional_value:.4f}, Mínimo: {min_notional}")
+                                     f"Valor: {notional_value:.4f}, Mínimo: {min_notional}")
                         continue
+                    
                     result = await self._execute_trade(
                         symbol=symbol,
                         action=action["action"],
                         quantity=quantity_to_use,
                         price=current_price
                     )
-                    trading_results.append(result)
-                    asset_config.last_action = action["action"]
+                    
+                    if result:
+                        trading_results.append(result)
+                        asset_config.last_action = action["action"]
                 else:
                     logger.info(f"No se tomó ninguna acción para {symbol}. Razón: Precio actual ({prices.get(symbol, 0)}) no cruzó ningún nivel de la grilla o la última acción fue la misma.")
+            
             if self.insufficient_funds:
-                logger.info("Enviando alerta de activos con saldo insuficiente por Telegram...")
-                msg = "⚠️ Activos sin saldo suficiente para operar:\n"
-                for symbol, data in self.insufficient_funds.items():
-                    msg += (f"{symbol}: saldo actual {data['saldo_actual']:.6f}, "
-                            f"necesario {data['cantidad_necesaria']:.6f}, "
-                            f"faltante {data['faltante']:.6f}, min_notional {data['min_notional']:.2f}, "
-                            f"precio {data['precio_actual']:.6f}\n")
-                send_telegram_alert(msg)
+                logger.warning(f"Activos con saldo insuficiente: {list(self.insufficient_funds.keys())}")
+            
             return trading_results
+            
         except Exception as e:
-            logger.error(f"Error in grid trading cycle: {e}")
+            logger.error(f"Error ejecutando ciclo de trading: {e}")
             return []
-    
+
     async def _execute_single_asset_trading(self, symbol: str, quantity: float, current_price: float) -> Optional[TradingResult]:
         """Execute trading for a single asset"""
         try:
@@ -262,118 +323,92 @@ class OptimizedGridManager:
             if not asset_config:
                 return None
             
-            # Calculate grid levels
-            grid_levels = calculate_grid_levels(
-                asset_config.min_price, 
-                asset_config.max_price, 
-                asset_config.grids
-            )
+            action = decide_grid_action(current_price, asset_config.grid_levels, asset_config.last_action)
             
-            # Decide action
-            decision = decide_grid_action(
-                current_price, 
-                grid_levels, 
-                asset_config.last_action or "NONE"
-            )
-            
-            if not decision["action"]:
+            if not action or not action.get("action"):
                 return None
             
-            # Execute order
-            order_result = await self._place_order(symbol, decision["action"], quantity)
-            if not order_result:
-                return None
-            
-            # Update last action
-            asset_config.last_action = decision["action"]
-            
-            # Create trading result
-            result = TradingResult(
+            result = await self._execute_trade(
                 symbol=symbol,
-                action=decision["action"],
+                action=action["action"],
                 quantity=quantity,
-                price=current_price,
-                order_id=order_result.get("orderId", ""),
-                status=order_result.get("status", ""),
-                timestamp=datetime.now()
+                price=current_price
             )
             
-            # Send notification
-            await self._send_trading_notification(result)
+            if result:
+                asset_config.last_action = action["action"]
             
             return result
             
         except Exception as e:
-            logger.error(f"Error executing trading for {symbol}: {e}")
+            logger.error(f"Error ejecutando trading para {symbol}: {e}")
             return None
-    
+
     async def _place_order(self, symbol: str, action: str, quantity: float) -> Optional[Dict]:
-        """Place order with proper validation and error handling"""
+        """Place an order on Binance"""
         try:
-            result = self.order_validator.place_market_order_with_validation(symbol, action, quantity)
-            return result.get("order", {})
-        except Exception as e:
-            logger.error(f"Error placing order for {symbol}: {e}")
-            return None
-    
-    async def _send_trading_notification(self, result: TradingResult):
-        """Send trading notification to Telegram"""
-        try:
-            message = (
-                f"🤖 GridBot ejecutó {result.action} {result.quantity} {result.symbol} "
-                f"a ${result.price:.6f}\n"
-                f"📋 Orden ID: {result.order_id}\n"
-                f"📊 Status: {result.status}"
+            if not self.client:
+                return None
+            
+            order = self.client.create_order(
+                symbol=symbol,
+                side=action,
+                type='MARKET',
+                quantity=quantity
             )
-            send_telegram_alert(message)
+            
+            return order
         except Exception as e:
-            logger.error(f"Error sending notification: {e}")
-    
-    async def _execute_trade(self, symbol: str, action: str, quantity: float, price: float):
-        """
-        Ejecuta una orden en Binance y la registra en la base de datos.
-        Retorna un TradingResult para el logger.
-        """
+            logger.error(f"Error colocando orden para {symbol}: {e}")
+            return None
+
+    async def _send_trading_notification(self, result: TradingResult):
+        """Send trading notification via Telegram"""
         try:
-            # Ejecutar orden en Binance
-            if action == "BUY":
-                order = self.client.order_market_buy(symbol=symbol, quantity=quantity)
-            elif action == "SELL":
-                order = self.client.order_market_sell(symbol=symbol, quantity=quantity)
-            else:
-                raise ValueError(f"Acción no soportada: {action}")
+            message = f"🔄 Trade ejecutado:\n" \
+                     f"🪙 {result.symbol}\n" \
+                     f"📈 {result.action}\n" \
+                     f"📏 {result.quantity}\n" \
+                     f"💰 ${result.price:.6f}\n" \
+                     f"📊 Estado: {result.status}"
+            
+            await send_telegram_alert(message)
+        except Exception as e:
+            logger.error(f"Error enviando notificación: {e}")
 
-            entry_price = float(order['fills'][0]['price']) if 'fills' in order and order['fills'] else price
-            status = order.get('status', 'UNKNOWN')
-            ts = datetime.utcnow()
-
-            # Registrar en la base de datos
-            db_user = os.getenv("POSTGRES_USER")
-            db_pass = os.getenv("POSTGRES_PASSWORD")
-            db_name = os.getenv("POSTGRES_DB")
-            db_host = os.getenv("POSTGRES_HOST", "db")
-            conn = await asyncpg.connect(user=db_user, password=db_pass, database=db_name, host=db_host)
-            await conn.execute('''
-                INSERT INTO trades (symbol, side, quantity, entry_price, timestamp)
-                VALUES ($1, $2, $3, $4, $5)
-            ''', symbol, action, quantity, entry_price, ts)
-            await conn.close()
-
-            # Alerta Telegram
-            send_telegram_alert(f"✅ Orden ejecutada: {action} {quantity} {symbol} @ ${entry_price:.4f} (status: {status})")
-            return TradingResult(
-                timestamp=ts,
+    async def _execute_trade(self, symbol: str, action: str, quantity: float, price: float):
+        """Execute a trade and return the result"""
+        try:
+            # Place the order
+            order = await self._place_order(symbol, action, quantity)
+            
+            if not order:
+                return None
+            
+            # Create trading result
+            result = TradingResult(
+                timestamp=datetime.now(),
                 symbol=symbol,
                 action=action,
                 quantity=quantity,
-                price=entry_price,
-                order_id=order.get('orderId', None),
-                status=status,
-                profit=None
+                price=price,
+                order_id=order.get('orderId', 'unknown'),
+                status=order.get('status', 'unknown'),
+                profit=None  # Will be calculated later
             )
+            
+            # Add to trading history
+            self.trading_history.append(result)
+            
+            # Send notification
+            await self._send_trading_notification(result)
+            
+            logger.info(f"Trade ejecutado: {action} {quantity} {symbol} a ${price:.6f}")
+            
+            return result
+            
         except Exception as e:
-            send_telegram_alert(f"❌ Error ejecutando orden {action} {quantity} {symbol}: {e}")
-            logger.error(f"Error ejecutando orden {action} {quantity} {symbol}: {e}")
+            logger.error(f"Error ejecutando trade para {symbol}: {e}")
             return None
 
     def update_asset_config(self, symbol: str, new_config: Dict) -> bool:
@@ -382,17 +417,56 @@ class OptimizedGridManager:
             if symbol not in self.config.assets:
                 return False
             
-            current_config = self.config.assets[symbol]
+            asset_config = self.config.assets[symbol]
+            
+            # Update fields
             for key, value in new_config.items():
-                if hasattr(current_config, key):
-                    setattr(current_config, key, value)
+                if hasattr(asset_config, key):
+                    setattr(asset_config, key, value)
+            
+            # Recalculate grid levels
+            asset_config.grid_levels = calculate_grid_levels(
+                asset_config.min_price,
+                asset_config.max_price,
+                asset_config.grids
+            )
             
             logger.info(f"Updated configuration for {symbol}")
             return True
         except Exception as e:
             logger.error(f"Error updating config for {symbol}: {e}")
             return False
-    
+
+    async def reload_configuration(self, config_file_path: str = None) -> bool:
+        """Recarga la configuración desde el archivo"""
+        try:
+            if config_file_path:
+                self.config_file_path = config_file_path
+            
+            if not self.config_file_path:
+                logger.error("No se especificó archivo de configuración para recargar")
+                return False
+            
+            logger.info(f"Recargando configuración desde: {self.config_file_path}")
+            
+            # Crear nuevo grid manager con la configuración actualizada
+            new_manager = await create_optimized_grid_manager(self.config_file_path)
+            
+            if new_manager:
+                # Actualizar configuración
+                self.config = new_manager.config
+                self.asset_limits = new_manager.asset_limits
+                
+                logger.info("✅ Configuración recargada exitosamente")
+                return True
+            else:
+                logger.error("❌ Error creando nuevo grid manager")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error recargando configuración: {e}")
+            return False
+
     def get_trading_statistics(self) -> Dict:
         """Get comprehensive trading statistics"""
         try:
@@ -478,10 +552,11 @@ async def create_optimized_grid_manager(config_file: str) -> Optional[OptimizedG
         grid_config = GridManagerConfig(
             assets=assets,
             update_interval=config_data.get("update_interval", 60),
-            min_notional_threshold=config_data.get("min_notional_threshold", 10.0)
+            min_notional_threshold=config_data.get("min_notional_threshold", 10.0)  # Usar 10.0 por defecto
         )
         
         manager = OptimizedGridManager(grid_config)
+        manager.config_file_path = config_file  # Guardar ruta del archivo
         await manager._load_asset_limits() # Load limits after creation
         return manager
     except Exception as e:

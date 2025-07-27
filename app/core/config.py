@@ -1,14 +1,46 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
+import os
 
 class Settings(BaseSettings):
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
-    postgres_host: str = "db"
+    # Configuración de base de datos
+    postgres_user: str = "griduser"
+    postgres_password: str = "gridpass"
+    postgres_db: str = "gridbot"
+    postgres_host: str = "localhost"  # Cambiado a localhost por defecto
     postgres_port: int = 5432
-    database_url: str
+    
+    # URL de base de datos - se configurará dinámicamente
+    database_url: str = ""
+    
+    # Configuración adicional
+    redis_url: str = "redis://localhost:6379/0"  # Cambiado a localhost
+    secret_key: str = "supersecretkey"
+    debug: bool = True
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    binance_api_key: str = ""
+    binance_api_secret: str = ""
+    api_key: str = ""
 
     class Config:
         env_file = ".env"
+        extra = "allow"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+        # Detectar si estamos en Docker o ejecutándose localmente
+        is_docker = os.getenv("DOCKER_ENV") == "true" or os.path.exists("/.dockerenv")
+        
+        if is_docker:
+            # Configuración para Docker
+            self.postgres_host = "db"
+            self.redis_url = "redis://redis:6379/0"
+            self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        else:
+            # Configuración para desarrollo local
+            self.postgres_host = "localhost"
+            self.redis_url = "redis://localhost:6379/0"
+            self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
 settings = Settings() 

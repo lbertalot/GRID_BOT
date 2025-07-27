@@ -48,6 +48,47 @@ def log_trade(
     db.refresh(trade)
     return trade
 
+@router.get("/binance_status")
+def get_binance_status():
+    """Endpoint para verificar el estado del servicio de Binance"""
+    global binance_service
+    
+    try:
+        # Crear una nueva instancia del servicio
+        new_service = BinanceService()
+        
+        # Obtener precio real
+        price = new_service.get_current_price("BTCUSDT")
+        
+        # Obtener información de cuenta
+        account_info = new_service.get_account_info()
+        
+        # Actualizar la instancia global
+        binance_service = new_service
+        
+        return {
+            "status": "success",
+            "simulation_mode": new_service.simulation_mode,
+            "btc_price": price,
+            "account_type": account_info.get("accountType", "N/A"),
+            "balances_count": len(account_info.get("balances", [])),
+            "api_key_configured": bool(new_service.api_key),
+            "api_secret_configured": bool(new_service.api_secret),
+            "message": "Servicio de Binance actualizado correctamente"
+        }
+    except Exception as e:
+        # En caso de error, devolver información del servicio actual
+        return {
+            "status": "error",
+            "error": str(e),
+            "simulation_mode": binance_service.simulation_mode if hasattr(binance_service, 'simulation_mode') else True,
+            "message": f"Error actualizando servicio de Binance: {str(e)}",
+            "current_service_status": {
+                "api_key_configured": bool(getattr(binance_service, 'api_key', None)),
+                "api_secret_configured": bool(getattr(binance_service, 'api_secret', None))
+            }
+        }
+
 @router.get("/price/{symbol}")
 def get_price(symbol: str):
     try:

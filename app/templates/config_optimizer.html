@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimizador de Configuración - Grid Trading Bot</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .results-section {
+            grid-column: 1 / -1;
+        }
+
+        .optimization-result {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .result-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .result-item h4 {
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .result-item .value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .confidence-score {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .confidence-high {
+            background: #28a745;
+        }
+
+        .confidence-medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .confidence-low {
+            background: #dc3545;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #c3e6cb;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .strategy-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .strategy-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid #e1e5e9;
+            transition: border-color 0.3s ease;
+        }
+
+        .strategy-card.best {
+            border-color: #28a745;
+            background: #f8fff9;
+        }
+
+        .strategy-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .strategy-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .metric .label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .metric .value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Optimizador de Configuración</h1>
+            <p>Optimiza automáticamente los parámetros de tu estrategia de Grid Trading</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Panel de Configuración -->
+            <div class="card">
+                <h2>⚙️ Configuración de Optimización</h2>
+                
+                <div class="form-group">
+                    <label for="symbol">Símbolo:</label>
+                    <input type="text" id="symbol" placeholder="Ej: BTC, ETH, BNB" value="BTC">
+                </div>
+
+                <div class="form-group">
+                    <label for="strategy">Estrategia de Optimización:</label>
+                    <select id="strategy">
+                        <option value="grid_optimization">Grid Optimization</option>
+                        <option value="volatility_based">Volatility Based</option>
+                        <option value="volume_based">Volume Based</option>
+                        <option value="machine_learning">Machine Learning</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="investment">Cantidad a Invertir (USDT):</label>
+                    <input type="number" id="investment" placeholder="1000" value="1000" min="10" step="10">
+                </div>
+
+                <div class="form-group">
+                    <label for="riskTolerance">Tolerancia al Riesgo:</label>
+                    <input type="range" id="riskTolerance" min="0.1" max="1.0" step="0.1" value="0.5">
+                    <div style="text-align: center; margin-top: 5px; color: #666;">
+                        <span id="riskValue">0.5</span> (Conservador ← → Agresivo)
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxGrids">Máximo Número de Grids:</label>
+                    <input type="number" id="maxGrids" placeholder="20" value="20" min="5" max="50">
+                </div>
+
+                <div class="form-group">
+                    <label for="timeHorizon">Horizonte Temporal (días):</label>
+                    <input type="number" id="timeHorizon" placeholder="7" value="7" min="1" max="30">
+                </div>
+
+                <button class="btn" onclick="optimizeConfiguration()">🚀 Optimizar Configuración</button>
+                <button class="btn btn-secondary" onclick="quickOptimize()">⚡ Optimización Rápida</button>
+                <button class="btn btn-success" onclick="compareStrategies()">📊 Comparar Estrategias</button>
+            </div>
+
+            <!-- Panel de Análisis de Mercado -->
+            <div class="card">
+                <h2>📈 Análisis de Mercado</h2>
+                <div id="marketAnalysis">
+                    <p style="color: #666; text-align: center;">Selecciona un símbolo para ver el análisis de mercado</p>
+                </div>
+                <button class="btn" onclick="getMarketAnalysis()">🔄 Actualizar Análisis</button>
+            </div>
+        </div>
+
+        <!-- Resultados de Optimización -->
+        <div class="card results-section">
+            <h2>🎯 Resultados de Optimización</h2>
+            <div id="optimizationResults">
+                <p style="color: #666; text-align: center;">Ejecuta una optimización para ver los resultados</p>
+            </div>
+        </div>
+
+        <!-- Comparación de Estrategias -->
+        <div class="card results-section" id="strategyComparison" style="display: none;">
+            <h2>📊 Comparación de Estrategias</h2>
+            <div id="strategyResults"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1/api/v1';
+
+        // Actualizar valor de riesgo en tiempo real
+        document.getElementById('riskTolerance').addEventListener('input', function() {
+            document.getElementById('riskValue').textContent = this.value;
+        });
+
+        async function optimizeConfiguration() {
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const strategy = document.getElementById('strategy').value;
+            const investment = parseFloat(document.getElementById('investment').value);
+            const riskTolerance = parseFloat(document.getElementById('riskTolerance').value);
+            const maxGrids = parseInt(document.getElementById('maxGrids').value);
+            const timeHorizon = parseInt(document.getElementById('timeHorizon').value);
+
+            if (!symbol) {
+                showError('Por favor ingresa un símbolo válido');
+                return;
+            }
+
+            showLoading('optimizationResults', 'Optimizando configuración...');
+
+            try {
+                const response = await axios.post(`${API_BASE}/config/optimize`, {
+                    symbol: symbol,
+                    strategy: strategy,
+                    investment_amount: investment,
+                    risk_tolerance: riskTolerance,
+                    max_grids: maxGrids,
+                    time_horizon: timeHorizon
+                });
+
+                displayOptimizationResult(response.data);
+            } catch (error) {
+                showError('Error optimizando configuración: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        async function quickOptimize() {
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const investment = parseFloat(document.getElementById('investment').value);
+
+            if (!symbol) {
+                showError('Por favor ingresa un símbolo válido');
+                return;
+            }
+
+            showLoading('optimizationResults', 'Ejecutando optimización rápida...');
+
+            try {
+                const response = await axios.post(`${API_BASE}/config/quick-optimize/${symbol}?investment_amount=${investment}`);
+                displayOptimizationResult(response.data);
+            } catch (error) {
+                showError('Error en optimización rápida: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        async function compareStrategies() {
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const investment = parseFloat(document.getElementById('investment').value);
+
+            if (!symbol) {
+                showError('Por favor ingresa un símbolo válido');
+                return;
+            }
+
+            showLoading('strategyResults', 'Comparando estrategias...');
+            document.getElementById('strategyComparison').style.display = 'block';
+
+            try {
+                const response = await axios.post(`${API_BASE}/config/compare-strategies/${symbol}?investment_amount=${investment}`);
+                displayStrategyComparison(response.data);
+            } catch (error) {
+                showError('Error comparando estrategias: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        async function getMarketAnalysis() {
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+
+            if (!symbol) {
+                showError('Por favor ingresa un símbolo válido');
+                return;
+            }
+
+            showLoading('marketAnalysis', 'Obteniendo análisis de mercado...');
+
+            try {
+                const response = await axios.get(`${API_BASE}/config/market-analysis/${symbol}`);
+                displayMarketAnalysis(response.data);
+            } catch (error) {
+                showError('Error obteniendo análisis de mercado: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        function displayOptimizationResult(data) {
+            const container = document.getElementById('optimizationResults');
+            
+            const confidenceClass = data.confidence_score > 0.7 ? 'confidence-high' : 
+                                  data.confidence_score > 0.4 ? 'confidence-medium' : 'confidence-low';
+
+            container.innerHTML = `
+                <div class="optimization-result">
+                    <h3>✅ Optimización Completada para ${data.symbol}</h3>
+                    <p><strong>Estrategia:</strong> ${data.optimization_strategy}</p>
+                    <p><strong>Score de Confianza:</strong> 
+                        <span class="confidence-score ${confidenceClass}">${(data.confidence_score * 100).toFixed(1)}%</span>
+                    </p>
+                    
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <h4>Precio Mínimo</h4>
+                            <div class="value">$${data.min_price.toFixed(4)}</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Precio Máximo</h4>
+                            <div class="value">$${data.max_price.toFixed(4)}</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Número de Grids</h4>
+                            <div class="value">${data.grids}</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Cantidad por Grid</h4>
+                            <div class="value">${data.quantity.toFixed(6)}</div>
+                        </div>
+                    </div>
+
+                    ${data.backtest_results ? `
+                        <h4 style="margin-top: 20px; color: #667eea;">📊 Resultados del Backtesting</h4>
+                        <div class="result-grid">
+                            <div class="result-item">
+                                <h4>Total de Trades</h4>
+                                <div class="value">${data.backtest_results.total_trades}</div>
+                            </div>
+                            <div class="result-item">
+                                <h4>Win Rate</h4>
+                                <div class="value">${(data.backtest_results.win_rate * 100).toFixed(1)}%</div>
+                            </div>
+                            <div class="result-item">
+                                <h4>ROI</h4>
+                                <div class="value">${(data.backtest_results.roi * 100).toFixed(2)}%</div>
+                            </div>
+                            <div class="result-item">
+                                <h4>Profit Total</h4>
+                                <div class="value">$${data.backtest_results.total_profit.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function displayMarketAnalysis(data) {
+            const container = document.getElementById('marketAnalysis');
+            
+            container.innerHTML = `
+                <div class="optimization-result">
+                    <h3>📈 Análisis de ${data.symbol}</h3>
+                    
+                    <div class="result-grid">
+                        <div class="result-item">
+                            <h4>Precio Actual</h4>
+                            <div class="value">$${data.current_price.toFixed(4)}</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Volatilidad</h4>
+                            <div class="value">${(data.volatility.value * 100).toFixed(2)}%</div>
+                            <small>${data.volatility.level}</small>
+                        </div>
+                        <div class="result-item">
+                            <h4>Volumen 24h</h4>
+                            <div class="value">$${(data.volume_24h / 1000000).toFixed(1)}M</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Cambio 24h</h4>
+                            <div class="value" style="color: ${data.price_change_24h >= 0 ? '#28a745' : '#dc3545'}">
+                                ${data.price_change_24h >= 0 ? '+' : ''}${data.price_change_24h.toFixed(2)}%
+                            </div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Tendencia</h4>
+                            <div class="value">${data.trend}</div>
+                        </div>
+                        <div class="result-item">
+                            <h4>Rango 24h</h4>
+                            <div class="value">$${data.low_24h.toFixed(4)} - $${data.high_24h.toFixed(4)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayStrategyComparison(data) {
+            const container = document.getElementById('strategyResults');
+            
+            let html = `
+                <h3>📊 Comparación de Estrategias para ${data.symbol}</h3>
+                <p><strong>Inversión:</strong> $${data.investment_amount.toFixed(2)} USDT</p>
+                <p><strong>Mejor Estrategia:</strong> ${data.best_strategy} (Score: ${(data.best_score * 100).toFixed(1)}%)</p>
+                
+                <div class="strategy-comparison">
+            `;
+
+            for (const [strategy, result] of Object.entries(data.strategies)) {
+                if (result.error) {
+                    html += `
+                        <div class="strategy-card">
+                            <h4>${strategy.replace('_', ' ').toUpperCase()}</h4>
+                            <p style="color: #dc3545;">Error: ${result.error}</p>
+                        </div>
+                    `;
+                } else {
+                    const isBest = strategy === data.best_strategy;
+                    const confidenceClass = result.confidence_score > 0.7 ? 'confidence-high' : 
+                                          result.confidence_score > 0.4 ? 'confidence-medium' : 'confidence-low';
+                    
+                    html += `
+                        <div class="strategy-card ${isBest ? 'best' : ''}">
+                            <h4>${strategy.replace('_', ' ').toUpperCase()}</h4>
+                            <p><strong>Score:</strong> 
+                                <span class="confidence-score ${confidenceClass}">${(result.confidence_score * 100).toFixed(1)}%</span>
+                            </p>
+                            
+                            <div class="strategy-metrics">
+                                <div class="metric">
+                                    <div class="label">Grids</div>
+                                    <div class="value">${result.config.grids}</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="label">Cantidad</div>
+                                    <div class="value">${result.config.quantity.toFixed(6)}</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="label">Win Rate</div>
+                                    <div class="value">${result.backtest_results ? (result.backtest_results.win_rate * 100).toFixed(1) + '%' : 'N/A'}</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="label">ROI</div>
+                                    <div class="value">${result.backtest_results ? (result.backtest_results.roi * 100).toFixed(2) + '%' : 'N/A'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function showLoading(containerId, message) {
+            document.getElementById(containerId).innerHTML = `<div class="loading">${message}</div>`;
+        }
+
+        function showError(message) {
+            const container = document.getElementById('optimizationResults');
+            container.innerHTML = `<div class="error">❌ ${message}</div>`;
+        }
+
+        function showSuccess(message) {
+            const container = document.getElementById('optimizationResults');
+            container.innerHTML = `<div class="success">✅ ${message}</div>`;
+        }
+
+        // Cargar análisis de mercado al cargar la página
+        window.addEventListener('load', function() {
+            const symbol = document.getElementById('symbol').value;
+            if (symbol) {
+                getMarketAnalysis();
+            }
+        });
+
+        // Actualizar análisis cuando cambie el símbolo
+        document.getElementById('symbol').addEventListener('change', getMarketAnalysis);
+    </script>
+</body>
+</html> 

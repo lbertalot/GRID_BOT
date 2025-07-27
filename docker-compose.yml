@@ -12,6 +12,15 @@ services:
     ports:
       - "5432:5432"
 
+  redis:
+    image: redis:7-alpine
+    container_name: gridbot_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   api:
     build:
       context: .
@@ -21,8 +30,19 @@ services:
       - "8000:8000"
     depends_on:
       - db
+      - redis
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql://griduser:gridpass@db:5432/gridbot
+      - POSTGRES_USER=griduser
+      - POSTGRES_PASSWORD=gridpass
+      - POSTGRES_DB=gridbot
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=gridbot-secret-key-2025
+      - DEBUG=true
+      - ENVIRONMENT=development
+      - DOCKER_ENV=true
     volumes:
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -59,20 +79,10 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: gridbot_frontend
-    ports:
-      - "3001:80"
-    depends_on:
-      - api
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    restart: unless-stopped
+
 
 volumes:
   pgdata:
+  redis_data:
   prometheus_data:
   grafana_data:

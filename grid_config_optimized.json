@@ -4,76 +4,77 @@
     "min_price": 760.6858000000001,
     "max_price": 791.7342,
     "grids": 6,
-    "quantity": 0.007,
+    "quantity": 0.014,
     "last_action": null,
     "is_active": true
   },
   "ANIMEUSDT": {
     "symbol": "ANIMEUSDT",
-    "min_price": 0.022716399999999998,
-    "max_price": 0.0236436,
+    "min_price": 0.0182084,
+    "max_price": 0.0189516,
     "grids": 6,
-    "quantity": 0.1,
+    "quantity": 591.7,
     "last_action": null,
     "is_active": true
   },
   "GPSUSDT": {
     "symbol": "GPSUSDT",
-    "min_price": 0.0225792,
-    "max_price": 0.023500800000000002,
+    "min_price": 0.019698,
+    "max_price": 0.020502,
     "grids": 6,
-    "quantity": 0.1,
+    "quantity": 547.3,
     "last_action": null,
     "is_active": true
   },
   "GUNUSDT": {
     "symbol": "GUNUSDT",
-    "min_price": 0.0340452,
-    "max_price": 0.0354348,
+    "min_price": 0.029596,
+    "max_price": 0.030804,
     "grids": 6,
-    "quantity": 1.0,
+    "quantity": 363.5,
     "last_action": null,
     "is_active": true
   },
   "SIGNUSDT": {
     "symbol": "SIGNUSDT",
-    "min_price": 0.0782432,
-    "max_price": 0.08143679999999999,
+    "min_price": 0.0745878,
+    "max_price": 0.0776322,
     "grids": 6,
-    "quantity": 1.0,
+    "quantity": 144.3,
     "last_action": null,
     "is_active": true
   },
   "SPKUSDT": {
     "symbol": "SPKUSDT",
-    "min_price": 0.04228798,
-    "max_price": 0.04401402,
+    "min_price": 0.12062722000000001,
+    "max_price": 0.12555078,
     "grids": 6,
-    "quantity": 1.0,
+    "quantity": 88.2,
     "last_action": null,
     "is_active": true
   },
   "HOMEUSDT": {
     "symbol": "HOMEUSDT",
-    "min_price": 0.02548,
-    "max_price": 0.02652,
+    "min_price": 0.0298704,
+    "max_price": 0.031089600000000002,
     "grids": 6,
-    "quantity": 1.0,
+    "quantity": 361.7,
     "last_action": null,
     "is_active": true
   },
   "HUMAUSDT": {
     "symbol": "HUMAUSDT",
-    "min_price": 0.037818199999999996,
-    "max_price": 0.0393618,
+    "min_price": 0.034829200000000005,
+    "max_price": 0.0362508,
     "grids": 6,
-    "quantity": 1.0,
+    "quantity": 309.2,
     "last_action": null,
     "is_active": true
   },
   "_optimization_metadata": {
-    "optimized_at": "2025-07-21 13:39:25",
-    "optimization_version": "5.0",
-    "ajuste_tipo": "Rangos ajustados a precios actuales con un 2.0% de margen."
+    "optimized_at": "2025-07-25 16:08:03",
+    "optimization_version": "7.0",
+    "ajuste_tipo": "Cantidades ajustadas para min_notional de $10.0",
+    "min_notional": 10.0
   }
 }

@@ -11,6 +11,7 @@ import logging
 
 from app.core.optimized_grid_manager import OptimizedGridManager, create_optimized_grid_manager
 from app.services.telegram_alert import send_telegram_alert
+from app.services.auto_rebalancer import auto_rebalancer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -44,6 +45,24 @@ class SystemStatusResponse(BaseModel):
     total_assets: int
     last_trading_cycle: Optional[str] = None
     uptime: str
+
+
+class ConfigReloadRequest(BaseModel):
+    """Request model for configuration reload"""
+    config_file_path: Optional[str] = Field(None, description="Path to configuration file")
+
+
+class RebalanceRequest(BaseModel):
+    """Request model for rebalancing"""
+    force: bool = Field(False, description="Force immediate rebalancing")
+
+
+class RebalanceResponse(BaseModel):
+    """Response model for rebalancing operations"""
+    success: bool
+    message: str
+    results: List[Dict]
+    total_transferred: float
 
 
 # Dependency injection
@@ -81,6 +100,105 @@ async def get_system_status(manager: OptimizedGridManager = Depends(get_grid_man
         raise HTTPException(status_code=500, detail="Error retrieving system status")
 
 
+# Configuration reload endpoint
+@router.post("/config/reload")
+async def reload_configuration(
+    request: ConfigReloadRequest,
+    manager: OptimizedGridManager = Depends(get_grid_manager)
+):
+    """Reload configuration from file"""
+    try:
+        config_file = request.config_file_path or "grid_config_optimized.json"
+        
+        success = await manager.reload_configuration(config_file)
+        
+        if success:
+            return {
+                "message": "Configuration reloaded successfully",
+                "config_file": config_file,
+                "status": "success"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reload configuration")
+            
+    except Exception as e:
+        logger.error(f"Error reloading configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reloading configuration: {str(e)}")
+
+
+# Rebalancer endpoints
+@router.post("/rebalancer/execute")
+async def execute_rebalance(request: RebalanceRequest = RebalanceRequest()):
+    """Execute rebalancing operation"""
+    try:
+        logger.info("🔄 Ejecutando rebalanceo manual")
+        
+        result = await auto_rebalancer.check_and_rebalance()
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error ejecutando rebalanceo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo: {e}")
+
+
+@router.get("/rebalancer/status")
+async def get_rebalance_status():
+    """Get rebalancer status"""
+    try:
+        status = await auto_rebalancer.get_rebalance_status()
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo status de rebalanceo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error obteniendo status: {e}")
+
+
+@router.post("/rebalancer/manual/{symbol}")
+async def manual_rebalance(symbol: str, usdt_amount: float):
+    """Execute manual rebalancing for a specific symbol"""
+    try:
+        logger.info(f"Ejecutando rebalanceo manual para {symbol}: ${usdt_amount}")
+        
+        result = await auto_rebalancer.manual_rebalance(symbol, usdt_amount)
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error ejecutando rebalanceo manual para {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo manual: {e}")
+
+
+# Grid manager restart endpoint
+@router.post("/grid_manager/restart")
+async def restart_grid_manager():
+    """Restart the grid manager with current configuration"""
+    global grid_manager
+    
+    try:
+        # Get current config file path
+        config_file = "grid_config_optimized.json"
+        if grid_manager and grid_manager.config_file_path:
+            config_file = grid_manager.config_file_path
+        
+        # Create new grid manager
+        new_manager = await create_optimized_grid_manager(config_file)
+        
+        if new_manager:
+            # Update global instance
+            grid_manager = new_manager
+            
+            return {
+                "message": "Grid manager restarted successfully",
+                "config_file": config_file,
+                "status": "success"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to restart grid manager")
+            
+    except Exception as e:
+        logger.error(f"Error restarting grid manager: {e}")
+        raise HTTPException(status_code=500, detail=f"Error restarting grid manager: {str(e)}")
+
+
 # Manual trading cycle endpoint
 @router.post("/trading/cycle")
 async def execute_trading_cycle(
@@ -102,7 +220,7 @@ async def execute_trading_cycle(
         raise HTTPException(status_code=500, detail="Error executing trading cycle")
 
 
-# Get trading statistics
+# Trading statistics endpoint
 @router.get("/trading/statistics")
 async def get_trading_statistics(manager: OptimizedGridManager = Depends(get_grid_manager)):
     """Get comprehensive trading statistics"""
@@ -114,7 +232,7 @@ async def get_trading_statistics(manager: OptimizedGridManager = Depends(get_gri
         raise HTTPException(status_code=500, detail="Error retrieving trading statistics")
 
 
-# Update asset configuration
+# Asset configuration update endpoint
 @router.put("/assets/{symbol}")
 async def update_asset_config(
     symbol: str,
@@ -123,37 +241,29 @@ async def update_asset_config(
 ):
     """Update configuration for a specific asset"""
     try:
-        # Validate symbol exists
-        if symbol not in manager.config.assets:
-            raise HTTPException(status_code=404, detail=f"Asset {symbol} not found")
+        # Convert request to dict, removing None values
+        update_data = {k: v for k, v in request.dict().items() if v is not None}
         
-        # Prepare update data
-        update_data = {}
-        if request.min_price is not None:
-            update_data["min_price"] = request.min_price
-        if request.max_price is not None:
-            update_data["max_price"] = request.max_price
-        if request.grids is not None:
-            update_data["grids"] = request.grids
-        if request.quantity is not None:
-            update_data["quantity"] = request.quantity
-        if request.is_active is not None:
-            update_data["is_active"] = request.is_active
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No valid update data provided")
         
-        # Update configuration
         success = manager.update_asset_config(symbol, update_data)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to update asset configuration")
         
-        return {"message": f"Asset {symbol} configuration updated successfully"}
-    except HTTPException:
-        raise
+        if success:
+            return {
+                "message": f"Configuration updated for {symbol}",
+                "symbol": symbol,
+                "updates": update_data
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Asset {symbol} not found")
+            
     except Exception as e:
-        logger.error(f"Error updating asset {symbol}: {e}")
-        raise HTTPException(status_code=500, detail="Error updating asset configuration")
+        logger.error(f"Error updating asset config for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating asset configuration: {str(e)}")
 
 
-# Get asset balances
+# Asset balances endpoint
 @router.get("/assets/balances")
 async def get_asset_balances(manager: OptimizedGridManager = Depends(get_grid_manager)):
     """Get current asset balances"""
@@ -161,24 +271,24 @@ async def get_asset_balances(manager: OptimizedGridManager = Depends(get_grid_ma
         balances = await manager.get_asset_balances()
         return {"balances": balances}
     except Exception as e:
-        logger.error(f"Error getting balances: {e}")
-        raise HTTPException(status_code=500, detail="Error retrieving balances")
+        logger.error(f"Error getting asset balances: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving asset balances")
 
 
-# Get current prices
+# Current prices endpoint
 @router.get("/assets/prices")
 async def get_current_prices(manager: OptimizedGridManager = Depends(get_grid_manager)):
-    """Get current prices for all configured assets"""
+    """Get current prices for configured assets"""
     try:
         symbols = [asset.symbol for asset in manager.config.assets.values() if asset.is_active]
         prices = await manager.get_current_prices(symbols)
         return {"prices": prices}
     except Exception as e:
-        logger.error(f"Error getting prices: {e}")
-        raise HTTPException(status_code=500, detail="Error retrieving prices")
+        logger.error(f"Error getting current prices: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving current prices")
 
 
-# Save configuration
+# Configuration save endpoint
 @router.post("/config/save")
 async def save_configuration(
     filepath: str = "optimized_grid_config.json",
@@ -187,15 +297,18 @@ async def save_configuration(
     """Save current configuration to file"""
     try:
         success = manager.save_configuration(filepath)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to save configuration")
         
-        return {"message": f"Configuration saved to {filepath}"}
-    except HTTPException:
-        raise
+        if success:
+            return {
+                "message": "Configuration saved successfully",
+                "filepath": filepath
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save configuration")
+            
     except Exception as e:
         logger.error(f"Error saving configuration: {e}")
-        raise HTTPException(status_code=500, detail="Error saving configuration")
+        raise HTTPException(status_code=500, detail=f"Error saving configuration: {str(e)}")
 
 
 # Emergency stop endpoint
@@ -208,11 +321,15 @@ async def emergency_stop(manager: OptimizedGridManager = Depends(get_grid_manage
             asset.is_active = False
         
         # Send emergency notification
-        send_telegram_alert("🚨 EMERGENCY STOP ACTIVATED - All trading stopped")
+        await send_telegram_alert("🚨 EMERGENCY STOP: All trading activities have been stopped!")
         
-        return {"message": "Emergency stop activated - All trading stopped"}
+        return {
+            "message": "Emergency stop executed",
+            "status": "stopped",
+            "active_assets": 0
+        }
     except Exception as e:
-        logger.error(f"Error in emergency stop: {e}")
+        logger.error(f"Error executing emergency stop: {e}")
         raise HTTPException(status_code=500, detail="Error executing emergency stop")
 
 
@@ -226,37 +343,48 @@ async def resume_trading(manager: OptimizedGridManager = Depends(get_grid_manage
             asset.is_active = True
         
         # Send resume notification
-        send_telegram_alert("✅ TRADING RESUMED - All assets reactivated")
+        await send_telegram_alert("✅ TRADING RESUMED: All trading activities have been resumed!")
         
-        return {"message": "Trading resumed - All assets reactivated"}
+        active_assets = sum(1 for asset in manager.config.assets.values() if asset.is_active)
+        
+        return {
+            "message": "Trading resumed",
+            "status": "running",
+            "active_assets": active_assets
+        }
     except Exception as e:
         logger.error(f"Error resuming trading: {e}")
         raise HTTPException(status_code=500, detail="Error resuming trading")
 
 
-# Initialize grid manager
+# Initialize grid manager function
 async def initialize_grid_manager():
-    """Initialize the grid manager with proper error handling"""
+    """Initialize the global grid manager instance"""
     global grid_manager
-    config_file = "grid_config_optimized.json"
     
     try:
+        config_file = "grid_config_optimized.json"
         grid_manager = await create_optimized_grid_manager(config_file)
-        logger.info("Grid manager initialized successfully")
+        
+        if grid_manager:
+            logger.info("Grid manager initialized successfully")
+        else:
+            logger.error("Failed to initialize grid manager")
+            
     except Exception as e:
-        logger.error(f"Failed to initialize grid manager: {e}")
-        raise
+        logger.error(f"Error initializing grid manager: {e}")
 
 
 # Startup event
 @router.on_event("startup")
 async def startup_event():
-    """Application startup event to initialize the grid manager"""
-    await initialize_grid_manager() 
+    """Initialize grid manager on startup"""
+    await initialize_grid_manager()
 
+
+# Shutdown event
 @router.on_event("shutdown")
 async def shutdown_event():
-    """Application shutdown event to close the grid manager"""
-    if grid_manager:
-        await grid_manager.close()
-        logger.info("Grid manager closed successfully") 
+    """Cleanup on shutdown"""
+    global grid_manager
+    grid_manager = None 

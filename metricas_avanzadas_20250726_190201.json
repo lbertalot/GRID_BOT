@@ -1,0 +1,221 @@
+{
+  "timestamp": "2025-07-26T19:02:01.044467",
+  "metrics": {
+    "total_return": 5.7665634993406085,
+    "sharpe_ratio": 1.654264700566436,
+    "max_drawdown": 9.979869729424507,
+    "volatility": 42.399415211258216,
+    "win_rate": 51.85185185185185,
+    "profit_factor": 1.3715922867477321,
+    "total_trades": 54,
+    "winning_trades": 28,
+    "losing_trades": 26
+  },
+  "portfolio": {
+    "current_value": 400.16031549841375,
+    "allocation": {
+      "allocation": {
+        "ETH": {
+          "balance": 0.02,
+          "value_usdt": 75.1966,
+          "price": 3759.83,
+          "percentage": 18.792264805485008
+        },
+        "BNB": {
+          "balance": 0.01163914,
+          "value_usdt": 9.1952697742,
+          "price": 790.03,
+          "percentage": 2.297975500948696
+        },
+        "USDT": {
+          "balance": 253.15437031,
+          "value_usdt": 253.15437031,
+          "percentage": 63.265413110849835
+        },
+        "ANIME": {
+          "balance": 535.79545515,
+          "value_usdt": 10.496232966388499,
+          "price": 0.01959,
+          "percentage": 2.6230971794527154
+        },
+        "BERA": {
+          "balance": 0.00202736,
+          "value_usdt": 0.00449871184,
+          "price": 2.219,
+          "percentage": 0.0011242660463485143
+        },
+        "LAYER": {
+          "balance": 0.00725106,
+          "value_usdt": 0.005180882370000001,
+          "price": 0.7145,
+          "percentage": 0.0012947462175564952
+        },
+        "KAITO": {
+          "balance": 0.00402431,
+          "value_usdt": 0.005485939392,
+          "price": 1.3632,
+          "percentage": 0.0013709825412492771
+        },
+        "NIL": {
+          "balance": 0.00515681,
+          "value_usdt": 0.0017821935360000003,
+          "price": 0.3456,
+          "percentage": 0.0004453852017662458
+        },
+        "RED": {
+          "balance": 0.00578295,
+          "value_usdt": 0.00229120479,
+          "price": 0.3962,
+          "percentage": 0.0005725914088838546
+        },
+        "SHELL": {
+          "balance": 0.00501078,
+          "value_usdt": 0.000941525562,
+          "price": 0.1879,
+          "percentage": 0.00023529518199276418
+        },
+        "GPS": {
+          "balance": 480.85982469,
+          "value_usdt": 10.0163101482927,
+          "price": 0.02083,
+          "percentage": 2.50316041789899
+        },
+        "BMT": {
+          "balance": 0.00600764,
+          "value_usdt": 0.0005226646799999999,
+          "price": 0.087,
+          "percentage": 0.00013061831347473265
+        },
+        "GUN": {
+          "balance": 300.0589074,
+          "value_usdt": 9.292824362178001,
+          "price": 0.03097,
+          "percentage": 2.322355215593674
+        },
+        "PARTI": {
+          "balance": 0.00602232,
+          "value_usdt": 0.001382724672,
+          "price": 0.2296,
+          "percentage": 0.0003455545621650633
+        },
+        "BABY": {
+          "balance": 0.01505946,
+          "value_usdt": 0.0009237472764,
+          "price": 0.06134,
+          "percentage": 0.0002308522384184172
+        },
+        "INIT": {
+          "balance": 0.00470308,
+          "value_usdt": 0.002051013188,
+          "price": 0.4361,
+          "percentage": 0.0005125655009460268
+        },
+        "WCT": {
+          "balance": 0.00628896,
+          "value_usdt": 0.002365277856,
+          "price": 0.3761,
+          "percentage": 0.0005911028930630086
+        },
+        "SOPH": {
+          "balance": 0.03004686,
+          "value_usdt": 0.0012487475016,
+          "price": 0.04156,
+          "percentage": 0.0003120725368601108
+        },
+        "HYPER": {
+          "balance": 0.00399863,
+          "value_usdt": 0.0020085118490000002,
+          "price": 0.5023,
+          "percentage": 0.0005019440577281728
+        },
+        "SIGN": {
+          "balance": 133.03993384,
+          "value_usdt": 10.390418832904,
+          "price": 0.0781,
+          "percentage": 2.5966533346963883
+        },
+        "STO": {
+          "balance": 0.00300564,
+          "value_usdt": 0.00034594916399999996,
+          "price": 0.1151,
+          "percentage": 8.645561500286128e-05
+        },
+        "SXT": {
+          "balance": 0.0192797,
+          "value_usdt": 0.00180650789,
+          "price": 0.0937,
+          "percentage": 0.00045146156398132335
+        },
+        "NXPC": {
+          "balance": 0.00589611,
+          "value_usdt": 0.006382539075000001,
+          "price": 1.0825,
+          "percentage": 0.0015950503670213191
+        },
+        "HAEDAL": {
+          "balance": 0.00600753,
+          "value_usdt": 0.000984033414,
+          "price": 0.1638,
+          "percentage": 0.00024591825286427116
+        },
+        "HUMA": {
+          "balance": 151.03826864,
+          "value_usdt": 5.9931984996352,
+          "price": 0.03968,
+          "percentage": 1.4977508722067236
+        },
+        "RESOLV": {
+          "balance": 0.00392654,
+          "value_usdt": 0.00077745492,
+          "price": 0.198,
+          "percentage": 0.00019429254422363723
+        },
+        "HOME": {
+          "balance": 316.03942478,
+          "value_usdt": 9.95524188057,
+          "price": 0.0315,
+          "percentage": 2.487898942536311
+        },
+        "SPK": {
+          "balance": 61.03968269,
+          "value_usdt": 6.40403934910404,
+          "price": 0.104916,
+          "percentage": 1.6004234669268151
+        },
+        "NEWT": {
+          "balance": 0.00248361,
+          "value_usdt": 0.0010682006609999998,
+          "price": 0.4301,
+          "percentage": 0.00026695235804419503
+        },
+        "SAHARA": {
+          "balance": 0.0248245,
+          "value_usdt": 0.002360065215,
+          "price": 0.09507,
+          "percentage": 0.0005898002100958542
+        },
+        "LA": {
+          "balance": 0.00298659,
+          "value_usdt": 0.001096974507,
+          "price": 0.3673,
+          "percentage": 0.0002741431849366908
+        },
+        "ERA": {
+          "balance": 0.00396837,
+          "value_usdt": 0.005073164208,
+          "price": 1.2784,
+          "percentage": 0.001267826540009051
+        },
+        "C": {
+          "balance": 0.0039581,
+          "value_usdt": 0.00146964253,
+          "price": 0.3713,
+          "percentage": 0.00036727606824195434
+        }
+      },
+      "total_value": 400.1465537993693,
+      "assets_count": 33
+    }
+  },
+  "analysis_period": "30 d\u00edas"
+}

@@ -7,7 +7,7 @@ import logging
 from fastapi.exceptions import RequestValidationError
 from fastapi import HTTPException
 
-from app.api import trade, strategies, metrics, prometheus, optimized_routes
+from app.api import trade, strategies, metrics, prometheus, optimized_routes, metrics_routes, risk_routes, config_routes, strategy_routes
 from app.core.auth import get_api_key
 from app.core.error_handlers import validation_exception_handler, http_exception_handler, general_exception_handler
 from app.db.init_db import init_db
@@ -61,8 +61,12 @@ app.add_exception_handler(Exception, general_exception_handler)
 app.include_router(trade.router, prefix="/api/trade", tags=["Trading"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Metrics"])
+app.include_router(metrics_routes.router, tags=["Advanced Metrics"])  # Ya tiene prefix /api/v1/metrics
+app.include_router(risk_routes.router, tags=["Risk Management"])  # Ya tiene prefix /api/v1/risk
+app.include_router(config_routes.router, tags=["Configuration Optimization"])  # Ya tiene prefix /api/v1/config
 app.include_router(prometheus.router, prefix="/api/prometheus", tags=["Prometheus"])
 app.include_router(optimized_routes.router, prefix="/api/optimized", tags=["Optimized"])
+app.include_router(strategy_routes.router, tags=["Strategies"])
 
 # Configuración de plantillas
 templates = Jinja2Templates(directory="app/templates")
@@ -73,6 +77,28 @@ async def read_root(request: Request):
     Endpoint raíz que sirve la página principal de la aplicación.
     """
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """
+    Endpoint del dashboard avanzado de métricas.
+    """
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/config-optimizer", response_class=HTMLResponse)
+async def config_optimizer(request: Request):
+    """
+    Endpoint del optimizador de configuración.
+    """
+    return templates.TemplateResponse("config_optimizer.html", {"request": request})
+
+@app.get("/optimizer", response_class=HTMLResponse)
+async def optimizer_alt(request: Request):
+    """
+    Endpoint alternativo del optimizador de configuración.
+    """
+    return templates.TemplateResponse("config_optimizer.html", {"request": request})
 
 @app.get("/health", response_class=JSONResponse)
 async def health_check():
