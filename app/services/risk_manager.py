@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from app.services.binance_client import client as binance_client
-from app.services.telegram_alert import send_telegram_alert
+from app.services.telegram_alert import send_telegram_alert, send_telegram_alert_async
+from app.core.error_handler import handle_risk_manager_errors, error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ class RiskManager:
             
             # Verificar límites críticos
             if risk_metrics.current_daily_loss >= self.max_daily_loss_percentage:
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.CRITICAL,
                     f"Pérdida diaria crítica: {risk_metrics.current_daily_loss:.2%}",
                     action_required=True
@@ -89,7 +90,7 @@ class RiskManager:
                 return RiskStatus.STOP_TRADING
             
             if risk_metrics.max_drawdown >= self.max_drawdown_percentage:
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.HIGH,
                     f"Drawdown máximo alcanzado: {risk_metrics.max_drawdown:.2%}",
                     action_required=True
@@ -97,7 +98,7 @@ class RiskManager:
                 return RiskStatus.DANGER
             
             if risk_metrics.total_exposure >= self.max_total_exposure_percentage:
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.MEDIUM,
                     f"Exposición total alta: {risk_metrics.total_exposure:.2%}",
                     action_required=False
@@ -112,7 +113,7 @@ class RiskManager:
             
         except Exception as e:
             logger.error(f"Error verificando riesgo del portafolio: {e}")
-            await self._trigger_risk_alert(
+            self._trigger_risk_alert(
                 RiskLevel.HIGH,
                 f"Error en verificación de riesgo: {str(e)}",
                 action_required=True
@@ -133,7 +134,7 @@ class RiskManager:
             
             # Verificar límites por activo
             if asset_exposure >= self.max_asset_exposure:
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.MEDIUM,
                     f"Exposición alta en {symbol}: {asset_exposure:.2%}",
                     action_required=False
@@ -142,7 +143,7 @@ class RiskManager:
             
             # Verificar stop-loss
             if await self._check_stop_loss(symbol, position):
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.HIGH,
                     f"Stop-loss activado para {symbol}",
                     action_required=True
@@ -159,7 +160,7 @@ class RiskManager:
         """Calcula métricas de riesgo del portafolio"""
         try:
             # Obtener datos del portafolio
-            account_info = await self._get_account_info()
+            account_info = self._get_account_info()
             balances = account_info.get('balances', [])
             
             # Calcular exposición total
@@ -188,20 +189,21 @@ class RiskManager:
                         total_value += usdt_value
             
             # Calcular métricas
-            total_exposure = (total_value - (await self._get_usdt_balance())) / total_value if total_value > 0 else 0.0
+            usdt_balance = await self._get_usdt_balance()
+            total_exposure = (total_value - usdt_balance) / total_value if total_value > 0 else 0.0
             largest_position_pct = largest_position / total_value if total_value > 0 else 0.0
             
             # Calcular pérdida diaria (simplificado)
-            current_daily_loss = await self._calculate_daily_loss()
+            current_daily_loss = self._calculate_daily_loss()
             
             # Calcular volatilidad (simplificado)
-            portfolio_volatility = await self._calculate_portfolio_volatility()
+            portfolio_volatility = self._calculate_portfolio_volatility()
             
             # Calcular Sharpe ratio (simplificado)
-            sharpe_ratio = await self._calculate_sharpe_ratio()
+            sharpe_ratio = self._calculate_sharpe_ratio()
             
             # Calcular máximo drawdown (simplificado)
-            max_drawdown = await self._calculate_max_drawdown()
+            max_drawdown = self._calculate_max_drawdown()
             
             # Calcular score de riesgo
             risk_score = self._calculate_risk_score(
@@ -240,13 +242,13 @@ class RiskManager:
             logger.info(f"Ejecutando stop-loss para {symbol}")
             
             # Obtener posición actual
-            position = await self._get_asset_position(symbol)
+            position = self._get_asset_position(symbol)
             if not position or position['quantity'] <= 0:
                 logger.info(f"No hay posición para vender en {symbol}")
                 return False
             
             # Crear orden de venta de mercado
-            order = await binance_client.create_order(
+            order = binance_client.create_order(
                 symbol=f"{symbol}USDT",
                 side='SELL',
                 type='MARKET',
@@ -254,7 +256,7 @@ class RiskManager:
             )
             
             if order and order.get('status') == 'FILLED':
-                await self._trigger_risk_alert(
+                self._trigger_risk_alert(
                     RiskLevel.MEDIUM,
                     f"Stop-loss ejecutado para {symbol}: {position['quantity']} vendidos",
                     action_required=False
@@ -267,7 +269,7 @@ class RiskManager:
                 
         except Exception as e:
             logger.error(f"Error ejecutando stop-loss para {symbol}: {e}")
-            await self._trigger_risk_alert(
+            self._trigger_risk_alert(
                 RiskLevel.HIGH,
                 f"Error ejecutando stop-loss para {symbol}: {str(e)}",
                 action_required=True
@@ -280,14 +282,14 @@ class RiskManager:
         self.trading_enabled = not enabled
         
         if enabled:
-            await self._trigger_risk_alert(
+            self._trigger_risk_alert(
                 RiskLevel.CRITICAL,
                 "🚨 PARADA DE EMERGENCIA ACTIVADA - Trading detenido",
                 action_required=True
             )
             logger.warning("Parada de emergencia activada")
         else:
-            await self._trigger_risk_alert(
+            self._trigger_risk_alert(
                 RiskLevel.LOW,
                 "✅ Parada de emergencia desactivada - Trading reanudado",
                 action_required=False
@@ -297,8 +299,8 @@ class RiskManager:
     async def get_risk_status(self) -> Dict:
         """Obtiene el estado actual del sistema de riesgo"""
         try:
-            risk_metrics = await self.calculate_risk_metrics()
-            portfolio_status = await self.check_portfolio_risk()
+            risk_metrics = self.calculate_risk_metrics()
+            portfolio_status = self.check_portfolio_risk()
             
             return {
                 "status": portfolio_status.value,
@@ -333,7 +335,7 @@ class RiskManager:
     
     # Métodos auxiliares privados
     
-    async def _trigger_risk_alert(self, level: RiskLevel, message: str, action_required: bool = False) -> None:
+    def _trigger_risk_alert(self, level: RiskLevel, message: str, action_required: bool = False) -> None:
         """Envía alerta de riesgo"""
         try:
             alert_key = f"{level.value}_{message[:50]}"
@@ -360,17 +362,17 @@ class RiskManager:
                 formatted_message += "⚠️ **ACCIÓN REQUERIDA**"
             
             # Enviar por Telegram
-            await send_telegram_alert(formatted_message)
+            send_telegram_alert(formatted_message)
             
             logger.warning(f"Alerta de riesgo enviada: {level.value} - {message}")
             
         except Exception as e:
             logger.error(f"Error enviando alerta de riesgo: {e}")
     
-    async def _get_account_info(self) -> Dict:
+    def _get_account_info(self) -> Dict:
         """Obtiene información de la cuenta"""
         try:
-            return await binance_client.get_account()
+            return binance_client.get_account()
         except Exception as e:
             logger.error(f"Error obteniendo información de cuenta: {e}")
             return {"balances": []}
@@ -378,7 +380,10 @@ class RiskManager:
     async def _get_symbol_ticker(self, symbol: str) -> Dict:
         """Obtiene ticker de un símbolo"""
         try:
-            return await binance_client.get_symbol_ticker(symbol=symbol)
+            # Usar asyncio para ejecutar la llamada síncrona de Binance
+            import asyncio
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, lambda: binance_client.get_symbol_ticker(symbol=symbol))
         except Exception as e:
             logger.error(f"Error obteniendo ticker de {symbol}: {e}")
             return {"price": "0"}
@@ -386,7 +391,7 @@ class RiskManager:
     async def _get_usdt_balance(self) -> float:
         """Obtiene balance de USDT"""
         try:
-            account_info = await self._get_account_info()
+            account_info = self._get_account_info()
             for balance in account_info.get('balances', []):
                 if balance['asset'] == 'USDT':
                     return float(balance['free']) + float(balance['locked'])
@@ -398,7 +403,7 @@ class RiskManager:
     async def _get_asset_position(self, symbol: str) -> Optional[Dict]:
         """Obtiene posición de un activo"""
         try:
-            account_info = await self._get_account_info()
+            account_info = self._get_account_info()
             for balance in account_info.get('balances', []):
                 if balance['asset'] == symbol:
                     quantity = float(balance['free']) + float(balance['locked'])
@@ -419,7 +424,7 @@ class RiskManager:
     async def _get_total_portfolio_value(self) -> float:
         """Obtiene valor total del portafolio"""
         try:
-            account_info = await self._get_account_info()
+            account_info = self._get_account_info()
             total_value = 0.0
             
             for balance in account_info.get('balances', []):
@@ -462,22 +467,22 @@ class RiskManager:
             logger.error(f"Error verificando stop-loss para {symbol}: {e}")
             return False
     
-    async def _calculate_daily_loss(self) -> float:
+    def _calculate_daily_loss(self) -> float:
         """Calcula pérdida diaria (simplificado)"""
         # Implementación simplificada - en producción se usarían datos históricos
         return 0.0
     
-    async def _calculate_portfolio_volatility(self) -> float:
+    def _calculate_portfolio_volatility(self) -> float:
         """Calcula volatilidad del portafolio (simplificado)"""
         # Implementación simplificada - en producción se usarían datos históricos
         return 0.05  # 5% por defecto
     
-    async def _calculate_sharpe_ratio(self) -> float:
+    def _calculate_sharpe_ratio(self) -> float:
         """Calcula Sharpe ratio (simplificado)"""
         # Implementación simplificada - en producción se usarían datos históricos
         return 1.0  # 1.0 por defecto
     
-    async def _calculate_max_drawdown(self) -> float:
+    def _calculate_max_drawdown(self) -> float:
         """Calcula máximo drawdown (simplificado)"""
         # Implementación simplificada - en producción se usarían datos históricos
         return 0.05  # 5% por defecto

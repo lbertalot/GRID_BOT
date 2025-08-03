@@ -321,7 +321,7 @@ async def emergency_stop(manager: OptimizedGridManager = Depends(get_grid_manage
             asset.is_active = False
         
         # Send emergency notification
-        await send_telegram_alert("🚨 EMERGENCY STOP: All trading activities have been stopped!")
+        send_telegram_alert("🚨 EMERGENCY STOP: All trading activities have been stopped!")
         
         return {
             "message": "Emergency stop executed",
@@ -343,7 +343,7 @@ async def resume_trading(manager: OptimizedGridManager = Depends(get_grid_manage
             asset.is_active = True
         
         # Send resume notification
-        await send_telegram_alert("✅ TRADING RESUMED: All trading activities have been resumed!")
+        send_telegram_alert("✅ TRADING RESUMED: All trading activities have been resumed!")
         
         active_assets = sum(1 for asset in manager.config.assets.values() if asset.is_active)
         

@@ -404,7 +404,7 @@ class ScalpingStrategy(TradingStrategy):
             message += f"RSI: {rsi:.1f}\n"
             message += f"Posiciones activas: {len(self.active_positions)}"
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error enviando notificación de entrada: {e}")
@@ -418,7 +418,7 @@ class ScalpingStrategy(TradingStrategy):
             message += f"Profit: ${profit:.2f}\n"
             message += f"Razón: {reason}"
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error enviando notificación de salida: {e}")

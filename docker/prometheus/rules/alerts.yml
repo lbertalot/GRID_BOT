@@ -1,0 +1,92 @@
+groups:
+  - name: gridbot_alerts
+    rules:
+      # Alerta cuando la API no responde
+      - alert: GridBotAPIDown
+        expr: up{job="gridbot-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GridBot API está caída"
+          description: "La API de GridBot ha estado caída por más de 1 minuto"
+
+      # Alerta cuando hay errores en las órdenes de trading
+      - alert: TradingOrderErrors
+        expr: rate(gridbot_trading_orders_failed_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errores en órdenes de trading"
+          description: "Tasa de errores en órdenes de trading es alta"
+
+      # Alerta cuando el balance es bajo
+      - alert: LowBalance
+        expr: gridbot_balance_usdt < 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Balance USDT bajo"
+          description: "El balance de USDT está por debajo de $50"
+
+      # Alerta cuando hay pérdidas significativas
+      - alert: SignificantLosses
+        expr: gridbot_daily_pnl < -100
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pérdidas significativas detectadas"
+          description: "Pérdidas diarias superan $100"
+
+      # Alerta cuando Redis no responde
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis está caído"
+          description: "Redis ha estado caído por más de 1 minuto"
+
+      # Alerta cuando PostgreSQL no responde
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL está caído"
+          description: "PostgreSQL ha estado caído por más de 1 minuto"
+
+      # Alerta cuando Celery worker no está funcionando
+      - alert: CeleryWorkerDown
+        expr: up{job="gridbot-celery"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery worker está caído"
+          description: "El worker de Celery ha estado caído por más de 2 minutos"
+
+      # Alerta cuando la latencia de la API es alta
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia alta en la API"
+          description: "El 95% de las requests tardan más de 1 segundo"
+
+      # Alerta cuando hay muchas tareas fallidas en Celery
+      - alert: CeleryTaskFailures
+        expr: rate(celery_tasks_failed_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Muchas tareas fallidas en Celery"
+          description: "Tasa de fallos en tareas de Celery es alta" 

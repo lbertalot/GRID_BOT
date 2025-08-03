@@ -27,14 +27,16 @@ async def metrics():
     """Endpoint principal de métricas de Prometheus"""
     start_time = time.time()
     try:
-        result = get_metrics()
-        duration = time.time() - start_time
-        record_api_request("GET", "/api/metrics/metrics/", 200, duration)
-        return result
+        # result = get_metrics()
+        # duration = time.time() - start_time
+        # record_api_request("GET", "/api/metrics/metrics/", 200, duration)
+        # return result
+        return {"error": "Métricas no disponibles"}
     except Exception as e:
-        duration = time.time() - start_time
-        record_api_request("GET", "/api/metrics/metrics/", 500, duration)
-        raise e
+        # duration = time.time() - start_time
+        # record_api_request("GET", "/api/metrics/metrics/", 500, duration)
+        # raise e
+        return {"error": "Error en métricas"}
 
 @router.get("/health")
 async def metrics_health():
@@ -204,14 +206,24 @@ async def prometheus_trading_metrics():
     """Métricas de trading para Prometheus (sin autenticación)"""
     start_time = time.time()
     try:
-        result = get_trading_metrics()
+        from fastapi.responses import Response
+        from prometheus_client import generate_latest
+        
+        # Generar métricas de Prometheus directamente
+        metrics_content = generate_latest()
+        
         duration = time.time() - start_time
-        record_api_request("GET", "/api/prometheus/trading", 200, duration)
-        return result
+        record_api_request("GET", "/api/metrics/metrics/prometheus/trading", 200, duration)
+        
+        return Response(
+            content=metrics_content,
+            media_type="text/plain; version=0.0.4; charset=utf-8"
+        )
+        
     except Exception as e:
         duration = time.time() - start_time
-        record_api_request("GET", "/api/prometheus/trading", 500, duration)
-        raise e
+        record_api_request("GET", "/api/metrics/metrics/prometheus/trading", 500, duration)
+        return {"error": f"Error generando métricas: {str(e)}"}
 
 @router.get("/prometheus/binance")
 async def prometheus_binance_metrics():

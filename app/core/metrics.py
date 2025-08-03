@@ -1,298 +1,433 @@
-from prometheus_client import Counter, Gauge, Histogram, Summary, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+"""
+Métricas Prometheus para el dashboard de rentabilidad del bot de trading
+Orientado a usuarios no técnicos
+"""
+
+from prometheus_client import Counter, Gauge, Histogram, Summary
+from typing import Dict, Optional
 import time
-from typing import Dict, Any
+from datetime import datetime, timedelta
 
 # ============================================================================
-# MÉTRICAS DE TRADING
+# MÉTRICAS DE RENTABILIDAD (Principales para el dashboard)
 # ============================================================================
 
-# Contadores de órdenes
-orders_executed = Counter(
-    'gridbot_orders_total', 
-    'Total orders executed', 
-    ['symbol', 'side', 'type', 'strategy']
+# Ganancia total acumulada en USDT
+profit_total_usdt = Gauge(
+    'profit_total_usdt',
+    'Ganancia total acumulada en USDT',
+    ['strategy']
 )
 
-orders_failed = Counter(
-    'gridbot_orders_failed_total', 
-    'Total failed orders', 
-    ['symbol', 'side', 'type', 'error_type']
+# ROI diario en porcentaje
+roi_daily_percent = Gauge(
+    'roi_daily_percent',
+    'ROI diario en porcentaje',
+    ['strategy']
+)
+
+# Ganancia diaria en USDT
+profit_daily_usdt = Gauge(
+    'profit_daily_usdt',
+    'Ganancia diaria en USDT',
+    ['strategy']
+)
+
+# Valor total del portafolio en USDT
+portfolio_total_value_usdt = Gauge(
+    'portfolio_total_value_usdt',
+    'Valor total del portafolio en USDT',
+    ['strategy']
+)
+
+# Ganancia por activo específico
+profit_by_asset_usdt = Gauge(
+    'profit_by_asset_usdt',
+    'Ganancia por activo en USDT',
+    ['asset', 'strategy']
+)
+
+# ROI por activo específico
+roi_by_asset_percent = Gauge(
+    'roi_by_asset_percent',
+    'ROI por activo en porcentaje',
+    ['asset', 'strategy']
+)
+
+# ============================================================================
+# MÉTRICAS DE OPERACIONES
+# ============================================================================
+
+# Total de trades ejecutados
+trades_executed_total = Counter(
+    'trades_executed_total',
+    'Total de trades ejecutados',
+    ['side', 'asset', 'strategy']
+)
+
+# Tasa de éxito de trades (0-1)
+trades_success_rate = Gauge(
+    'trades_success_rate',
+    'Tasa de éxito de trades (0-1)',
+    ['strategy']
+)
+
+# Trades exitosos vs fallidos
+trades_successful_total = Counter(
+    'trades_successful_total',
+    'Total de trades exitosos',
+    ['asset', 'strategy']
+)
+
+trades_failed_total = Counter(
+    'trades_failed_total',
+    'Total de trades fallidos',
+    ['asset', 'strategy']
+)
+
+# ============================================================================
+# MÉTRICAS DE ESTADO DEL BOT
+# ============================================================================
+
+# Timestamp de última ejecución
+bot_last_execution_timestamp = Gauge(
+    'bot_last_execution_timestamp',
+    'Timestamp de la última ejecución del bot',
+    ['strategy']
+)
+
+# Estado del bot (1=activo, 0=inactivo)
+bot_status = Gauge(
+    'bot_status',
+    'Estado del bot (1=activo, 0=inactivo)',
+    ['strategy']
+)
+
+# Errores del bot
+bot_errors_total = Counter(
+    'bot_errors_total',
+    'Total de errores del bot',
+    ['error_type', 'strategy']
+)
+
+# ============================================================================
+# MÉTRICAS DE SALDOS Y POSICIONES
+# ============================================================================
+
+# Saldo por activo
+balance_by_asset = Gauge(
+    'balance_by_asset',
+    'Saldo por activo',
+    ['asset', 'strategy']
+)
+
+# Posiciones activas
+active_positions_count = Gauge(
+    'active_positions_count',
+    'Número de posiciones activas',
+    ['strategy']
+)
+
+# ============================================================================
+# MÉTRICAS DE RENDIMIENTO
+# ============================================================================
+
+# Latencia de ejecución de trades
+trade_execution_duration = Histogram(
+    'trade_execution_duration_seconds',
+    'Duración de ejecución de trades',
+    ['asset', 'strategy'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
 )
 
 # Volumen de trading
-trading_volume = Counter(
-    'gridbot_volume_total', 
-    'Total trading volume', 
-    ['symbol', 'side']
-)
-
-# Ganancias/pérdidas
-profit_loss = Gauge(
-    'gridbot_profit_loss', 
-    'Current profit/loss', 
-    ['symbol', 'strategy']
+trading_volume_usdt = Counter(
+    'trading_volume_usdt',
+    'Volumen total de trading en USDT',
+    ['asset', 'strategy']
 )
 
 # ============================================================================
-# MÉTRICAS DE SISTEMA
+# MÉTRICAS DE API
 # ============================================================================
 
-# Estado del sistema
+# Contador de requests de API
 api_requests_total = Counter(
-    'gridbot_api_requests_total',
-    'Total API requests',
-    ['method', 'endpoint', 'status']
+    'api_requests_total',
+    'Total de requests de API',
+    ['method', 'endpoint', 'status_code']
 )
 
+# Duración de requests de API
 api_request_duration = Histogram(
-    'gridbot_api_request_duration_seconds',
-    'API request duration in seconds',
-    ['method', 'endpoint']
-)
-
-# Uso de recursos
-memory_usage = Gauge(
-    'gridbot_memory_usage_bytes',
-    'Memory usage in bytes'
-)
-
-cpu_usage = Gauge(
-    'gridbot_cpu_usage_percent',
-    'CPU usage percentage'
+    'api_request_duration_seconds',
+    'Duración de requests de API',
+    ['method', 'endpoint'],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
 )
 
 # ============================================================================
-# MÉTRICAS DE BINANCE API
+# FUNCIONES DE UTILIDAD
 # ============================================================================
 
-binance_api_calls = Counter(
-    'gridbot_binance_api_calls_total',
-    'Total Binance API calls',
-    ['endpoint', 'status']
-)
-
-binance_api_latency = Histogram(
-    'gridbot_binance_api_latency_seconds',
-    'Binance API latency in seconds',
-    ['endpoint']
-)
-
-binance_connection_status = Gauge(
-    'gridbot_binance_connection_status',
-    'Binance connection status (1=connected, 0=disconnected)'
-)
-
-# ============================================================================
-# MÉTRICAS DE ESTRATEGIAS
-# ============================================================================
-
-active_strategies = Gauge(
-    'gridbot_active_strategies',
-    'Number of active strategies',
-    ['strategy_type']
-)
-
-strategy_performance = Gauge(
-    'gridbot_strategy_performance',
-    'Strategy performance percentage',
-    ['strategy_type', 'symbol']
-)
-
-grid_levels_active = Gauge(
-    'gridbot_grid_levels_active',
-    'Number of active grid levels',
-    ['symbol', 'strategy_id']
-)
-
-# ============================================================================
-# MÉTRICAS DE BALANCE
-# ============================================================================
-
-balance_total = Gauge(
-    'gridbot_balance_total',
-    'Total balance',
-    ['asset']
-)
-
-balance_locked = Gauge(
-    'gridbot_balance_locked',
-    'Locked balance',
-    ['asset']
-)
-
-# ============================================================================
-# FUNCIONES UTILITARIAS
-# ============================================================================
-
-def record_order_execution(symbol: str, side: str, order_type: str, strategy: str, quantity: float, price: float):
-    """Registra una orden ejecutada exitosamente"""
+def record_api_request(method: str, endpoint: str, status_code: int, duration: float):
+    """
+    Registra una request de API para métricas
+    """
     try:
-        orders_executed.labels(symbol=symbol, side=side, type=order_type, strategy=strategy).inc()
+        # Incrementar contador de requests
+        api_requests_total.labels(
+            method=method,
+            endpoint=endpoint,
+            status_code=str(status_code)
+        ).inc()
         
-        # Calcular volumen
-        volume = quantity * price
-        trading_volume.labels(symbol=symbol, side=side).inc(volume)
+        # Registrar duración
+        api_request_duration.labels(
+            method=method,
+            endpoint=endpoint
+        ).observe(duration)
         
-        # Actualizar balance estimado
-        if side == "BUY":
-            # Compra: reducir USDT, aumentar asset
-            balance_total.labels(asset="USDT").dec(volume)
-            balance_total.labels(asset=symbol.replace("USDT", "")).inc(quantity)
-        else:
-            # Venta: aumentar USDT, reducir asset
-            balance_total.labels(asset="USDT").inc(volume)
-            balance_total.labels(asset=symbol.replace("USDT", "")).dec(quantity)
-        
-        print(f"📊 Métrica registrada: Orden {side} {quantity} {symbol} @ ${price}")
     except Exception as e:
-        print(f"❌ Error registrando métrica de orden: {e}")
+        # Log del error pero no fallar la aplicación
+        print(f"Error registrando métrica de API: {e}")
 
-def record_order_failure(symbol: str, side: str, order_type: str, error_type: str):
-    """Registra una orden fallida"""
+def get_metrics():
+    """
+    Obtiene todas las métricas en formato Prometheus
+    """
     try:
-        orders_failed.labels(symbol=symbol, side=side, type=order_type, error_type=error_type).inc()
-        print(f"📊 Métrica registrada: Orden fallida {side} {symbol} - {error_type}")
+        from prometheus_client import generate_latest
+        return generate_latest()
     except Exception as e:
-        print(f"❌ Error registrando métrica de orden fallida: {e}")
+        print(f"Error generando métricas: {e}")
+        return ""
 
-def record_api_request(method: str, endpoint: str, status: int, duration: float):
-    """Registra una petición API"""
+def get_trading_metrics():
+    """
+    Obtiene métricas específicas de trading
+    """
     try:
-        api_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
-        api_request_duration.labels(method=method, endpoint=endpoint).observe(duration)
+        return {
+            "profit_total": profit_total_usdt._value.get(),
+            "roi_daily": roi_daily_percent._value.get(),
+            "portfolio_value": portfolio_total_value_usdt._value.get(),
+            "trades_executed": trades_executed_total._value.get(),
+            "success_rate": trades_success_rate._value.get()
+        }
     except Exception as e:
-        print(f"❌ Error registrando métrica de API: {e}")
+        print(f"Error obteniendo métricas de trading: {e}")
+        return {}
 
-def record_binance_api_call(endpoint: str, status: str, duration: float):
-    """Registra una llamada a la API de Binance"""
+def get_binance_metrics():
+    """
+    Obtiene métricas de Binance
+    """
     try:
-        binance_api_calls.labels(endpoint=endpoint, status=status).inc()
-        binance_api_latency.labels(endpoint=endpoint).observe(duration)
+        return {
+            "api_requests": api_requests_total._value.get(),
+            "api_duration_avg": api_request_duration._value.get()
+        }
     except Exception as e:
-        print(f"❌ Error registrando métrica de Binance: {e}")
+        print(f"Error obteniendo métricas de Binance: {e}")
+        return {}
+
+def get_strategy_metrics():
+    """
+    Obtiene métricas de estrategias
+    """
+    try:
+        return {
+            "bot_status": bot_status._value.get(),
+            "bot_errors": bot_errors_total._value.get(),
+            "active_positions": active_positions_count._value.get()
+        }
+    except Exception as e:
+        print(f"Error obteniendo métricas de estrategias: {e}")
+        return {}
+
+def record_order_execution(symbol: str, side: str, quantity: float, price: float, success: bool):
+    """
+    Registra la ejecución de una orden
+    """
+    try:
+        volume_usdt = quantity * price
+        trading_metrics.record_trade(
+            side=side,
+            asset=symbol,
+            success=success,
+            volume_usdt=volume_usdt,
+            execution_time=0.1,  # Valor por defecto
+            strategy="grid"
+        )
+    except Exception as e:
+        print(f"Error registrando ejecución de orden: {e}")
+
+def record_order_failure(symbol: str, side: str, error_type: str):
+    """
+    Registra el fallo de una orden
+    """
+    try:
+        trading_metrics.record_error(error_type, "grid")
+    except Exception as e:
+        print(f"Error registrando fallo de orden: {e}")
 
 def update_balance(asset: str, free: float, locked: float):
-    """Actualiza métricas de balance"""
+    """
+    Actualiza balance de un activo
+    """
     try:
-        balance_total.labels(asset=asset).set(free)
-        balance_locked.labels(asset=asset).set(locked)
+        balances = {asset: free + locked}
+        trading_metrics.update_balances(balances, "grid")
     except Exception as e:
-        print(f"❌ Error actualizando métrica de balance: {e}")
+        print(f"Error actualizando balance: {e}")
 
 def update_strategy_status(strategy_type: str, active_count: int):
-    """Actualiza el estado de las estrategias"""
+    """
+    Actualiza estado de estrategias
+    """
     try:
-        active_strategies.labels(strategy_type=strategy_type).set(active_count)
+        trading_metrics.update_active_positions(active_count, strategy_type)
     except Exception as e:
-        print(f"❌ Error actualizando métrica de estrategia: {e}")
+        print(f"Error actualizando estado de estrategia: {e}")
 
-def update_profit_loss(symbol: str, strategy: str, pnl: float):
-    """Actualiza ganancias/pérdidas"""
+def update_profit_loss(total_profit: float, portfolio_value: float):
+    """
+    Actualiza métricas de P&L
+    """
     try:
-        profit_loss.labels(symbol=symbol, strategy=strategy).set(pnl)
+        trading_metrics.update_profit_metrics(total_profit, portfolio_value, "grid")
     except Exception as e:
-        print(f"❌ Error actualizando métrica de P&L: {e}")
+        print(f"Error actualizando P&L: {e}")
 
 # ============================================================================
-# ENDPOINTS DE MÉTRICAS
+# CLASE PARA GESTIONAR MÉTRICAS
 # ============================================================================
 
-def get_metrics() -> Response:
-    """Endpoint para obtener métricas de Prometheus"""
-    try:
-        return Response(
-            content=generate_latest(),
-            media_type=CONTENT_TYPE_LATEST
-        )
-    except Exception as e:
-        print(f"❌ Error generando métricas: {e}")
-        return Response(
-            content="",
-            media_type=CONTENT_TYPE_LATEST
-        )
-
-def get_trading_metrics() -> Dict[str, Any]:
-    """Endpoint para obtener métricas específicas de trading"""
-    return {
-        "orders_executed": {
-            "total": 0,  # Valor por defecto
-            "by_symbol": {}
-        },
-        "trading_volume": {
-            "total": 0,  # Valor por defecto
-            "by_symbol": {}
-        },
-        "profit_loss": {
-            "total": 0,  # Valor por defecto
-            "by_strategy": {}
-        }
-    }
-
-def get_binance_metrics() -> Dict[str, Any]:
-    """Endpoint para obtener métricas de Binance API"""
-    return {
-        "api_calls": {
-            "total": 0,  # Valor por defecto
-            "by_endpoint": {}
-        },
-        "latency": {
-            "average": 0,  # Valor por defecto
-            "by_endpoint": {}
-        },
-        "connection_status": 1  # Valor por defecto (conectado)
-    }
-
-def get_strategy_metrics() -> Dict[str, Any]:
-    """Endpoint para obtener métricas de estrategias"""
-    return {
-        "active_strategies": {
-            "total": 0,  # Valor por defecto
-            "by_type": {}
-        },
-        "performance": {
-            "by_strategy": {}
-        },
-        "grid_levels": {
-            "total": 0,  # Valor por defecto
-            "by_symbol": {}
-        }
-    }
-
-# ============================================================================
-# MIDDLEWARE SIMPLIFICADO PARA MÉTRICAS
-# ============================================================================
-
-class MetricsMiddleware:
-    """Middleware simplificado para registrar métricas automáticamente"""
+class TradingMetrics:
+    """
+    Clase para gestionar todas las métricas del bot de trading
+    """
     
-    def __init__(self, app):
-        self.app = app
+    def __init__(self):
+        self.last_update = time.time()
+        self.daily_profit_start = 0.0
+        self.daily_profit_current = 0.0
+        self.portfolio_initial_value = 0.0
+        
+    def update_profit_metrics(self, 
+                            total_profit: float,
+                            portfolio_value: float,
+                            strategy: str = "grid"):
+        """
+        Actualiza métricas de rentabilidad
+        """
+        # Ganancia total
+        profit_total_usdt.labels(strategy=strategy).set(total_profit)
+        
+        # Valor del portafolio
+        portfolio_total_value_usdt.labels(strategy=strategy).set(portfolio_value)
+        
+        # Calcular ganancia diaria
+        current_time = time.time()
+        if current_time - self.last_update > 86400:  # 24 horas
+            self.daily_profit_start = self.daily_profit_current
+            self.last_update = current_time
+        
+        daily_profit = total_profit - self.daily_profit_start
+        profit_daily_usdt.labels(strategy=strategy).set(daily_profit)
+        
+        # Calcular ROI diario
+        if self.portfolio_initial_value > 0:
+            roi_daily = (daily_profit / self.portfolio_initial_value) * 100
+            roi_daily_percent.labels(strategy=strategy).set(roi_daily)
     
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            method = scope["method"]
-            path = scope["path"]
-            
-            # Registrar inicio de petición
-            start_time = time.time()
-            
-            # Wrapper para capturar la respuesta
-            async def send_wrapper(message):
-                if message["type"] == "http.response.start":
-                    # Calcular duración
-                    duration = time.time() - start_time
-                    status = message.get("status", 500)
-                    
-                    # Registrar métrica de forma segura
-                    try:
-                        record_api_request(method, path, status, duration)
-                    except Exception as e:
-                        print(f"❌ Error en middleware de métricas: {e}")
-                
-                await send(message)
-            
-            # Continuar con la petición
-            await self.app(scope, receive, send_wrapper)
+    def update_asset_profit(self, 
+                           asset: str,
+                           profit: float,
+                           roi: float,
+                           strategy: str = "grid"):
+        """
+        Actualiza métricas por activo
+        """
+        profit_by_asset_usdt.labels(asset=asset, strategy=strategy).set(profit)
+        roi_by_asset_percent.labels(asset=asset, strategy=strategy).set(roi)
+    
+    def record_trade(self, 
+                    side: str,
+                    asset: str,
+                    success: bool,
+                    volume_usdt: float,
+                    execution_time: float,
+                    strategy: str = "grid"):
+        """
+        Registra un trade ejecutado
+        """
+        # Incrementar contador total
+        trades_executed_total.labels(side=side, asset=asset, strategy=strategy).inc()
+        
+        # Registrar éxito/fallo
+        if success:
+            trades_successful_total.labels(asset=asset, strategy=strategy).inc()
         else:
-            await self.app(scope, receive, send) 
+            trades_failed_total.labels(asset=asset, strategy=strategy).inc()
+        
+        # Actualizar tasa de éxito
+        total_trades = trades_successful_total.labels(asset=asset, strategy=strategy)._value.get() + \
+                      trades_failed_total.labels(asset=asset, strategy=strategy)._value.get()
+        
+        if total_trades > 0:
+            success_rate = trades_successful_total.labels(asset=asset, strategy=strategy)._value.get() / total_trades
+            trades_success_rate.labels(strategy=strategy).set(success_rate)
+        
+        # Registrar volumen
+        trading_volume_usdt.labels(asset=asset, strategy=strategy).inc(volume_usdt)
+        
+        # Registrar duración de ejecución
+        trade_execution_duration.labels(asset=asset, strategy=strategy).observe(execution_time)
+    
+    def update_bot_status(self, 
+                         is_active: bool,
+                         strategy: str = "grid"):
+        """
+        Actualiza estado del bot
+        """
+        status_value = 1 if is_active else 0
+        bot_status.labels(strategy=strategy).set(status_value)
+        
+        if is_active:
+            bot_last_execution_timestamp.labels(strategy=strategy).set(time.time())
+    
+    def record_error(self, 
+                    error_type: str,
+                    strategy: str = "grid"):
+        """
+        Registra un error del bot
+        """
+        bot_errors_total.labels(error_type=error_type, strategy=strategy).inc()
+    
+    def update_balances(self, 
+                       balances: Dict[str, float],
+                       strategy: str = "grid"):
+        """
+        Actualiza saldos por activo
+        """
+        for asset, balance in balances.items():
+            balance_by_asset.labels(asset=asset, strategy=strategy).set(balance)
+    
+    def update_active_positions(self, 
+                               count: int,
+                               strategy: str = "grid"):
+        """
+        Actualiza número de posiciones activas
+        """
+        active_positions_count.labels(strategy=strategy).set(count)
+    
+    def set_initial_portfolio_value(self, value: float):
+        """
+        Establece el valor inicial del portafolio para cálculos de ROI
+        """
+        self.portfolio_initial_value = value
+
+# Instancia global para usar en toda la aplicación
+trading_metrics = TradingMetrics() 

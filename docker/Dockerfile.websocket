@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements
+COPY requirements*.txt ./
+
+# Instalar dependencias con WebSocket avanzado
+RUN pip install --no-cache-dir -r requirements_websocket.txt
+
+# Verificar instalación de dependencias críticas
+RUN python -c "import sys; packages = ['fastapi', 'uvicorn', 'sqlalchemy', 'asyncpg', 'pydantic', 'unicorn_binance_websocket_api']; missing = []; [missing.append(p) if __import__(p.replace('-', '_'), globals(), locals(), [], 0) is None else print(f'✅ {p} instalado') for p in packages]; sys.exit(1) if missing else print('✅ Todas las dependencias instaladas correctamente')"
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 

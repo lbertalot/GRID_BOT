@@ -1,111 +1,288 @@
-# GridBot - Bot de Trading Automatizado
+# 🤖 GridBot Trading Platform
 
-## 🚀 Descripción
+Una plataforma completa de trading automatizado que implementa estrategias avanzadas de trading algorítmico, incluyendo Grid Trading, DCA, Scalping y más.
 
-GridBot es un sistema de trading automatizado que implementa estrategias de grid trading y otras (Scalping, Trailing Stop, RSI/MACD) sobre Binance Spot, usando FastAPI, PostgreSQL, SQLAlchemy y python-binance. El sistema es modular, dockerizado y seguro.
+## 🚀 Características Principales
+
+### 📊 Trading Automatizado
+- **Grid Trading**: Estrategia de trading en rangos de precios
+- **DCA (Dollar Cost Averaging)**: Compra automática periódica
+- **Scalping**: Trading de alta frecuencia
+- **Arbitraje**: Oportunidades entre exchanges
+
+### 🧠 Machine Learning
+- Predicción de precios con modelos ML
+- Optimización automática de parámetros
+- Detección de patrones de mercado
+- Backtesting avanzado
+
+### 📈 Monitoreo y Análisis
+- Dashboard en tiempo real
+- Métricas de rendimiento avanzadas
+- Alertas automáticas por Telegram
+- Análisis de riesgo integrado
+
+### 🔒 Gestión de Riesgos
+- Stop-loss automático
+- Position sizing dinámico
+- Límites de exposición por activo
+- Rebalanceo automático
+
+### 🌐 Escalabilidad
+- Arquitectura multi-tenant
+- Soporte multi-exchange
+- API pública documentada
+- White-label solutions
 
 ## 🏗️ Arquitectura
 
 ```
-grid_bot/
-├── app/
-│   ├── api/           # Endpoints de la API (trading, grid, consulta de operaciones)
-│   ├── core/          # Configuración, utilidades, lógica base
-│   ├── db/            # Configuración y sesión de base de datos
-│   ├── models/        # Modelos SQLAlchemy (Trade, GridConfig, AssetLimit)
-│   ├── scheduler/     # Jobs programados (APScheduler)
-│   ├── services/      # Lógica de trading (Binance, grid, estrategias, logging)
-│   ├── schemas/       # Esquemas Pydantic
-│   └── strategies/    # Estrategias de trading
-├── scripts/           # Scripts de utilidad y automatización
-├── docker/            # Configuración Docker, Prometheus, Grafana
-├── tests/             # Tests unitarios y de integración
-├── Docs/              # Documentación técnica y de despliegue
-├── grid_config_optimized.json # Configuración de activos y grids
-├── .env               # Variables de entorno (no versionado)
-├── requirements.txt   # Dependencias
-├── docker-compose.yml # Orquestación de servicios
-└── README.md
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   API Gateway   │    │   Trading       │
+│   (React)       │◄──►│   (Nginx)       │◄──►│   Engine        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │
+                                ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   PostgreSQL    │    │   Redis         │    │   Celery        │
+│   (Database)    │◄──►│   (Cache)       │◄──►│   (Tasks)       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │
+                                ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Prometheus    │    │   Grafana       │    │   Alertmanager  │
+│   (Metrics)     │◄──►│   (Dashboards)  │◄──►│   (Alerts)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-## ⚙️ Tecnologías
+## 📋 Requisitos Previos
 
-- **Backend**: FastAPI, Python 3.11
-- **Base de Datos**: PostgreSQL + SQLAlchemy + asyncpg
-- **Trading**: python-binance
-- **Scheduler**: APScheduler
-- **Contenedores**: Docker & Docker Compose
-- **Monitoreo**: Prometheus & Grafana (integración futura)
-- **Alertas**: Telegram Bot (integrado)
-- **Testing**: pytest, pytest-asyncio
+- **Docker**: Versión 20.10 o superior
+- **Docker Compose**: Versión 2.0 o superior
+- **Git**: Para clonar el repositorio
+- **API Keys de Binance**: Para trading real
 
-## 🟢 Estado actual del desarrollo
+## 🚀 Instalación Rápida
 
-- Sincronización automática de balances y límites de Binance al iniciar el sistema.
-- Persistencia de operaciones, configuraciones y límites en PostgreSQL.
-- Estrategias implementadas: Grid, Scalping, Trailing Stop, RSI/MACD.
-- Validación y ajuste automático de órdenes para cumplir con `step_size` y `min_notional` de Binance.
-- Scheduler automático con APScheduler para ejecución periódica de estrategias.
-- Logging robusto de eventos, errores y operaciones.
-- Integración de alertas por Telegram (operaciones y errores críticos).
-- Tests unitarios y de endpoints críticos.
-- Dockerización completa (app + db + worker).
+### 1. Clonar el Repositorio
+```bash
+git clone https://github.com/tu-usuario/grid-bot.git
+cd grid-bot
+```
 
-## 🛠️ Instalación y despliegue
+### 2. Configurar Variables de Entorno
+```bash
+cp env.example .env
+# Editar .env con tus API keys de Binance
+```
 
-1. **Clonar el repositorio**
-   ```bash
-   git clone <repository-url>
-   cd grid_bot
-   ```
-2. **Configurar variables de entorno**
-   - Copia `.env.example` a `.env` y edítalo con tus credenciales de Binance y PostgreSQL.
-3. **Ejecutar con Docker Compose**
-   ```bash
-   docker-compose up -d --build
-   ```
-4. **Ver logs**
-   ```bash
-   docker-compose logs -f api
-   ```
+### 3. Iniciar con Script Automático
+```bash
+./scripts/start.sh
+```
 
-## 📝 Configuración
+### 4. Acceder a la Plataforma
+- **API**: http://localhost:8000
+- **Grafana**: http://localhost:3000 (admin/gridbot123)
+- **Prometheus**: http://localhost:9090
+- **Flower**: http://localhost:5555
 
-- El archivo `grid_config_optimized.json` define los activos, cantidades, niveles de grid y rangos de precios.
-- Los límites de trading (`min_notional`, `step_size`, etc.) se sincronizan automáticamente desde Binance y se usan para validar cada orden.
+## ⚙️ Configuración Manual
 
-## 🔗 Endpoints REST principales
+### 1. Configurar Variables de Entorno
+Edita el archivo `.env` con tus credenciales:
 
-- `POST /order` - Ejecuta una orden de compra/venta y la registra en la base de datos
-- `POST /run_grid` - Ejecuta la estrategia grid
-- `POST /strategy/scalping` - Ejecuta la estrategia de scalping
-- `POST /strategy/backtest` - Realiza backtesting de una estrategia
-- `GET /api/trade/balances` - Consulta de saldos en Binance
+```bash
+# Binance API Keys (OBLIGATORIO)
+BINANCE_API_KEY=tu_api_key_aqui
+BINANCE_SECRET_KEY=tu_secret_key_aqui
+
+# Telegram (OPCIONAL)
+TELEGRAM_BOT_TOKEN=tu_bot_token_aqui
+TELEGRAM_CHAT_ID=tu_chat_id_aqui
+
+# Seguridad
+SECRET_KEY=tu_secret_key_super_segura
+```
+
+### 2. Construir e Iniciar Servicios
+```bash
+# Construir imágenes
+docker-compose build
+
+# Iniciar servicios
+docker-compose up -d
+
+# Ver logs
+docker-compose logs -f
+```
+
+### 3. Verificar Instalación
+```bash
+# Verificar estado de servicios
+docker-compose ps
+
+# Verificar API
+curl http://localhost:8000/health
+
+# Verificar base de datos
+docker-compose exec db psql -U griduser -d gridbot -c "SELECT version();"
+```
+
+## 📊 Monitoreo y Métricas
+
+### Prometheus
+- **URL**: http://localhost:9090
+- **Métricas**: Latencia, throughput, errores, métricas de trading
+
+### Grafana
+- **URL**: http://localhost:3000
+- **Usuario**: admin
+- **Contraseña**: gridbot123
+- **Dashboards**: Trading, Performance, System Health
+
+### Alertas
+- **Telegram**: Alertas automáticas de trading
+- **Email**: Alertas de sistema (configurable)
+- **Slack**: Integración opcional
+
+## 🔧 Desarrollo
+
+### Estructura del Proyecto
+```
+grid-bot/
+├── app/                    # Código de la aplicación
+│   ├── api/               # Endpoints de la API
+│   ├── core/              # Configuración y utilidades
+│   ├── models/            # Modelos de base de datos
+│   ├── services/          # Lógica de negocio
+│   ├── strategies/        # Estrategias de trading
+│   └── templates/         # Templates HTML
+├── docker/                # Configuración Docker
+├── scripts/               # Scripts de utilidad
+├── tests/                 # Tests automatizados
+└── docs/                  # Documentación
+```
+
+### Comandos de Desarrollo
+```bash
+# Ejecutar tests
+docker-compose exec api pytest
+
+# Ver logs en tiempo real
+docker-compose logs -f api
+
+# Acceder a la base de datos
+docker-compose exec db psql -U griduser -d gridbot
+
+# Reconstruir servicios
+docker-compose build --no-cache
+docker-compose up -d
+```
 
 ## 🧪 Testing
 
+### Ejecutar Tests
 ```bash
-pytest tests/
+# Tests unitarios
+docker-compose exec api pytest tests/unit/
+
+# Tests de integración
+docker-compose exec api pytest tests/integration/
+
+# Tests completos con cobertura
+docker-compose exec api pytest --cov=app tests/
 ```
 
-## 🚨 Seguridad y recomendaciones
+### Tests Disponibles
+- **Unit Tests**: Funciones individuales
+- **Integration Tests**: APIs y servicios
+- **E2E Tests**: Flujos completos
+- **Performance Tests**: Carga y estrés
 
-- El sistema valida y ajusta automáticamente las órdenes para cumplir con las reglas de Binance.
-- Las credenciales deben mantenerse seguras en `.env` (permisos 600).
-- Antes de operar con dinero real, se recomienda:
-  - Ejecutar todos los tests
-  - Realizar pruebas de integración en modo paper trading o con cantidades mínimas
-  - Revisar los logs y alertas de Telegram
-  - Completar la integración de monitoreo avanzado (Prometheus/Grafana)
+## 📈 Roadmap
 
-## 📈 Próximos pasos recomendados
+### Fase 1: MVP (Q1 2025) ✅
+- [x] Sistema de rebalanceo automático
+- [x] Dashboard de rendimiento
+- [x] Gestión de riesgos básica
+- [x] Notificaciones Telegram
 
-- Mejorar el dashboard web para visualización de operaciones y métricas.
-- Añadir monitoreo avanzado y alertas automáticas.
-- Implementar paginación y filtros avanzados en `/trades`.
-- Documentar ejemplos de uso y despliegue seguro en producción.
-- Realizar pruebas de stress y edge cases.
+### Fase 2: Mejoras Core (Q2 2025) 🚧
+- [ ] Múltiples estrategias de trading
+- [ ] Machine learning básico
+- [ ] API pública
+- [ ] Backtesting avanzado
 
-## 📄 Licencia
+### Fase 3: Escalabilidad (Q3 2025) 📋
+- [ ] Arquitectura multi-tenant
+- [ ] Multi-exchange support
+- [ ] Marketplace de estrategias
+- [ ] White-label solutions
 
-MIT
+### Fase 4: Enterprise (Q4 2025) 📋
+- [ ] Integraciones enterprise
+- [ ] Reporting avanzado
+- [ ] Compliance tools
+- [ ] Professional services
+
+## 🤝 Contribuir
+
+### 1. Fork el Proyecto
+```bash
+git clone https://github.com/tu-usuario/grid-bot.git
+cd grid-bot
+```
+
+### 2. Crear Rama de Feature
+```bash
+git checkout -b feature/nueva-funcionalidad
+```
+
+### 3. Hacer Cambios
+```bash
+# Hacer cambios en el código
+# Agregar tests
+# Actualizar documentación
+```
+
+### 4. Commit y Push
+```bash
+git add .
+git commit -m "feat: agregar nueva funcionalidad"
+git push origin feature/nueva-funcionalidad
+```
+
+### 5. Crear Pull Request
+- Describir cambios realizados
+- Incluir tests si aplica
+- Actualizar documentación
+
+## 📝 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+
+## 🆘 Soporte
+
+### Documentación
+- [Guía de Usuario](docs/USER_GUIDE.md)
+- [API Documentation](docs/API.md)
+- [Deployment Guide](docs/DEPLOYMENT.md)
+
+### Comunidad
+- [Issues](https://github.com/tu-usuario/grid-bot/issues)
+- [Discussions](https://github.com/tu-usuario/grid-bot/discussions)
+- [Telegram Group](https://t.me/gridbot_community)
+
+### Soporte Técnico
+- **Email**: support@gridbot.com
+- **Telegram**: @gridbot_support
+- **Discord**: [GridBot Community](https://discord.gg/gridbot)
+
+## ⚠️ Disclaimer
+
+Este software es para fines educativos y de investigación. El trading de criptomonedas conlleva riesgos significativos. No garantizamos ganancias y no somos responsables de pérdidas financieras. Usa este software bajo tu propia responsabilidad.
+
+---
+
+**Desarrollado con ❤️ por el equipo GridBot**

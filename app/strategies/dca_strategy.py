@@ -280,7 +280,7 @@ class DCAStrategy(TradingStrategy):
             message += f"Total: ${self.dca_config.investment_amount:.2f}\n"
             message += f"Inversión #{self.investment_count}"
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error enviando notificación DCA: {e}")

@@ -337,10 +337,10 @@ class ConfigManager:
                     return cached_data
             
             # Obtener ticker de 24h
-            ticker_24h = await binance_client.get_ticker(symbol=f"{symbol}USDT")
+            ticker_24h = binance_client.get_ticker(symbol=f"{symbol}USDT")
             
             # Obtener klines para calcular volatilidad
-            klines = await binance_client.get_klines(
+            klines = binance_client.get_klines(
                 symbol=f"{symbol}USDT",
                 interval="1h",
                 limit=24
@@ -608,7 +608,7 @@ class ConfigManager:
                 message += f"• Win Rate: {backtest['win_rate']:.2%}\n"
                 message += f"• ROI: {backtest['roi']:.2%}\n"
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error enviando notificación de optimización: {e}")

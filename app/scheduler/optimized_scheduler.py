@@ -15,7 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.optimized_grid_manager import OptimizedGridManager, create_optimized_grid_manager
-from app.services.telegram_alert import send_telegram_alert
+from app.services.telegram_alert import send_telegram_alert, send_telegram_alert_async
 from app.services.min_qty_updater import update_min_qty_in_db_and_config, create_asset_min_qty_table
 from app.services.auto_rebalancer import auto_rebalancer
 
@@ -142,13 +142,13 @@ class OptimizedGridScheduler:
                 activos_operativos, activos_sin_saldo
             )
             
-            await send_telegram_alert(mensaje)
+            send_telegram_alert(mensaje)
             
             logger.info(f"✅ Reporte de balances enviado - Valor total: ${valor_total_usdt:.2f} USDT")
             
         except Exception as e:
             logger.error(f"❌ Error en monitoreo de balances: {e}")
-            await self._send_error_notification(f"Error en monitoreo de balances: {e}")
+            self._send_error_notification(f"Error en monitoreo de balances: {e}")
 
     async def _auto_rebalance_cycle(self):
         """Ejecuta ciclo de rebalanceo automático"""
@@ -181,7 +181,7 @@ class OptimizedGridScheduler:
                             reason = rebalance_result.get("reason", "Error desconocido")
                             mensaje += f"❌ {symbol}: {reason}\n"
                     
-                    await send_telegram_alert(mensaje)
+                    send_telegram_alert(mensaje)
                     logger.info(f"✅ Rebalanceo completado: {successful_rebalances} exitosos, {failed_rebalances} fallidos")
                 else:
                     logger.info("ℹ️ No se requirió rebalanceo o no hay USDT disponible")
@@ -189,11 +189,11 @@ class OptimizedGridScheduler:
                 logger.info("ℹ️ Rebalanceo saltado: ya en progreso")
             else:
                 logger.error(f"❌ Error en rebalanceo: {result.get('message', 'Error desconocido')}")
-                await self._send_error_notification(f"Error en rebalanceo automático: {result.get('message', 'Error desconocido')}")
+                self._send_error_notification(f"Error en rebalanceo automático: {result.get('message', 'Error desconocido')}")
             
         except Exception as e:
             logger.error(f"❌ Error en ciclo de rebalanceo: {e}")
-            await self._send_error_notification(f"Error en rebalanceo automático: {e}")
+            self._send_error_notification(f"Error en rebalanceo automático: {e}")
 
     async def _obtener_balances_actuales(self) -> Dict:
         """Obtiene los balances actuales del sistema"""
@@ -346,7 +346,7 @@ class OptimizedGridScheduler:
             self.is_running = True
             
             # Send startup notification
-            await self._send_startup_notification()
+            self._send_startup_notification()
             
             logger.info("Optimized scheduler started successfully")
             return True
@@ -362,7 +362,7 @@ class OptimizedGridScheduler:
             self.is_running = False
             
             # Send shutdown notification
-            await self._send_shutdown_notification()
+            self._send_shutdown_notification()
             
             logger.info("Optimized scheduler stopped successfully")
             return True
@@ -385,13 +385,13 @@ class OptimizedGridScheduler:
             results = await self.grid_manager.execute_grid_trading_cycle()
             
             # Log results
-            await self._log_trading_results(results)
+            self._log_trading_results(results)
             
             logger.info(f"Trading cycle {self.cycle_count}: {len(results)} trades executed")
             
         except Exception as e:
             logger.error(f"Error in trading cycle: {e}")
-            await self._send_error_notification(f"Error in trading cycle: {e}")
+            self._send_error_notification(f"Error in trading cycle: {e}")
 
     async def _monitor_system_health(self):
         """Monitor system health and send alerts"""
@@ -410,7 +410,7 @@ class OptimizedGridScheduler:
             
             # Send health alert if issues found
             if issues:
-                await self._send_health_alert(issues)
+                self._send_health_alert(issues)
             else:
                 logger.info("System health check passed")
                 
@@ -427,15 +427,15 @@ class OptimizedGridScheduler:
             stats = self.grid_manager.get_trading_statistics()
             
             # Generate performance report
-            report = await self._generate_performance_report(stats)
+            report = self._generate_performance_report(stats)
             
             # Send performance report
-            await self._send_performance_report(report)
+            self._send_performance_report(report)
             
         except Exception as e:
             logger.error(f"Error in performance analysis: {e}")
 
-    async def _log_trading_results(self, results: List):
+    def _log_trading_results(self, results: List):
         """Log trading results"""
         if not results:
             return
@@ -443,7 +443,7 @@ class OptimizedGridScheduler:
         for result in results:
             logger.info(f"Trade executed: {result.action} {result.quantity} {result.symbol} at ${result.price:.6f}")
 
-    async def _generate_performance_report(self, stats: Dict) -> Dict:
+    def _generate_performance_report(self, stats: Dict) -> Dict:
         """Generate performance report"""
         uptime = self._calculate_uptime()
         
@@ -465,7 +465,7 @@ class OptimizedGridScheduler:
         uptime = datetime.now() - self.last_cycle_time
         return str(uptime)
 
-    async def _send_startup_notification(self):
+    def _send_startup_notification(self):
         """Send startup notification"""
         try:
             message = f"""🚀 Optimized GridBot Started
@@ -476,12 +476,12 @@ class OptimizedGridScheduler:
 
 ✅ System ready for trading!"""
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error sending startup notification: {e}")
 
-    async def _send_shutdown_notification(self):
+    def _send_shutdown_notification(self):
         """Send shutdown notification"""
         try:
             message = f"""🛑 GridBot Shutdown
@@ -491,12 +491,12 @@ class OptimizedGridScheduler:
 
 🔴 System stopped"""
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error sending shutdown notification: {e}")
 
-    async def _send_error_notification(self, error_message: str):
+    def _send_error_notification(self, error_message: str):
         """Send error notification"""
         try:
             message = f"""❌ GridBot Error
@@ -506,12 +506,12 @@ class OptimizedGridScheduler:
 
 ⚠️ Please check system logs"""
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error sending error notification: {e}")
 
-    async def _send_health_alert(self, issues: List[str]):
+    def _send_health_alert(self, issues: List[str]):
         """Send health alert"""
         try:
             message = f"""⚠️ GridBot Health Alert
@@ -525,12 +525,12 @@ class OptimizedGridScheduler:
 ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 🤖 Please investigate"""
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error sending health alert: {e}")
 
-    async def _send_performance_report(self, report: Dict):
+    def _send_performance_report(self, report: Dict):
         """Send performance report"""
         try:
             stats = report.get("trading_stats", {})
@@ -550,7 +550,7 @@ class OptimizedGridScheduler:
 
 📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
             
         except Exception as e:
             logger.error(f"Error sending performance report: {e}")

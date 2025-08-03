@@ -336,7 +336,7 @@ class StrategyFactory:
     async def _send_strategy_notification(self, message: str):
         """Envía notificación sobre cambios en estrategias"""
         try:
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
         except Exception as e:
             logger.error(f"Error enviando notificación de estrategia: {e}")
     

@@ -102,7 +102,7 @@ async def check_asset_risk(symbol: str):
     """Verifica el riesgo de un activo específico"""
     try:
         risk_status = await risk_manager.check_asset_risk(symbol)
-        position = await risk_manager._get_asset_position(symbol)
+        position = risk_manager._get_asset_position(symbol)
         
         return AssetRiskResponse(
             symbol=symbol,

@@ -1,0 +1,47 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'telegram.critical'
+      continue: true
+    - match:
+        severity: warning
+      receiver: 'telegram.warning'
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://127.0.0.1:5001/'
+
+  - name: 'telegram.critical'
+    webhook_configs:
+      - url: 'http://api:8000/api/v1/alerts/telegram/critical'
+        send_resolved: true
+
+  - name: 'telegram.warning'
+    webhook_configs:
+      - url: 'http://api:8000/api/v1/alerts/telegram/warning'
+        send_resolved: true
+
+  - name: 'slack'
+    slack_configs:
+      - channel: '#gridbot-alerts'
+        title: '{{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance'] 

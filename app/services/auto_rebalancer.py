@@ -16,6 +16,8 @@ from datetime import datetime
 from app.services.binance_client import client
 from app.core.config import settings
 from app.models.grid_config import GridConfig
+from app.db.session import SessionLocal
+from app.models.trade import Trade
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class AutoRebalancer:
     """
     
     def __init__(self):
-        self.min_balance_threshold = 10.0  # USDT mínimo por activo
+        self.min_balance_threshold = 15.0  # USDT mínimo por activo (aumentado para cumplir min_notional)
         self.rebalance_frequency = 3600  # segundos (1 hora)
         self.binance_client = client
         self.is_rebalancing = False
@@ -263,6 +265,36 @@ class AutoRebalancer:
             logger.error(f"Error obteniendo balance USDT: {e}")
             return 0.0
     
+    def _save_trade_to_db(self, symbol: str, side: str, quantity: float, price: float, order_id: str):
+        """
+        Guarda un trade en la base de datos.
+        
+        Args:
+            symbol: Símbolo del trade
+            side: Lado del trade (BUY/SELL)
+            quantity: Cantidad
+            price: Precio
+            order_id: ID de la orden
+        """
+        try:
+            db = SessionLocal()
+            trade = Trade(
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                entry_price=price,
+                timestamp=datetime.utcnow()
+            )
+            db.add(trade)
+            db.commit()
+            db.refresh(trade)
+            logger.info(f"Trade guardado en BD: {side} {quantity} {symbol} @ ${price:.6f}")
+            db.close()
+        except Exception as e:
+            logger.error(f"Error guardando trade en BD: {e}")
+            if db:
+                db.close()
+
     async def execute_buy_order(self, symbol: str, quantity: float) -> Dict:
         """
         Ejecuta una orden de compra para rebalanceo.
@@ -292,6 +324,10 @@ class AutoRebalancer:
             
             logger.info(f"Orden de compra ejecutada: {symbol} - "
                        f"Cantidad: {quantity}, USDT: ${usdt_amount:.2f}")
+            
+            # Guardar trade en la base de datos
+            if order.get('status') == 'FILLED':
+                self._save_trade_to_db(symbol, "BUY", quantity, current_price, order.get('orderId'))
             
             return {
                 "order_id": order.get('orderId'),
