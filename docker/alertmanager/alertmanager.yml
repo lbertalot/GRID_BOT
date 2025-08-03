@@ -32,12 +32,7 @@ receivers:
       - url: 'http://api:8000/api/v1/alerts/telegram/warning'
         send_resolved: true
 
-  - name: 'slack'
-    slack_configs:
-      - channel: '#gridbot-alerts'
-        title: '{{ template "slack.title" . }}'
-        text: '{{ template "slack.text" . }}'
-        send_resolved: true
+# Receptor slack eliminado - no se usa en ninguna ruta
 
 inhibit_rules:
   - source_match:
