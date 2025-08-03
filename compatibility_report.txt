@@ -1,0 +1,37 @@
+
+╔══════════════════════════════════════════════════════════════╗
+║                    REPORTE DE COMPATIBILIDAD                 ║
+║                        Grid Trading Bot                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+📦 DEPENDENCIAS EXTERNAS:
+   ✅ Importaciones exitosas: 24/26
+   ❌ Errores de importación: 2
+
+📁 MÓDULOS DEL PROYECTO:
+   ✅ Módulos cargados: 0/14
+   ❌ Errores de módulos: 14
+
+🔢 VERSIONES DE DEPENDENCIAS:
+   ✅ Versiones coincidentes: 12/12
+   ⚠️ Versiones diferentes: 0
+
+🚨 ERRORES ENCONTRADOS:
+   • Import error: pydantic_settings - No module named 'pydantic.settings'
+   • Import error: prometheus_client - No module named 'prometheus'
+   • Project module error: app.main - No module named 'app'
+   • Project module error: app.main_simple - No module named 'app'
+   • Project module error: app.core.config - No module named 'app'
+   • Project module error: app.core.auth - No module named 'app'
+   • Project module error: app.core.celery_app - No module named 'app'
+   • Project module error: app.db.session - No module named 'app'
+   • Project module error: app.models.base - No module named 'app'
+   • Project module error: app.models.grid_config - No module named 'app'
+
+📋 RECOMENDACIONES:
+   • Revisar dependencias faltantes
+   • Verificar estructura del proyecto
+
+🎯 ESTADO GENERAL:
+   🔴 REQUIERE ATENCIÓN - Problemas significativos detectados
+   Puntuación general: 60.0%

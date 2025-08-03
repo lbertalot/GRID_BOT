@@ -22,6 +22,7 @@ from app.services.grid_strategy import decide_grid_action, calculate_grid_levels
 from app.services.order_validation import OrderValidator
 from app.models.asset_limit import AssetLimit
 from app.services.risk_manager import risk_manager, RiskStatus
+from app.services.metrics_service import metrics_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -108,13 +109,29 @@ class OptimizedGridManager:
         """Initialize Binance client with API credentials"""
         try:
             api_key = os.getenv("BINANCE_API_KEY")
-            api_secret = os.getenv("BINANCE_API_SECRET")
+            api_secret = os.getenv("BINANCE_SECRET_KEY")  # Corregido para usar BINANCE_SECRET_KEY
             
             if not api_key or not api_secret:
                 logger.error("Faltan credenciales de Binance en las variables de entorno.")
+                logger.error(f"API_KEY presente: {bool(api_key)}")
+                logger.error(f"SECRET_KEY presente: {bool(api_secret)}")
                 return None
             
-            return Client(api_key, api_secret)
+            logger.info("✅ Credenciales de Binance encontradas, inicializando cliente...")
+            logger.info(f"API_KEY: {api_key[:10]}...")
+            logger.info(f"SECRET_KEY: {api_secret[:10]}...")
+            
+            client = Client(api_key, api_secret)
+            
+            # Probar la conexión inmediatamente
+            try:
+                test_account = client.get_account()
+                logger.info(f"✅ Cliente de Binance inicializado correctamente - Tipo de cuenta: {test_account.get('accountType', 'N/A')}")
+            except Exception as test_error:
+                logger.error(f"❌ Error probando cliente de Binance: {test_error}")
+                return None
+            
+            return client
         except Exception as e:
             logger.error(f"Error inicializando cliente Binance: {e}")
             return None
@@ -123,20 +140,25 @@ class OptimizedGridManager:
         """Get current asset balances from Binance"""
         try:
             if not self.client:
+                logger.error("❌ Cliente de Binance no inicializado")
                 return {}
             
+            logger.info("🔄 Obteniendo información de cuenta de Binance...")
             account_info = self.client.get_account()
-            balances = {}
+            logger.info(f"✅ Información de cuenta obtenida: {len(account_info.get('balances', []))} balances")
             
+            balances = {}
             for balance in account_info['balances']:
                 asset = balance['asset']
                 free_balance = float(balance['free'])
                 if free_balance > 0:
                     balances[asset] = free_balance
+                    logger.info(f"💰 Balance {asset}: {free_balance}")
             
+            logger.info(f"📊 Total de activos con saldo: {len(balances)}")
             return balances
         except Exception as e:
-            logger.error(f"Error obteniendo balances: {e}")
+            logger.error(f"❌ Error obteniendo balances: {e}")
             return {}
 
     async def get_current_prices(self, symbols: List[str]) -> Dict[str, float]:
@@ -230,12 +252,12 @@ class OptimizedGridManager:
             
             if risk_status == RiskStatus.STOP_TRADING:
                 logger.warning("Trading detenido por límites de riesgo críticos")
-                await send_telegram_alert("🚨 Trading detenido por límites de riesgo críticos")
+                send_telegram_alert("🚨 Trading detenido por límites de riesgo críticos")
                 return []
             
             if risk_status == RiskStatus.DANGER:
                 logger.warning("Trading en modo de riesgo alto - ejecutando con precaución")
-                await send_telegram_alert("⚠️ Trading en modo de riesgo alto - ejecutando con precaución")
+                send_telegram_alert("⚠️ Trading en modo de riesgo alto - ejecutando con precaución")
             
             # Verificar si el trading está habilitado
             if not risk_manager.trading_enabled:
@@ -310,6 +332,14 @@ class OptimizedGridManager:
             if self.insufficient_funds:
                 logger.warning(f"Activos con saldo insuficiente: {list(self.insufficient_funds.keys())}")
             
+            # Actualizar métricas de rentabilidad
+            try:
+                await metrics_service.calculate_portfolio_metrics()
+                await metrics_service.update_balance_metrics(balances)
+                logger.info("✅ Métricas de rentabilidad actualizadas")
+            except Exception as e:
+                logger.error(f"Error actualizando métricas: {e}")
+            
             return trading_results
             
         except Exception as e:
@@ -362,7 +392,7 @@ class OptimizedGridManager:
             logger.error(f"Error colocando orden para {symbol}: {e}")
             return None
 
-    async def _send_trading_notification(self, result: TradingResult):
+    def _send_trading_notification(self, result: TradingResult):
         """Send trading notification via Telegram"""
         try:
             message = f"🔄 Trade ejecutado:\n" \
@@ -372,9 +402,33 @@ class OptimizedGridManager:
                      f"💰 ${result.price:.6f}\n" \
                      f"📊 Estado: {result.status}"
             
-            await send_telegram_alert(message)
+            send_telegram_alert(message)
         except Exception as e:
             logger.error(f"Error enviando notificación: {e}")
+
+    async def _save_trade_to_db(self, symbol: str, side: str, quantity: float, price: float, order_id: str):
+        """Guarda un trade en la base de datos PostgreSQL"""
+        try:
+            from app.db.session import SessionLocal
+            from app.models.trade import Trade
+            
+            db = SessionLocal()
+            trade = Trade(
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                entry_price=price,
+                timestamp=datetime.now()
+            )
+            db.add(trade)
+            db.commit()
+            db.refresh(trade)
+            logger.info(f"✅ Trade guardado en BD: {side} {quantity} {symbol} @ ${price:.6f}")
+            db.close()
+        except Exception as e:
+            logger.error(f"Error guardando trade en BD: {e}")
+            if 'db' in locals():
+                db.close()
 
     async def _execute_trade(self, symbol: str, action: str, quantity: float, price: float):
         """Execute a trade and return the result"""
@@ -401,7 +455,31 @@ class OptimizedGridManager:
             self.trading_history.append(result)
             
             # Send notification
-            await self._send_trading_notification(result)
+            self._send_trading_notification(result)
+            
+            # Registrar métricas del trade
+            try:
+                execution_time = 0.1  # Tiempo estimado de ejecución
+                success = result.status in ['FILLED', 'PARTIALLY_FILLED']
+                await metrics_service.record_trade_execution(
+                    symbol=symbol,
+                    side=action,
+                    quantity=quantity,
+                    price=price,
+                    success=success,
+                    execution_time=execution_time
+                )
+            except Exception as e:
+                logger.error(f"Error registrando métricas del trade: {e}")
+            
+            # Guardar trade en la base de datos
+            try:
+                logger.info(f"🔄 Intentando guardar trade en BD: {action} {quantity} {symbol} @ ${price:.6f}")
+                await self._save_trade_to_db(symbol, action, quantity, price, order.get('orderId', 'unknown'))
+                logger.info(f"✅ Trade guardado exitosamente en BD")
+            except Exception as e:
+                logger.error(f"❌ Error guardando trade en base de datos: {e}")
+                logger.error(f"   Detalles: symbol={symbol}, action={action}, quantity={quantity}, price={price}")
             
             logger.info(f"Trade ejecutado: {action} {quantity} {symbol} a ${price:.6f}")
             

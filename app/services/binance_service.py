@@ -7,7 +7,7 @@ import math
 from binance import Client
 from binance.exceptions import BinanceAPIException
 
-from app.core.metrics import record_binance_api_call, binance_connection_status
+# from app.core.metrics import record_binance_api_call, binance_connection_status
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class BinanceService:
             if not self.api_key or not self.api_secret:
                 logger.warning("Credenciales de Binance no configuradas. Activando modo simulación.")
                 self.simulation_mode = True
-                binance_connection_status.set(0)
+                # binance_connection_status.set(0)
                 return
             
             # Intentar crear el cliente
@@ -46,8 +46,8 @@ class BinanceService:
             account_info = self.client.get_account()
             duration = time.time() - start_time
             
-            record_binance_api_call("get_account", "success", duration)
-            binance_connection_status.set(1)
+            # record_binance_api_call("get_account", "success", duration)
+            # binance_connection_status.set(1)
             
             logger.info("✅ Cliente de Binance inicializado correctamente")
             logger.info(f"   Tipo de cuenta: {account_info.get('accountType', 'N/A')}")
@@ -57,7 +57,7 @@ class BinanceService:
                 logger.error(f"❌ Error de autenticación Binance (1022): {e.message}")
                 logger.warning("🔧 Activando modo simulación debido a credenciales inválidas")
                 self.simulation_mode = True
-                binance_connection_status.set(0)
+                # binance_connection_status.set(0)
             else:
                 logger.error(f"❌ Error de Binance API: {e}")
                 self.simulation_mode = True
@@ -66,7 +66,7 @@ class BinanceService:
         except Exception as e:
             logger.error(f"❌ Error inesperado inicializando Binance: {e}")
             self.simulation_mode = True
-            binance_connection_status.set(0)
+            # binance_connection_status.set(0)
     
     def get_account_info(self) -> Dict[str, Any]:
         """Obtiene información de la cuenta"""
@@ -79,11 +79,11 @@ class BinanceService:
             account_info = self.client.get_account()
             duration = time.time() - start_time
             
-            record_binance_api_call("get_account", "success", duration)
+            # record_binance_api_call("get_account", "success", duration)
             return account_info
             
         except BinanceAPIException as e:
-            record_binance_api_call("get_account", f"error_{e.code}", 0)
+            # record_binance_api_call("get_account", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo información de cuenta: {e}")
             raise
     
@@ -98,11 +98,11 @@ class BinanceService:
             balance = self.client.get_asset_balance(asset=asset)
             duration = time.time() - start_time
             
-            record_binance_api_call("get_asset_balance", "success", duration)
+            # record_binance_api_call("get_asset_balance", "success", duration)
             return balance
             
         except BinanceAPIException as e:
-            record_binance_api_call("get_asset_balance", f"error_{e.code}", 0)
+            # record_binance_api_call("get_asset_balance", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo balance de {asset}: {e}")
             raise
     
@@ -235,11 +235,11 @@ class BinanceService:
             ticker = self.client.get_symbol_ticker(symbol=symbol.upper())
             duration = time.time() - start_time
             
-            record_binance_api_call("get_symbol_ticker", "success", duration)
+            # record_binance_api_call("get_symbol_ticker", "success", duration)
             return float(ticker['price'])
             
         except BinanceAPIException as e:
-            record_binance_api_call("get_symbol_ticker", f"error_{e.code}", 0)
+            # record_binance_api_call("get_symbol_ticker", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo precio de {symbol}: {e}")
             raise
     
@@ -264,13 +264,13 @@ class BinanceService:
                     order = self.client.order_limit_sell(symbol=symbol, quantity=quantity, price=str(price))
             
             duration = time.time() - start_time
-            record_binance_api_call("execute_trading_order", "success", duration)
+            # record_binance_api_call("execute_trading_order", "success", duration)
             
             logger.info(f"✅ Orden colocada exitosamente: {order['orderId']}")
             return order
             
         except BinanceAPIException as e:
-            record_binance_api_call("execute_trading_order", f"error_{e.code}", 0)
+            # record_binance_api_call("execute_trading_order", f"error_{e.code}", 0)
             logger.error(f"Error colocando orden: {e}")
             raise
     
@@ -285,11 +285,11 @@ class BinanceService:
             orders = self.client.get_open_orders(symbol=symbol)
             duration = time.time() - start_time
             
-            record_binance_api_call("get_open_orders", "success", duration)
+            # record_binance_api_call("get_open_orders", "success", duration)
             return orders
             
         except BinanceAPIException as e:
-            record_binance_api_call("get_open_orders", f"error_{e.code}", 0)
+            # record_binance_api_call("get_open_orders", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo órdenes abiertas: {e}")
             raise
     
@@ -304,11 +304,11 @@ class BinanceService:
             result = self.client.cancel_order(symbol=symbol, orderId=order_id)
             duration = time.time() - start_time
             
-            record_binance_api_call("cancel_order", "success", duration)
+            # record_binance_api_call("cancel_order", "success", duration)
             return result
             
         except BinanceAPIException as e:
-            record_binance_api_call("cancel_order", f"error_{e.code}", 0)
+            # record_binance_api_call("cancel_order", f"error_{e.code}", 0)
             logger.error(f"Error cancelando orden: {e}")
             raise
     

@@ -7,7 +7,7 @@ import logging
 from fastapi.exceptions import RequestValidationError
 from fastapi import HTTPException
 
-from app.api import trade, strategies, metrics, prometheus, optimized_routes, metrics_routes, risk_routes, config_routes, strategy_routes
+from app.api import trade, strategies, metrics, prometheus, optimized_routes, risk_routes, config_routes, strategy_routes, metrics_routes
 from app.core.auth import get_api_key
 from app.core.error_handlers import validation_exception_handler, http_exception_handler, general_exception_handler
 from app.db.init_db import init_db
@@ -61,7 +61,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 app.include_router(trade.router, prefix="/api/trade", tags=["Trading"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Metrics"])
-app.include_router(metrics_routes.router, tags=["Advanced Metrics"])  # Ya tiene prefix /api/v1/metrics
+app.include_router(metrics_routes.router)  # Ya tiene prefix /api/v1/metrics
 app.include_router(risk_routes.router, tags=["Risk Management"])  # Ya tiene prefix /api/v1/risk
 app.include_router(config_routes.router, tags=["Configuration Optimization"])  # Ya tiene prefix /api/v1/config
 app.include_router(prometheus.router, prefix="/api/prometheus", tags=["Prometheus"])
@@ -105,4 +105,68 @@ async def health_check():
     """
     Endpoint de health check para verificar que la aplicación está funcionando.
     """
-    return {"status": "ok"} 
+    return {"status": "ok"}
+
+@app.get("/test-simple")
+async def test_simple():
+    """
+    Endpoint simple de prueba.
+    """
+    return {"message": "Test simple funcionando"}
+
+@app.get("/test-metrics", response_class=JSONResponse)
+async def test_metrics():
+    """
+    Endpoint de prueba para verificar que las métricas funcionan.
+    """
+    try:
+        from app.core.metrics import trading_metrics
+        return {"status": "ok", "message": "Métricas importadas correctamente"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/v1/metrics/prometheus")
+async def prometheus_metrics():
+    """
+    Endpoint directo para métricas de Prometheus.
+    """
+    try:
+        import subprocess
+        from fastapi.responses import Response
+        
+        # Ejecutar el script de generación de métricas
+        result = subprocess.run([
+            "python3", "/app/scripts/generate_profitability_metrics.py"
+        ], capture_output=True, text=True, cwd="/app")
+        
+        if result.returncode != 0:
+            return {"error": f"Error ejecutando script: {result.stderr}"}
+        
+        # Leer las métricas generadas
+        try:
+            with open("/app/gridbot_profitability_metrics.txt", "r") as f:
+                metrics_content = f.read()
+            
+            return Response(
+                content=metrics_content,
+                media_type="text/plain"
+            )
+        except FileNotFoundError:
+            return {"error": "Archivo de métricas no encontrado"}
+        
+    except Exception as e:
+        return {"error": f"Error generando métricas: {str(e)}"}
+
+@app.get("/simple-metrics")
+async def simple_metrics():
+    """
+    Endpoint simple para probar métricas.
+    """
+    return {"message": "Métricas funcionando"}
+
+@app.get("/test-endpoint")
+async def test_endpoint():
+    """
+    Endpoint de prueba.
+    """
+    return {"message": "Endpoint funcionando"} 

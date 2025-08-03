@@ -1,28 +1,72 @@
 from fastapi import APIRouter
-from app.core.metrics import get_trading_metrics, get_binance_metrics, get_strategy_metrics
+# from app.core.metrics import get_trading_metrics, get_binance_metrics, get_strategy_metrics
 from binance import Client
 import os
 from dotenv import load_dotenv
 from fastapi.responses import Response
 import subprocess
 import tempfile
+from app.services.metrics_service import metrics_service
+from app.core.metrics import trading_metrics
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 router = APIRouter()
+
+@router.get("/metrics")
+async def prometheus_metrics():
+    """Endpoint principal para métricas de Prometheus"""
+    try:
+        # Ejecutar el script de generación de métricas
+        result = subprocess.run([
+            "python3", "/app/scripts/generate_profitability_metrics.py"
+        ], capture_output=True, text=True, cwd="/app")
+        
+        if result.returncode != 0:
+            return {"error": f"Error ejecutando script: {result.stderr}"}
+        
+        # Leer las métricas generadas
+        try:
+            with open("/app/gridbot_profitability_metrics.txt", "r") as f:
+                metrics_content = f.read()
+            
+            return Response(
+                content=metrics_content,
+                media_type="text/plain"
+            )
+        except FileNotFoundError:
+            return {"error": "Archivo de métricas no encontrado"}
+        
+    except Exception as e:
+        return {"error": f"Error generando métricas: {str(e)}"}
 
 @router.get("/trading")
 async def prometheus_trading_metrics():
     """Métricas de trading para Prometheus (sin autenticación)"""
-    return get_trading_metrics()
+    try:
+        from prometheus_client import generate_latest
+        
+        # Generar métricas de Prometheus directamente
+        metrics_content = generate_latest()
+        
+        return Response(
+            content=metrics_content,
+            media_type="text/plain"
+        )
+        
+    except Exception as e:
+        return {"error": f"Error generando métricas: {str(e)}"}
 
 @router.get("/binance")
 async def prometheus_binance_metrics():
     """Métricas de Binance para Prometheus (sin autenticación)"""
-    return get_binance_metrics()
+    # return get_binance_metrics()
+    return {"error": "Métricas no disponibles"}
 
 @router.get("/strategies")
 async def prometheus_strategy_metrics():
     """Métricas de estrategias para Prometheus (sin autenticación)"""
-    return get_strategy_metrics()
+    # return get_strategy_metrics()
+    return {"error": "Métricas no disponibles"}
 
 @router.get("/pnl")
 async def prometheus_pnl_metrics():
