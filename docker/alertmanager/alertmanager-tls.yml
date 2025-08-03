@@ -1,0 +1,62 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'telegram.critical'
+      continue: true
+    - match:
+        severity: warning
+      receiver: 'telegram.warning'
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'https://127.0.0.1:5001/'
+        tls_config:
+          ca_file: /etc/alertmanager/ssl/ca.pem
+          cert_file: /etc/alertmanager/ssl/client-cert.pem
+          key_file: /etc/alertmanager/ssl/client-key.pem
+          insecure_skip_verify: false
+
+  - name: 'telegram.critical'
+    webhook_configs:
+      - url: 'https://api:8000/api/v1/alerts/telegram/critical'
+        send_resolved: true
+        tls_config:
+          ca_file: /etc/alertmanager/ssl/ca.pem
+          cert_file: /etc/alertmanager/ssl/client-cert.pem
+          key_file: /etc/alertmanager/ssl/client-key.pem
+          insecure_skip_verify: false
+
+  - name: 'telegram.warning'
+    webhook_configs:
+      - url: 'https://api:8000/api/v1/alerts/telegram/warning'
+        send_resolved: true
+        tls_config:
+          ca_file: /etc/alertmanager/ssl/ca.pem
+          cert_file: /etc/alertmanager/ssl/client-cert.pem
+          key_file: /etc/alertmanager/ssl/client-key.pem
+          insecure_skip_verify: false
+
+# Receptor slack eliminado - no se usa en ninguna ruta
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+
+# Configuración TLS para el servidor Alertmanager
+tls_config:
+  cert_file: /etc/alertmanager/ssl/server-cert.pem
+  key_file: /etc/alertmanager/ssl/server-key.pem 
