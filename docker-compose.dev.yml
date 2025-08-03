@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  # API principal para desarrollo (con reload)
+  api:
+    command: uvicorn app.main_simple:app --host 0.0.0.0 --port 8000 --reload --workers 1
+    environment:
+      - DEBUG=true
+      - ENVIRONMENT=development
+      - RELOAD=true
+
+  # Celery worker para desarrollo
+  celery_worker:
+    command: celery -A app.core.celery_app worker --loglevel=debug --concurrency=1
+
+  # Celery beat para desarrollo
+  celery_beat:
+    command: celery -A app.core.celery_app beat --loglevel=debug 
