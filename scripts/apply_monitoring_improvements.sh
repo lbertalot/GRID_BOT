@@ -187,7 +187,7 @@ show_summary() {
     echo ""
     echo "🌐 Servicios disponibles:"
     echo "   • API: http://localhost:8000"
-    echo "   • Grafana: http://localhost:3000 (admin/admin)"
+    echo "   • Grafana: http://localhost:3000 (admin/gridbot123)"
     echo "   • Prometheus: http://localhost:9090"
     echo "   • Alertmanager: http://localhost:9093"
     echo "   • Flower: http://localhost:5555"

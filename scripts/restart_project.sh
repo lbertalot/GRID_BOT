@@ -174,7 +174,7 @@ show_access_info() {
     echo ""
     echo "📊 Servicios disponibles:"
     echo "   • API Principal: http://localhost:8000"
-    echo "   • Grafana: http://localhost:3000 (admin/admin)"
+    echo "   • Grafana: http://localhost:3000 (admin/gridbot123)"
     echo "   • Prometheus: http://localhost:9090"
     echo "   • Flower (Celery): http://localhost:5555"
     echo "   • Alertmanager: http://localhost:9093"

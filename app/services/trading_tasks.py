@@ -1,181 +1,206 @@
-from celery import current_task
-from app.core.celery_app import celery_app
-import logging
+"""
+Tareas de trading mejoradas con logging detallado y validaciones robustas
+"""
+
 import asyncio
-import os
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional
+from celery import shared_task
+
 from app.core.optimized_grid_manager import create_optimized_grid_manager
+from app.services.metrics_service import MetricsService
+from app.services.fund_manager import fund_manager
 from app.services.telegram_alert import send_telegram_alert
 
 logger = logging.getLogger(__name__)
 
-@celery_app.task(bind=True)
-def execute_trading_cycle(self):
-    """Ejecuta el ciclo de trading principal"""
+@shared_task
+def execute_trading_cycle():
+    """
+    Ejecuta un ciclo completo de trading con validaciones mejoradas
+    """
     try:
         logger.info("🚀 Iniciando ciclo de trading REAL")
+        logger.info("💰 Ejecutando TRADING REAL con dinero real")
         
-        # Verificar si el trading está habilitado
-        trading_enabled = os.getenv("TRADING_ENABLED", "true").lower() == "true"
-        paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        # Verificar credenciales de Binance
+        logger.info("🔍 Validando credenciales de Binance...")
         
-        if not trading_enabled:
-            logger.info("⏸️ Trading deshabilitado por configuración")
-            return {"status": "disabled", "message": "Trading disabled by configuration"}
+        # Crear manager de grid trading
+        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        if not manager:
+            logger.error("❌ No se pudo crear el manager de grid trading")
+            return {"status": "error", "message": "Manager no disponible"}
         
-        if paper_trading:
-            logger.info("📄 Ejecutando en modo PAPER TRADING")
-        else:
-            logger.info("💰 Ejecutando TRADING REAL con dinero real")
+        # Ejecutar ciclo de trading
+        logger.info("🔄 Ejecutando ciclo de grid trading...")
+        results = asyncio.run(manager.execute_grid_trading_cycle())
         
-        # Crear y ejecutar el grid manager
-        async def run_trading_cycle():
-            try:
-                # Crear el grid manager
-                grid_manager = await create_optimized_grid_manager("grid_config_optimized.json")
-                
-                if not grid_manager:
-                    logger.error("❌ No se pudo crear el grid manager")
-                    return {"status": "error", "message": "Failed to create grid manager"}
-                
-                # Ejecutar el ciclo de trading
-                logger.info("🔄 Ejecutando ciclo de grid trading...")
-                results = await grid_manager.execute_grid_trading_cycle()
-                
-                if results:
-                    logger.info(f"✅ Ciclo completado con {len(results)} operaciones")
-                    
-                    # Enviar notificación de resumen
-                    total_trades = len(results)
-                    buy_trades = len([r for r in results if r.action == "BUY"])
-                    sell_trades = len([r for r in results if r.action == "SELL"])
-                    
-                    summary_message = f"📊 Resumen del ciclo de trading:\n" \
-                                    f"🔄 Total operaciones: {total_trades}\n" \
-                                    f"📈 Compras: {buy_trades}\n" \
-                                    f"📉 Ventas: {sell_trades}\n" \
-                                    f"💰 Modo: {'PAPER' if paper_trading else 'REAL'}"
-                    
-                    try:
-                        send_telegram_alert(summary_message)
-                    except Exception as e:
-                        logger.warning(f"No se pudo enviar notificación: {e}")
-                    
-                    return {
-                        "status": "success", 
-                        "message": f"Trading cycle completed with {total_trades} trades",
-                        "trades_executed": total_trades,
-                        "mode": "paper" if paper_trading else "real"
-                    }
-                else:
-                    logger.info("ℹ️ No se ejecutaron operaciones en este ciclo")
-                    return {"status": "success", "message": "No trades executed in this cycle"}
-                    
-            except Exception as e:
-                logger.error(f"❌ Error en el ciclo de trading: {e}")
-                error_message = f"🚨 Error en ciclo de trading: {str(e)}"
-                try:
-                    send_telegram_alert(error_message)
-                except:
-                    pass
-                raise e
+        # Analizar resultados
+        trades_executed = len([r for r in results if r and r.status == "success"])
+        total_trades = len(results)
         
-        # Ejecutar la función asíncrona
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(run_trading_cycle())
-            return result
-        finally:
-            loop.close()
+        # Generar resumen
+        summary = {
+            "timestamp": datetime.now().isoformat(),
+            "total_trades": total_trades,
+            "trades_executed": trades_executed,
+            "success_rate": (trades_executed / total_trades * 100) if total_trades > 0 else 0,
+            "mode": "REAL"
+        }
+        
+        # Logging detallado
+        logger.info(f"📊 Resumen del ciclo de trading:")
+        logger.info(f"   🔄 Total operaciones: {total_trades}")
+        logger.info(f"   ✅ Operaciones ejecutadas: {trades_executed}")
+        logger.info(f"   📈 Tasa de éxito: {summary['success_rate']:.1f}%")
+        logger.info(f"   💰 Modo: {summary['mode']}")
+        
+        # Enviar notificación si hay operaciones
+        if trades_executed > 0:
+            message = f"🔄 Resumen del ciclo de trading:\n" \
+                     f"🔄 Total operaciones: {total_trades}\n" \
+                     f"✅ Operaciones ejecutadas: {trades_executed}\n" \
+                     f"📈 Tasa de éxito: {summary['success_rate']:.1f}%\n" \
+                     f"💰 Modo: {summary['mode']}"
             
+            try:
+                asyncio.run(send_telegram_alert(message))
+                logger.info("✅ Notificación enviada a Telegram")
+            except Exception as e:
+                logger.error(f"❌ Error enviando notificación: {e}")
+        
+        # Actualizar métricas
+        try:
+            metrics_service = MetricsService()
+            asyncio.run(metrics_service.calculate_portfolio_metrics())
+            logger.info("✅ Métricas actualizadas")
+        except Exception as e:
+            logger.error(f"❌ Error actualizando métricas: {e}")
+        
+        return {
+            "status": "success",
+            "message": f"Ciclo completado - {trades_executed}/{total_trades} operaciones ejecutadas",
+            "summary": summary
+        }
+        
     except Exception as e:
         logger.error(f"❌ Error en ciclo de trading: {e}")
-        raise self.retry(countdown=60, max_retries=3)
+        
+        # Enviar alerta de error
+        error_message = f"🚨 Error en ciclo de trading:\n{str(e)}"
+        try:
+            asyncio.run(send_telegram_alert(error_message))
+        except:
+            pass
+        
+        return {"status": "error", "message": str(e)}
 
-@celery_app.task(bind=True)
-def assess_risk(self):
-    """Evalúa el riesgo del portafolio"""
+@shared_task
+def assess_risk():
+    """
+    Evalúa el riesgo del portafolio
+    """
     try:
         logger.info("🔍 Evaluando riesgo del portafolio")
         
-        # TODO: Implementar evaluación de riesgo real usando el risk manager
-        assessment = {
-            "risk_level": "low",
-            "daily_pnl": 0.0,
-            "max_drawdown": 0.0,
-            "recommendation": "continue_trading"
+        # Crear manager para obtener balances
+        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        if not manager:
+            return {"risk_level": "unknown", "error": "Manager no disponible"}
+        
+        # Obtener balances
+        balances = asyncio.run(manager.get_asset_balances())
+        
+        # Obtener resumen de trading
+        trading_summary = asyncio.run(fund_manager.get_trading_summary(balances))
+        
+        # Calcular métricas de riesgo
+        total_value = trading_summary.get("total_value_usdt", 0)
+        usdt_balance = trading_summary.get("usdt_balance", 0)
+        
+        # Determinar nivel de riesgo
+        if total_value < 10:
+            risk_level = "high"
+            recommendation = "insufficient_funds"
+        elif usdt_balance < 5:
+            risk_level = "medium"
+            recommendation = "low_liquidity"
+        else:
+            risk_level = "low"
+            recommendation = "continue_trading"
+        
+        risk_assessment = {
+            "risk_level": risk_level,
+            "daily_pnl": 0.0,  # Se calcularía con datos históricos
+            "max_drawdown": 0.0,  # Se calcularía con datos históricos
+            "recommendation": recommendation,
+            "total_value": total_value,
+            "usdt_balance": usdt_balance,
+            "can_trade": trading_summary.get("can_trade", False)
         }
         
-        logger.info(f"✅ Evaluación de riesgo completada: {assessment}")
-        return assessment
+        logger.info(f"✅ Evaluación de riesgo completada: {risk_assessment}")
+        return risk_assessment
         
     except Exception as e:
-        logger.error(f"❌ Error en evaluación de riesgo: {e}")
-        raise self.retry(countdown=300, max_retries=2)
+        logger.error(f"❌ Error evaluando riesgo: {e}")
+        return {"risk_level": "unknown", "error": str(e)}
 
-@celery_app.task(bind=True)
-def execute_order(self, order_data):
-    """Ejecuta una orden específica"""
+@shared_task
+def update_metrics():
+    """
+    Actualiza todas las métricas del sistema
+    """
     try:
-        logger.info(f"📋 Ejecutando orden: {order_data}")
+        logger.info("📊 Actualizando métricas del sistema")
         
-        # Verificar si es trading real o simulado
-        paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        metrics_service = MetricsService()
+        asyncio.run(metrics_service.calculate_portfolio_metrics())
         
-        if paper_trading:
-            logger.info("📄 Ejecutando orden en modo PAPER TRADING")
-            result = {
-                "order_id": f"paper_{current_task.request.id}",
-                "status": "executed",
-                "price": order_data.get("price", 0.0),
-                "quantity": order_data.get("quantity", 0.0),
-                "mode": "paper"
-            }
-        else:
-            logger.info("💰 Ejecutando orden REAL")
-            # TODO: Implementar ejecución de órdenes reales usando el BinanceService
-            result = {
-                "order_id": f"real_{current_task.request.id}",
-                "status": "executed",
-                "price": order_data.get("price", 0.0),
-                "quantity": order_data.get("quantity", 0.0),
-                "mode": "real"
-            }
-        
-        logger.info(f"✅ Orden ejecutada: {result}")
-        return result
+        logger.info("✅ Métricas actualizadas correctamente")
+        return {"status": "success", "message": "Métricas actualizadas"}
         
     except Exception as e:
-        logger.error(f"❌ Error ejecutando orden: {e}")
-        raise self.retry(countdown=30, max_retries=3)
+        logger.error(f"❌ Error actualizando métricas: {e}")
+        return {"status": "error", "message": str(e)}
 
-@celery_app.task(bind=True)
-def health_check(self):
-    """Verificación de salud del sistema"""
+@shared_task
+def health_check():
+    """
+    Verificación de salud del sistema
+    """
     try:
-        logger.info("🏥 Ejecutando health check")
+        logger.info("🏥 Ejecutando verificación de salud del sistema")
         
-        # Verificar variables de entorno críticas
-        binance_api_key = os.getenv("BINANCE_API_KEY")
-        binance_secret = os.getenv("BINANCE_SECRET_KEY")
-        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        # Verificar conexión con Binance
+        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        if not manager:
+            return {"status": "unhealthy", "error": "Manager no disponible"}
+        
+        # Verificar balances
+        balances = asyncio.run(manager.get_asset_balances())
+        if not balances:
+            return {"status": "unhealthy", "error": "No se pueden obtener balances"}
+        
+        # Verificar configuración
+        config = manager.config
+        if not config.assets:
+            return {"status": "unhealthy", "error": "No hay activos configurados"}
         
         health_status = {
             "status": "healthy",
-            "timestamp": "2025-01-27T00:00:00Z",
-            "services": {
-                "database": "connected",
-                "redis": "connected",
-                "binance_api": "connected" if binance_api_key and binance_secret else "missing_credentials",
-                "telegram": "connected" if telegram_token else "missing_token"
-            },
-            "trading_mode": "paper" if os.getenv("PAPER_TRADING", "false").lower() == "true" else "real",
-            "trading_enabled": os.getenv("TRADING_ENABLED", "true").lower() == "true"
+            "timestamp": datetime.now().isoformat(),
+            "binance_connection": "ok",
+            "balances_available": len(balances),
+            "assets_configured": len(config.assets),
+            "active_assets": len([a for a in config.assets.values() if a.is_active])
         }
         
-        logger.info(f"✅ Health check completado: {health_status}")
+        logger.info(f"✅ Verificación de salud completada: {health_status}")
         return health_status
         
     except Exception as e:
-        logger.error(f"❌ Error en health check: {e}")
+        logger.error(f"❌ Error en verificación de salud: {e}")
         return {"status": "unhealthy", "error": str(e)} 

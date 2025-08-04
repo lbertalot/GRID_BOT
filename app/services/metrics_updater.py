@@ -41,12 +41,13 @@ class MetricsUpdater:
         """Actualizar todas las métricas"""
         try:
             # Obtener balance real de Binance
-            client = get_binance_client()
-            if not client:
-                logger.warning("No se pudo obtener cliente de Binance para métricas")
-                return
+            from app.services.binance_client_singleton import binance_client_singleton
             
-            account_info = client.get_account()
+            try:
+                account_info = binance_client_singleton.get_account_info()
+            except Exception as e:
+                logger.warning(f"No se pudo obtener información de cuenta: {e}")
+                return
             portfolio_value = 0.0
             balances = {}
             
@@ -66,8 +67,7 @@ class MetricsUpdater:
                                 portfolio_value += free + locked
                             else:
                                 # Obtener precio en USDT
-                                ticker = client.get_symbol_ticker(symbol=f"{asset}USDT")
-                                price = float(ticker['price'])
+                                price = binance_client_singleton.get_symbol_price(f"{asset}USDT")
                                 portfolio_value += (free + locked) * price
                         except Exception as e:
                             logger.warning(f"No se pudo obtener precio para {asset}: {e}")

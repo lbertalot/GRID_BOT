@@ -1,18 +1,18 @@
 {
   "BTCUSDT": {
     "symbol": "BTCUSDT",
-    "min_price": 118000.0,
-    "max_price": 121000.0,
-    "grids": 4,
+    "min_price": 114000.0,
+    "max_price": 116000.0,
+    "grids": 6,
     "quantity": 0.0001,
     "last_action": null,
     "is_active": true
   },
   "ETHUSDT": {
     "symbol": "ETHUSDT",
-    "min_price": 3800.0,
-    "max_price": 3900.0,
-    "grids": 4,
+    "min_price": 3540.0,
+    "max_price": 3580.0,
+    "grids": 6,
     "quantity": 0.003,
     "last_action": null,
     "is_active": true
@@ -20,18 +20,26 @@
   "SPKUSDT": {
     "symbol": "SPKUSDT",
     "min_price": 0.095,
-    "max_price": 0.115,
-    "grids": 6,
+    "max_price": 0.125,
+    "grids": 8,
     "quantity": 120.0,
     "last_action": null,
     "is_active": true
   },
   "_optimization_metadata": {
-    "optimized_at": "2025-07-27 23:57:00",
-    "optimization_version": "9.5",
-    "ajuste_tipo": "Configuración ajustada para cumplir min_notional - SPKUSDT aumentado",
-    "min_notional": 10.0,
-    "simbolos_activos": 3,
-    "nota": "SPKUSDT ajustado a 120 SPK para cumplir min_notional de 10 USDT (120 * 0.098 = 11.76 USDT)"
+    "optimized_at": "2025-08-04 09:35:00",
+    "optimization_version": "11.0",
+    "ajuste_tipo": "Configuración optimizada para precios actuales con mayor sensibilidad",
+    "cambios": [
+      "Aumentado número de grids para mayor precisión",
+      "Ajustado rangos para precios actuales del mercado",
+      "Optimizada sensibilidad de detección de señales",
+      "Configuración más agresiva para ejecutar operaciones"
+    ],
+    "precios_actuales": {
+      "BTCUSDT": "~114600",
+      "ETHUSDT": "~3556",
+      "SPKUSDT": "~0.122"
+    }
   }
 } 

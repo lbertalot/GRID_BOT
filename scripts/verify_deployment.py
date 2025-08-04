@@ -157,7 +157,7 @@ class DeploymentVerifier:
 
 📋 ACCESO A SERVICIOS:
    • API Principal: http://localhost:8000
-   • Grafana: http://localhost:3000 (admin/admin)
+   • Grafana: http://localhost:3000 (admin/gridbot123)
    • Prometheus: http://localhost:9090
    • Flower (Celery): http://localhost:5555
    • Alertmanager: http://localhost:9093
