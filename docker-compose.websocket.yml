@@ -169,7 +169,7 @@ services:
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana_data_ws:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=gridbot123
       - GF_USERS_ALLOW_SIGN_UP=false
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]

@@ -20,7 +20,7 @@ El proyecto Grid Trading Bot ha sido reiniciado exitosamente desde cero con toda
 | Servicio | URL | Descripción |
 |----------|-----|-------------|
 | **API Principal** | http://localhost:8000 | FastAPI con todas las funcionalidades |
-| **Grafana** | http://localhost:3000 | Dashboards de monitoreo (admin/admin) |
+| **Grafana** | http://localhost:3000 | Dashboards de monitoreo (admin/gridbot123) |
 | **Prometheus** | http://localhost:9090 | Métricas y alertas |
 | **Flower** | http://localhost:5555 | Monitoreo de Celery |
 | **Alertmanager** | http://localhost:9093 | Gestión de alertas |

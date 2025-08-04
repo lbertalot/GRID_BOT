@@ -8,7 +8,12 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from app.core.metrics import trading_metrics
-from app.services.binance_client import client
+from binance.client import Client
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 from app.db.session import SessionLocal
 from app.models.trade import Trade
 # from app.models.balance import Balance  # Modelo no implementado aún
@@ -72,21 +77,12 @@ class MetricsService:
     
     async def _get_current_balances(self) -> Dict[str, float]:
         """
-        Obtiene los balances actuales de Binance
+        Obtiene los balances actuales de Binance usando Singleton
         """
         try:
-            account = client.get_account()
-            balances = {}
+            from app.services.binance_client_singleton import binance_client_singleton
             
-            for balance in account['balances']:
-                asset = balance['asset']
-                free = float(balance['free'])
-                locked = float(balance['locked'])
-                total = free + locked
-                
-                if total > 0:
-                    balances[asset] = total
-            
+            balances = binance_client_singleton.get_balances()
             return balances
             
         except Exception as e:
@@ -108,10 +104,20 @@ class MetricsService:
                     try:
                         if asset in ['BTC', 'ETH', 'BNB']:
                             symbol = f"{asset}USDT"
-                            ticker = client.get_symbol_ticker(symbol=symbol)
-                            price = float(ticker['price'])
-                            asset_value = amount * price
-                            total_value += asset_value
+                            try:
+                                from app.services.binance_client_singleton import binance_client_singleton
+                                price = binance_client_singleton.get_symbol_price(symbol)
+                                asset_value = amount * price
+                                total_value += asset_value
+                            except Exception as e:
+                                logger.warning(f"No se pudo obtener precio para {asset}: {e}")
+                                # Usar precio estimado
+                                if asset == 'BTC':
+                                    total_value += amount * 114000
+                                elif asset == 'ETH':
+                                    total_value += amount * 3500
+                                elif asset == 'BNB':
+                                    total_value += amount * 500
                     except Exception as e:
                         logger.warning(f"No se pudo obtener precio para {asset}: {e}")
             
@@ -123,26 +129,34 @@ class MetricsService:
     
     async def _calculate_total_profit(self) -> float:
         """
-        Calcula la ganancia total desde el inicio
+        Calcula la ganancia total desde el inicio usando consulta optimizada
         """
         try:
             db = SessionLocal()
-            
-            # Obtener todos los trades
-            trades = db.query(Trade).all()
-            
-            total_profit = 0.0
-            
-            for trade in trades:
-                if trade.side == 'BUY':
-                    # Compra: gasto de USDT
-                    total_profit -= trade.quantity * trade.entry_price
-                else:
-                    # Venta: ingreso de USDT
-                    total_profit += trade.quantity * trade.entry_price
-            
-            db.close()
-            return total_profit
+            try:
+                # Consulta optimizada: sumar solo profit_loss no nulos
+                from sqlalchemy import func
+                result = db.query(func.sum(Trade.profit_loss)).filter(
+                    Trade.profit_loss.isnot(None)
+                ).scalar()
+                
+                total_profit = result or 0.0
+                
+                # Si no hay profit_loss calculados, calcular con trades completos
+                if total_profit == 0.0:
+                    completed_trades = db.query(Trade).filter(
+                        Trade.side == 'SELL',
+                        Trade.exit_price.isnot(None),
+                        Trade.entry_price.isnot(None)
+                    ).all()
+                    
+                    for trade in completed_trades:
+                        profit = (trade.exit_price - trade.entry_price) * trade.quantity
+                        total_profit += profit
+                
+                return total_profit
+            finally:
+                db.close()
             
         except Exception as e:
             logger.error(f"Error calculando ganancia total: {e}")
@@ -150,27 +164,39 @@ class MetricsService:
     
     async def _calculate_daily_profit(self) -> float:
         """
-        Calcula la ganancia del día actual
+        Calcula la ganancia del día actual usando consulta optimizada
         """
         try:
             db = SessionLocal()
-            
-            # Obtener trades del día actual
-            today = datetime.now().date()
-            today_trades = db.query(Trade).filter(
-                Trade.timestamp >= today
-            ).all()
-            
-            daily_profit = 0.0
-            
-            for trade in today_trades:
-                if trade.side == 'BUY':
-                    daily_profit -= trade.quantity * trade.entry_price
-                else:
-                    daily_profit += trade.quantity * trade.entry_price
-            
-            db.close()
-            return daily_profit
+            try:
+                # Obtener trades del día actual
+                today = datetime.now().date()
+                
+                # Consulta optimizada: sumar profit_loss del día
+                from sqlalchemy import func
+                result = db.query(func.sum(Trade.profit_loss)).filter(
+                    Trade.timestamp >= today,
+                    Trade.profit_loss.isnot(None)
+                ).scalar()
+                
+                daily_profit = result or 0.0
+                
+                # Si no hay profit_loss calculados, calcular con trades completos del día
+                if daily_profit == 0.0:
+                    completed_today_trades = db.query(Trade).filter(
+                        Trade.timestamp >= today,
+                        Trade.side == 'SELL',
+                        Trade.exit_price.isnot(None),
+                        Trade.entry_price.isnot(None)
+                    ).all()
+                    
+                    for trade in completed_today_trades:
+                        profit = (trade.exit_price - trade.entry_price) * trade.quantity
+                        daily_profit += profit
+                
+                return daily_profit
+            finally:
+                db.close()
             
         except Exception as e:
             logger.error(f"Error calculando ganancia diaria: {e}")
@@ -187,7 +213,12 @@ class MetricsService:
                     self.initial_portfolio_value = portfolio_value
                     trading_metrics.set_initial_portfolio_value(portfolio_value)
                 
-                roi = (daily_profit / self.initial_portfolio_value) * 100
+                # Usar el valor inicial o el actual si es mayor
+                base_value = max(self.initial_portfolio_value, portfolio_value)
+                roi = (daily_profit / base_value) * 100
+                
+                # Limitar el ROI a un rango razonable (-100% a +100%)
+                roi = max(-100.0, min(100.0, roi))
                 return roi
             return 0.0
             
@@ -197,42 +228,52 @@ class MetricsService:
     
     async def _calculate_asset_metrics(self, balances: Dict[str, float]) -> Dict[str, Dict]:
         """
-        Calcula métricas por activo
+        Calcula métricas por activo usando consultas optimizadas
         """
         try:
             asset_metrics = {}
+            db = SessionLocal()
             
-            for asset in ['BTC', 'ETH', 'BNB']:
-                if asset in balances and balances[asset] > 0:
-                    # Obtener trades del activo
-                    db = SessionLocal()
-                    asset_trades = db.query(Trade).filter(
-                        Trade.symbol == f"{asset}USDT"
-                    ).all()
-                    
-                    asset_profit = 0.0
-                    asset_investment = 0.0
-                    
-                    for trade in asset_trades:
-                        if trade.side == 'BUY':
-                            asset_investment += trade.quantity * trade.entry_price
-                        else:
-                            asset_profit += trade.quantity * trade.entry_price
-                    
-                    # Calcular ROI del activo
-                    asset_roi = 0.0
-                    if asset_investment > 0:
-                        asset_roi = ((asset_profit - asset_investment) / asset_investment) * 100
-                    
-                    asset_metrics[asset] = {
-                        "profit": asset_profit - asset_investment,
-                        "roi": asset_roi,
-                        "balance": balances[asset]
-                    }
-                    
-                    db.close()
-            
-            return asset_metrics
+            try:
+                for asset in ['BTC', 'ETH', 'BNB']:
+                    if asset in balances and balances[asset] > 0:
+                        symbol = f"{asset}USDT"
+                        
+                        # Consulta optimizada: calcular métricas por activo en una sola consulta
+                        from sqlalchemy import func
+                        buy_trades = db.query(
+                            func.sum(Trade.quantity * Trade.entry_price)
+                        ).filter(
+                            Trade.symbol == symbol,
+                            Trade.side == 'BUY'
+                        ).scalar() or 0.0
+                        
+                        sell_trades = db.query(
+                            func.sum(Trade.quantity * Trade.entry_price)
+                        ).filter(
+                            Trade.symbol == symbol,
+                            Trade.side == 'SELL'
+                        ).scalar() or 0.0
+                        
+                        # Calcular métricas
+                        asset_investment = buy_trades
+                        asset_profit = sell_trades
+                        net_profit = asset_profit - asset_investment
+                        
+                        # Calcular ROI del activo
+                        asset_roi = 0.0
+                        if asset_investment > 0:
+                            asset_roi = (net_profit / asset_investment) * 100
+                        
+                        asset_metrics[asset] = {
+                            "profit": net_profit,
+                            "roi": asset_roi,
+                            "balance": balances[asset]
+                        }
+                
+                return asset_metrics
+            finally:
+                db.close()
             
         except Exception as e:
             logger.error(f"Error calculando métricas por activo: {e}")

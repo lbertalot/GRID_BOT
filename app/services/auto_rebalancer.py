@@ -13,7 +13,12 @@ from typing import Dict, List, Optional, Tuple
 from decimal import Decimal
 from datetime import datetime
 
-from app.services.binance_client import client
+from binance.client import Client
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 from app.core.config import settings
 from app.models.grid_config import GridConfig
 from app.db.session import SessionLocal
@@ -29,9 +34,12 @@ class AutoRebalancer:
     """
     
     def __init__(self):
-        self.min_balance_threshold = 15.0  # USDT mínimo por activo (aumentado para cumplir min_notional)
+        self.min_balance_threshold = 12.0  # USDT mínimo por activo (ajustado para cumplir min_notional + margen)
         self.rebalance_frequency = 3600  # segundos (1 hora)
-        self.binance_client = client
+        
+        # Usar cliente Binance Singleton
+        from app.services.binance_client_singleton import binance_client_singleton
+        self.binance_client = binance_client_singleton.client
         self.is_rebalancing = False
         
     async def check_and_rebalance(self) -> Dict:
@@ -93,10 +101,13 @@ class AutoRebalancer:
             for balance in account_info['balances']:
                 asset = balance['asset']
                 free_balance = float(balance['free'])
+                locked_balance = float(balance['locked'])
+                total_balance = free_balance + locked_balance
                 
-                if free_balance > 0:
-                    balances[asset] = free_balance
+                if total_balance > 0:
+                    balances[asset] = total_balance
             
+            logger.info(f"Balances obtenidos: {len(balances)} activos con saldo")
             return balances
             
         except Exception as e:
@@ -166,9 +177,13 @@ class AutoRebalancer:
                 current_price = float(ticker['price'])
                 current_value_usdt = current_balance * current_price
                 
-                # Verificar si necesita rebalanceo
-                if current_value_usdt < self.min_balance_threshold:
-                    needed_usdt = self.min_balance_threshold - current_value_usdt
+                # Calcular valor requerido para operar (cantidad configurada * precio actual)
+                required_quantity = config.quantity
+                required_value_usdt = required_quantity * current_price
+                
+                # Verificar si necesita rebalanceo (si el valor actual es menor que el requerido)
+                if current_value_usdt < required_value_usdt:
+                    needed_usdt = required_value_usdt - current_value_usdt
                     needed_quantity = needed_usdt / current_price
                     
                     rebalance_needs.append({
@@ -176,6 +191,7 @@ class AutoRebalancer:
                         "base_asset": base_asset,
                         "current_balance": current_balance,
                         "current_value_usdt": current_value_usdt,
+                        "required_value_usdt": required_value_usdt,
                         "needed_usdt": needed_usdt,
                         "needed_quantity": needed_quantity,
                         "current_price": current_price
@@ -183,6 +199,7 @@ class AutoRebalancer:
                     
                     logger.info(f"Necesita rebalanceo: {symbol} - "
                               f"Valor actual: ${current_value_usdt:.2f}, "
+                              f"Valor requerido: ${required_value_usdt:.2f}, "
                               f"Necesita: ${needed_usdt:.2f}")
                 
             except Exception as e:
