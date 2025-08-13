@@ -1,8 +1,8 @@
 {
   "BTCUSDT": {
     "symbol": "BTCUSDT",
-    "min_price": 114000.0,
-    "max_price": 116000.0,
+    "min_price": 112000.0,
+    "max_price": 118500.0,
     "grids": 6,
     "quantity": 0.0001,
     "last_action": null,
@@ -10,8 +10,8 @@
   },
   "ETHUSDT": {
     "symbol": "ETHUSDT",
-    "min_price": 3540.0,
-    "max_price": 3580.0,
+    "min_price": 3400.0,
+    "max_price": 3800.0,
     "grids": 6,
     "quantity": 0.003,
     "last_action": null,
@@ -19,8 +19,8 @@
   },
   "SPKUSDT": {
     "symbol": "SPKUSDT",
-    "min_price": 0.095,
-    "max_price": 0.125,
+    "min_price": 0.08,
+    "max_price": 0.14,
     "grids": 8,
     "quantity": 120.0,
     "last_action": null,

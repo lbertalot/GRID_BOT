@@ -29,7 +29,7 @@ def decide_grid_action(current_price: float, grid_levels: List[float], last_acti
     
     # Calcular tolerancia dinámica basada en la volatilidad del rango
     range_size = max_level - min_level
-    tolerance = range_size * 0.05  # Aumentado a 5% de tolerancia para mayor sensibilidad
+    tolerance = range_size * 0.10  # Aumentado a 10% para facilitar generación de señales
     
     # Determinar la acción basada en la posición del precio respecto al nivel más cercano
     price_diff = abs(current_price - closest_level)
