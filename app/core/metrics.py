@@ -279,6 +279,22 @@ def record_order_failure(symbol: str, side: str, error_type: str):
     except Exception as e:
         print(f"Error registrando fallo de orden: {e}")
 
+def compute_win_loss_and_sharpe(trades: list[dict]) -> dict:
+    """Calcula win/loss ratio y Sharpe simple a partir de trades con profit_loss.
+    Retorna dict con 'win_ratio' y 'sharpe'.
+    """
+    if not trades:
+        return {"win_ratio": 0.0, "sharpe": 0.0}
+    profits = [float(t.get('profit_loss', 0.0) or 0.0) for t in trades]
+    wins = sum(1 for p in profits if p > 0)
+    total = len(profits)
+    win_ratio = wins / total if total > 0 else 0.0
+    mean = sum(profits) / total
+    var = sum((p - mean) ** 2 for p in profits) / total
+    std = var ** 0.5
+    sharpe = (mean / std) if std > 0 else 0.0
+    return {"win_ratio": win_ratio, "sharpe": sharpe}
+
 def record_symbol_error(symbol: str, error_type: str):
     """
     Registra un error asociado a un símbolo específico.
