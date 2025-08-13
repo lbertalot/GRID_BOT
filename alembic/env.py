@@ -24,6 +24,9 @@ from app.models.base import Base
 from app.models.trade import Trade
 from app.models.grid_config import GridConfig
 from app.models.asset_limit import AssetLimit
+from app.models.performance_metrics import PerformanceMetrics
+from app.models.alerts import Alert
+from app.models.system_config import SystemConfig
 
 target_metadata = Base.metadata
 
