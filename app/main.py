@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi import HTTPException
 
 from app.api import trade, strategies, metrics, prometheus, optimized_routes, risk_routes, config_routes, strategy_routes, metrics_routes
+from app.api import alert_routes, binance_sync_routes, test_routes
 from app.core.auth import get_api_key
 from app.core.error_handlers import validation_exception_handler, http_exception_handler, general_exception_handler
 from app.db.init_db import init_db
@@ -67,8 +68,12 @@ app.include_router(metrics_routes.router)  # Ya tiene prefix /api/v1/metrics
 app.include_router(risk_routes.router, tags=["Risk Management"])  # Ya tiene prefix /api/v1/risk
 app.include_router(config_routes.router, tags=["Configuration Optimization"])  # Ya tiene prefix /api/v1/config
 app.include_router(prometheus.router, prefix="/api/prometheus", tags=["Prometheus"])
-app.include_router(optimized_routes.router, prefix="/api/optimized", tags=["Optimized"])
+# Exponer rutas optimizadas con su propio prefijo interno (/api/v1)
+app.include_router(optimized_routes.router)
 app.include_router(strategy_routes.router, tags=["Strategies"])
+app.include_router(alert_routes.router)
+app.include_router(binance_sync_routes.router)
+app.include_router(test_routes.router)
 
 # Configuración de plantillas
 templates = Jinja2Templates(directory="app/templates")
@@ -127,37 +132,7 @@ async def test_metrics():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-@app.get("/api/v1/metrics/prometheus")
-async def prometheus_metrics():
-    """
-    Endpoint directo para métricas de Prometheus.
-    """
-    try:
-        import subprocess
-        from fastapi.responses import Response
-        
-        # Ejecutar el script de generación de métricas
-        result = subprocess.run([
-            "python3", "/app/scripts/generate_profitability_metrics.py"
-        ], capture_output=True, text=True, cwd="/app")
-        
-        if result.returncode != 0:
-            return {"error": f"Error ejecutando script: {result.stderr}"}
-        
-        # Leer las métricas generadas
-        try:
-            with open("/app/gridbot_profitability_metrics.txt", "r") as f:
-                metrics_content = f.read()
-            
-            return Response(
-                content=metrics_content,
-                media_type="text/plain"
-            )
-        except FileNotFoundError:
-            return {"error": "Archivo de métricas no encontrado"}
-        
-    except Exception as e:
-        return {"error": f"Error generando métricas: {str(e)}"}
+ 
 
 @app.get("/simple-metrics")
 async def simple_metrics():
