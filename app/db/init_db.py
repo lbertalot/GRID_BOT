@@ -17,90 +17,8 @@ logger = logging.getLogger(__name__)
 # Configuración de la base de datos
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
 
-# SQL para crear las tablas
-CREATE_TABLES_SQL = """
--- Tabla de configuración del grid
-CREATE TABLE IF NOT EXISTS grid_config (
-    id SERIAL PRIMARY KEY,
-    trading_pair VARCHAR(20) NOT NULL,
-    grid_levels INTEGER NOT NULL DEFAULT 10,
-    min_price DECIMAL(20, 8) NOT NULL,
-    max_price DECIMAL(20, 8) NOT NULL,
-    quantity_per_trade DECIMAL(20, 8) NOT NULL,
-    auto_rebalance BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tabla de límites de activos
-CREATE TABLE IF NOT EXISTS asset_limits (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    min_qty DECIMAL(20, 8) NOT NULL,
-    max_qty DECIMAL(20, 8) NOT NULL,
-    step_size DECIMAL(20, 8) NOT NULL,
-    tick_size DECIMAL(20, 8) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tabla de operaciones de trading
-CREATE TABLE IF NOT EXISTS trades (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    side VARCHAR(10) NOT NULL, -- 'BUY' or 'SELL'
-    quantity DECIMAL(20, 8) NOT NULL,
-    entry_price DECIMAL(20, 8) NOT NULL,
-    exit_price DECIMAL(20, 8),
-    profit_loss DECIMAL(20, 8),
-    status VARCHAR(20) DEFAULT 'PENDING', -- 'PENDING', 'FILLED', 'CANCELLED'
-    order_id VARCHAR(100),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    grid_level INTEGER,
-    strategy VARCHAR(50) DEFAULT 'GRID'
-);
-
--- Tabla de métricas de rendimiento
-CREATE TABLE IF NOT EXISTS performance_metrics (
-    id SERIAL PRIMARY KEY,
-    total_trades INTEGER DEFAULT 0,
-    winning_trades INTEGER DEFAULT 0,
-    losing_trades INTEGER DEFAULT 0,
-    total_profit DECIMAL(20, 8) DEFAULT 0,
-    total_loss DECIMAL(20, 8) DEFAULT 0,
-    win_rate DECIMAL(5, 2) DEFAULT 0,
-    sharpe_ratio DECIMAL(10, 4) DEFAULT 0,
-    max_drawdown DECIMAL(10, 4) DEFAULT 0,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tabla de alertas
-CREATE TABLE IF NOT EXISTS alerts (
-    id SERIAL PRIMARY KEY,
-    type VARCHAR(50) NOT NULL, -- 'PROFIT', 'LOSS', 'SYSTEM', 'ERROR'
-    message TEXT NOT NULL,
-    level VARCHAR(20) DEFAULT 'INFO', -- 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
-    sent_to_telegram BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tabla de configuración del sistema
-CREATE TABLE IF NOT EXISTS system_config (
-    id SERIAL PRIMARY KEY,
-    key VARCHAR(100) UNIQUE NOT NULL,
-    value TEXT NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Índices para mejorar el rendimiento
-CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
-CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
-CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
-CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(type);
-CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at);
-"""
+# SQL manual removido: ahora se usa Alembic como única fuente de verdad para el esquema
+CREATE_TABLES_SQL = """-- handled by Alembic migrations"""
 
 # SQL para insertar datos iniciales
 INSERT_INITIAL_DATA_SQL = """
@@ -135,8 +53,7 @@ async def init_database():
         logger.info("Conectando a la base de datos...")
         conn = await asyncpg.connect(DATABASE_URL)
         
-        logger.info("Creando tablas...")
-        await conn.execute(CREATE_TABLES_SQL)
+        logger.info("Esquema gestionado por Alembic. Omitiendo creación manual de tablas.")
         
         logger.info("Insertando datos iniciales...")
         await conn.execute(INSERT_INITIAL_DATA_SQL)
