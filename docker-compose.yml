@@ -84,7 +84,7 @@ services:
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
-    command: uvicorn app.main_simple:app --host 0.0.0.0 --port 8000 --workers 2
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -119,6 +119,7 @@ services:
       - BINANCE_TESTNET=false
     volumes:
       - ./app:/app/app
+      - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
@@ -154,6 +155,7 @@ services:
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
     volumes:
       - ./app:/app/app
+      - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
     command: celery -A app.core.celery_app beat --loglevel=info
     networks:
