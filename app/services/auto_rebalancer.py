@@ -324,19 +324,24 @@ class AutoRebalancer:
             Resultado de la orden
         """
         try:
-            # Obtener precio actual
+            # Precio actual
             ticker = self.binance_client.get_symbol_ticker(symbol=symbol)
             current_price = float(ticker['price'])
-            
-            # Calcular cantidad en USDT y redondear a 2 decimales
-            usdt_amount = round(quantity * current_price, 2)
-            
-            # Ejecutar orden de compra
+
+            # Obtener filtros del símbolo
+            symbol_info = self.binance_client.get_symbol_info(symbol=symbol)
+            filters = {f["filterType"]: f for f in symbol_info.get("filters", [])}
+            min_notional = float(filters.get("MIN_NOTIONAL", {}).get("minNotional", 10))
+
+            # Calcular monto en USDT asegurando mínimo notional
+            usdt_amount = max(round(quantity * current_price, 2), round(min_notional + 0.01, 2))
+
+            # Ejecutar orden de compra con quoteOrderQty cumpliendo MIN_NOTIONAL
             order = self.binance_client.create_order(
                 symbol=symbol,
                 side="BUY",
                 type="MARKET",
-                quoteOrderQty=usdt_amount  # Cantidad en USDT
+                quoteOrderQty=usdt_amount
             )
             
             logger.info(f"Orden de compra ejecutada: {symbol} - "
@@ -344,7 +349,7 @@ class AutoRebalancer:
             
             # Guardar trade en la base de datos
             if order.get('status') == 'FILLED':
-                self._save_trade_to_db(symbol, "BUY", quantity, current_price, order.get('orderId'))
+                self._save_trade_to_db(symbol, "BUY", usdt_amount / current_price, current_price, order.get('orderId'))
             
             return {
                 "order_id": order.get('orderId'),

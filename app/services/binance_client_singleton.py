@@ -6,6 +6,7 @@ import os
 import logging
 from typing import Optional
 from binance.client import Client
+from binance.exceptions import BinanceAPIException
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -100,10 +101,41 @@ class BinanceClientSingleton:
     
     def get_symbol_price(self, symbol: str) -> float:
         """Obtiene el precio actual de un símbolo"""
+        def _fallback_symbol(sym: str) -> Optional[str]:
+            base = sym[:-4] if sym.endswith("USDT") else sym
+            # Reglas de normalización simples: tokens con prefijo 'LD' (ej. LDBNB) → base sin 'LD'
+            if base.startswith("LD") and len(base) > 2:
+                return f"{base[2:]}USDT"
+            return None
+
         try:
             ticker = self.client.get_symbol_ticker(symbol=symbol)
             return float(ticker['price'])
+        except BinanceAPIException as e:
+            if getattr(e, 'code', None) == -1121:  # Invalid symbol
+                fb = _fallback_symbol(symbol)
+                if fb and fb != symbol:
+                    try:
+                        ticker = self.client.get_symbol_ticker(symbol=fb)
+                        logger.warning(f"Símbolo inválido {symbol}, usando fallback {fb}")
+                        return float(ticker['price'])
+                    except Exception as inner:
+                        logger.error(f"Fallback de símbolo fallido {symbol}->{fb}: {inner}")
+                        return 0.0
+            logger.error(f"Error obteniendo precio para {symbol}: {e}")
+            return 0.0
         except Exception as e:
+            # Compatibilidad con clientes que lanzan otras clases de excepción
+            if 'Invalid symbol' in str(e):
+                fb = _fallback_symbol(symbol)
+                if fb and fb != symbol:
+                    try:
+                        ticker = self.client.get_symbol_ticker(symbol=fb)
+                        logger.warning(f"Símbolo inválido {symbol}, usando fallback {fb}")
+                        return float(ticker['price'])
+                    except Exception as inner:
+                        logger.error(f"Fallback de símbolo fallido {symbol}->{fb}: {inner}")
+                        return 0.0
             logger.error(f"Error obteniendo precio para {symbol}: {e}")
             return 0.0
     

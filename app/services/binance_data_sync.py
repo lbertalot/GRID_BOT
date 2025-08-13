@@ -68,6 +68,18 @@ class BinanceDataSync:
             
             # Conectar a la base de datos
             conn = await self.get_db_connection()
+            # Asegurar tabla system_config
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS system_config (
+                  key TEXT PRIMARY KEY,
+                  value TEXT NOT NULL,
+                  description TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             
             # Actualizar configuración del sistema con información de la cuenta
             await conn.execute("""
@@ -123,6 +135,22 @@ class BinanceDataSync:
             # Conectar a la base de datos
             conn = await self.get_db_connection()
             
+            # Asegurar tabla asset_limits (por si migraciones no corrieron)
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS asset_limits (
+                  symbol VARCHAR(20) PRIMARY KEY,
+                  min_price DOUBLE PRECISION NOT NULL,
+                  max_price DOUBLE PRECISION NOT NULL,
+                  tick_size DOUBLE PRECISION NOT NULL,
+                  min_qty DOUBLE PRECISION NOT NULL,
+                  max_qty DOUBLE PRECISION NOT NULL,
+                  step_size DOUBLE PRECISION NOT NULL,
+                  min_notional DOUBLE PRECISION NOT NULL,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             # Limpiar balances anteriores
             await conn.execute("DELETE FROM asset_limits")
             
@@ -141,15 +169,19 @@ class BinanceDataSync:
                     symbol_info = await self._get_symbol_info(asset)
                     
                     if symbol_info:
-                        await conn.execute("""
-                            INSERT INTO asset_limits (symbol, min_qty, max_qty, step_size, tick_size)
-                            VALUES ($1, $2, $3, $4, $5)
-                        """, 
-                        f"{asset}USDT",
-                        symbol_info.get("minQty", 0.001),
-                        symbol_info.get("maxQty", 1000000.0),
-                        symbol_info.get("stepSize", 0.001),
-                        symbol_info.get("tickSize", 0.01)
+                        await conn.execute(
+                            """
+                            INSERT INTO asset_limits (symbol, min_price, max_price, tick_size, min_qty, max_qty, step_size, min_notional)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                            """,
+                            f"{asset}USDT",
+                            symbol_info.get("minPrice", 0.0),
+                            symbol_info.get("maxPrice", 0.0),
+                            symbol_info.get("tickSize", 0.01),
+                            symbol_info.get("minQty", 0.001),
+                            symbol_info.get("maxQty", 1000000.0),
+                            symbol_info.get("stepSize", 0.001),
+                            symbol_info.get("minNotional", 10.0),
                         )
                         
                         # Calcular valor en USDT
@@ -195,7 +227,22 @@ class BinanceDataSync:
             # Conectar a la base de datos
             conn = await self.get_db_connection()
             
-            # Limpiar información anterior
+            # Asegurar tabla asset_limits y limpiar
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS asset_limits (
+                  symbol VARCHAR(20) PRIMARY KEY,
+                  min_price DOUBLE PRECISION NOT NULL,
+                  max_price DOUBLE PRECISION NOT NULL,
+                  tick_size DOUBLE PRECISION NOT NULL,
+                  min_qty DOUBLE PRECISION NOT NULL,
+                  max_qty DOUBLE PRECISION NOT NULL,
+                  step_size DOUBLE PRECISION NOT NULL,
+                  min_notional DOUBLE PRECISION NOT NULL,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             await conn.execute("DELETE FROM asset_limits")
             
             inserted_count = 0
@@ -224,11 +271,20 @@ class BinanceDataSync:
                 price_filter = filters.get("PRICE_FILTER", {})
                 tick_size = float(price_filter.get("tickSize", "0.01"))
                 
+                # Obtener min/max price y minNotional si están presentes
+                min_price = float(price_filter.get("minPrice", "0"))
+                max_price = float(price_filter.get("maxPrice", "0"))
+                min_notional_filter = filters.get("MIN_NOTIONAL", {})
+                min_notional = float(min_notional_filter.get("minNotional", "10"))
+
                 # Insertar en la base de datos
-                await conn.execute("""
-                    INSERT INTO asset_limits (symbol, min_qty, max_qty, step_size, tick_size)
-                    VALUES ($1, $2, $3, $4, $5)
-                """, symbol, min_qty, max_qty, step_size, tick_size)
+                await conn.execute(
+                    """
+                    INSERT INTO asset_limits (symbol, min_price, max_price, tick_size, min_qty, max_qty, step_size, min_notional)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
+                    symbol, min_price, max_price, tick_size, min_qty, max_qty, step_size, min_notional
+                )
                 
                 inserted_count += 1
             
@@ -478,7 +534,10 @@ class BinanceDataSync:
                             "stepSize": float(filters.get("LOT_SIZE", {}).get("stepSize", "0.001")),
                             "minQty": float(filters.get("LOT_SIZE", {}).get("minQty", "0.001")),
                             "maxQty": float(filters.get("LOT_SIZE", {}).get("maxQty", "1000000.0")),
-                            "tickSize": float(filters.get("PRICE_FILTER", {}).get("tickSize", "0.01"))
+                            "tickSize": float(filters.get("PRICE_FILTER", {}).get("tickSize", "0.01")),
+                            "minPrice": float(filters.get("PRICE_FILTER", {}).get("minPrice", "0")),
+                            "maxPrice": float(filters.get("PRICE_FILTER", {}).get("maxPrice", "0")),
+                            "minNotional": float(filters.get("MIN_NOTIONAL", {}).get("minNotional", "10")),
                         }
                         break
             

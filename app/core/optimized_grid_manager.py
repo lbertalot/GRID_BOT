@@ -14,9 +14,14 @@ import asyncpg
 import math
 
 import requests
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
+from pydantic import field_validator
 from binance import Client
 from dotenv import load_dotenv
+
+# Importar configuración de SQLAlchemy ANTES de cualquier import de SQLAlchemy
+from app.core.sqlalchemy_logging import configure_sqlalchemy_logging
+configure_sqlalchemy_logging()
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -28,13 +33,11 @@ from app.models.asset_limit import AssetLimit
 from app.services.risk_manager import risk_manager, RiskStatus
 from app.services.metrics_service import metrics_service
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# Configurar logging optimizado
+from app.core.optimized_logging import setup_optimized_logging
+logger = setup_optimized_logging()
 
 class AssetConfig(BaseModel):
-    """Configuration for a single trading asset"""
     symbol: str
     min_price: float
     max_price: float
@@ -44,15 +47,17 @@ class AssetConfig(BaseModel):
     last_action: Optional[str] = None
     grid_levels: List[float] = Field(default_factory=list)
 
-    @validator('grid_levels', always=True)
-    def calculate_grid_levels_on_init(cls, v, values):
-        if not v:  # Only calculate if not already set
-            return calculate_grid_levels(
-                values.get('min_price'),
-                values.get('max_price'),
-                values.get('grids')
-            )
-        return v
+    @field_validator('grid_levels')
+    @classmethod
+    def calculate_grid_levels_on_init(cls, v, info):
+        if v:
+            return v
+        data = info.data or {}
+        return calculate_grid_levels(
+            data.get('min_price'),
+            data.get('max_price'),
+            data.get('grids')
+        )
 
 
 class GridManagerConfig(BaseModel):

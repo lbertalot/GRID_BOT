@@ -27,16 +27,16 @@ async def metrics():
     """Endpoint principal de métricas de Prometheus"""
     start_time = time.time()
     try:
-        # result = get_metrics()
-        # duration = time.time() - start_time
-        # record_api_request("GET", "/api/metrics/metrics/", 200, duration)
-        # return result
-        return {"error": "Métricas no disponibles"}
+        from fastapi.responses import Response
+        from prometheus_client import generate_latest
+        content = generate_latest()
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/metrics/", 200, duration)
+        return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
     except Exception as e:
-        # duration = time.time() - start_time
-        # record_api_request("GET", "/api/metrics/metrics/", 500, duration)
-        # raise e
-        return {"error": "Error en métricas"}
+        duration = time.time() - start_time
+        record_api_request("GET", "/api/metrics/metrics/", 500, duration)
+        return {"error": f"Error en métricas: {e}"}
 
 @router.get("/health")
 async def metrics_health():
