@@ -31,11 +31,14 @@ class AsyncCache:
 
     async def get(self, key: str) -> Optional[str]:
         if self._use_redis and self._redis is not None:
-            try:
-                return await self._redis.get(key)
-            except Exception:
-                # Fallback a memoria si Redis falla
-                pass
+            # reintento simple de conexión si falla
+            for _ in range(2):
+                try:
+                    return await self._redis.get(key)
+                except Exception:
+                    await asyncio.sleep(0.05)
+                    continue
+            # Fallback a memoria si Redis falla
         # In-memory fallback
         now = time.time()
         item = self._memory_store.get(key)
@@ -55,12 +58,14 @@ class AsyncCache:
             serialized = str(value)
 
         if self._use_redis and self._redis is not None:
-            try:
-                await self._redis.set(key, serialized, ex=ttl_seconds)
-                return
-            except Exception:
-                # Fallback a memoria si Redis falla
-                pass
+            for _ in range(2):
+                try:
+                    await self._redis.set(key, serialized, ex=ttl_seconds)
+                    return
+                except Exception:
+                    await asyncio.sleep(0.05)
+                    continue
+            # Fallback a memoria si Redis falla
 
         # In-memory fallback
         expires_at = time.time() + max(1, ttl_seconds)
