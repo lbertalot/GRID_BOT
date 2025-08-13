@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     binance_api_key: str = ""
     binance_api_secret: str = ""
+    binance_testnet: bool = False
+    paper_trading: bool = False
     api_key: str = ""
 
     class Config:
@@ -42,5 +44,9 @@ class Settings(BaseSettings):
             self.postgres_host = "localhost"
             self.redis_url = "redis://localhost:6379/0"
             self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+
+        # Flags de trading
+        self.paper_trading = bool(os.getenv("PAPER_TRADING", "false").lower() == "true")
+        self.binance_testnet = bool(os.getenv("BINANCE_TESTNET", "false").lower() == "true")
 
 settings = Settings() 
