@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from app.db.session import SessionLocal
 from app.models.trade import Trade
+from sqlalchemy import func
 # from app.models.balance import Balance  # Modelo no implementado aún
 
 logger = logging.getLogger(__name__)
