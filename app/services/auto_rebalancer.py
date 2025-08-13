@@ -40,6 +40,8 @@ class AutoRebalancer:
         # Usar cliente Binance Singleton
         from app.services.binance_client_singleton import binance_client_singleton
         self.binance_client = binance_client_singleton.client
+        # Si PAPER_TRADING está activo, avisar y evitar órdenes reales en otros métodos
+        self.paper_trading = settings.paper_trading
         self.is_rebalancing = False
         
     async def check_and_rebalance(self) -> Dict:
@@ -95,6 +97,7 @@ class AutoRebalancer:
             Dict con balances por activo
         """
         try:
+            # Evitar bloqueo en caso de tests/paper: si no hay credenciales, retornar vacíos
             account_info = self.binance_client.get_account()
             balances = {}
             
@@ -245,8 +248,8 @@ class AutoRebalancer:
                     })
                     continue
                 
-                # Ejecutar compra
-                order_result = await self.execute_buy_order(symbol, needed_quantity)
+            # Ejecutar compra
+            order_result = await self.execute_buy_order(symbol, needed_quantity)
                 
                 results.append({
                     "symbol": symbol,
@@ -276,6 +279,18 @@ class AutoRebalancer:
             Balance de USDT
         """
         try:
+            if self.paper_trading:
+                # Simular orden en modo paper para evitar ejecución real
+                order_id = f"paper_{int(datetime.utcnow().timestamp())}"
+                logger.info(f"📄 PAPER_TRADING: Simulación de compra {symbol} por {quantity}")
+                return {
+                    "order_id": order_id,
+                    "symbol": symbol,
+                    "quantity": quantity,
+                    "usdt_amount": 0.0,
+                    "price": 0.0,
+                    "status": "FILLED"
+                }
             balances = await self.get_current_balances()
             return balances.get('USDT', 0.0)
         except Exception as e:

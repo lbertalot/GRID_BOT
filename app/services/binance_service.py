@@ -6,6 +6,7 @@ import math
 
 from binance import Client
 from binance.exceptions import BinanceAPIException
+from app.core.config import settings
 
 # from app.core.metrics import record_binance_api_call, binance_connection_status
 
@@ -18,13 +19,13 @@ class BinanceService:
         """Ejecuta __init__."""
         self.api_key = os.getenv("BINANCE_API_KEY", "")
         self.api_secret = os.getenv("BINANCE_API_SECRET", "")
-        self.client = Client(self.api_key, self.api_secret)
+        self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
         
         # Cache para información de símbolos
         self._symbol_info_cache = {}
         
-        # Inicializar modo simulación
-        self.simulation_mode = False
+        # Inicializar modo simulación (paper mode fuerza simulación)
+        self.simulation_mode = bool(settings.paper_trading)
         
         # Inicializar cliente automáticamente
         self._initialize_client()
@@ -32,6 +33,10 @@ class BinanceService:
     def _initialize_client(self):
         """Inicializa el cliente de Binance con manejo de errores"""
         try:
+            if self.simulation_mode:
+                logger.info("📄 PAPER_TRADING activo: habilitando modo simulación en BinanceService")
+                return
+            
             if not self.api_key or not self.api_secret:
                 logger.warning("Credenciales de Binance no configuradas. Activando modo simulación.")
                 self.simulation_mode = True
@@ -39,7 +44,7 @@ class BinanceService:
                 return
             
             # Intentar crear el cliente
-            self.client = Client(self.api_key, self.api_secret)
+            self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
             
             # Verificar credenciales con una llamada simple
             start_time = time.time()
@@ -61,7 +66,7 @@ class BinanceService:
             else:
                 logger.error(f"❌ Error de Binance API: {e}")
                 self.simulation_mode = True
-                binance_connection_status.set(0)
+                # binance_connection_status.set(0)
                 
         except Exception as e:
             logger.error(f"❌ Error inesperado inicializando Binance: {e}")
