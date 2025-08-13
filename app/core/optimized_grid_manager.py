@@ -557,10 +557,16 @@ class OptimizedGridManager:
                 logger.info(f"ℹ️ Ciclo de trading completado sin operaciones")
                 logger.info(f"💡 Posibles razones: precios fuera de rango, sin señales válidas, o saldos insuficientes")
             
-            # Actualizar métricas usando el nuevo sistema centralizado
+            # Actualizar métricas usando el nuevo sistema centralizado y el servicio de rentabilidad
             try:
                 from app.core.metrics_manager import metrics_manager
+                from app.services.metrics_service import metrics_service
                 await metrics_manager.update_all_metrics()
+                # Actualiza gauges como profit_total_usdt/portfolio_total_value_usdt con labels esperados
+                try:
+                    await metrics_service.calculate_portfolio_metrics()
+                except Exception:
+                    pass
                 logger.info("✅ Métricas actualizadas correctamente")
             except Exception as e:
                 logger.error(f"Error actualizando métricas: {e}")
