@@ -56,6 +56,15 @@ class OptimizedGridScheduler:
                 name="Grid Trading Cycle",
                 replace_existing=True
             )
+
+            # Ajuste de rangos a precio de mercado y recarga de config (cada 15 min)
+            self.scheduler.add_job(
+                self._adjust_ranges_and_reload,
+                IntervalTrigger(minutes=15),
+                id="auto_adjust_ranges",
+                name="Auto Adjust Ranges ±5%",
+                replace_existing=True
+            )
             
             # Add monitoring job
             self.scheduler.add_job(
@@ -392,6 +401,32 @@ class OptimizedGridScheduler:
         except Exception as e:
             logger.error(f"Error in trading cycle: {e}")
             self._send_error_notification(f"Error in trading cycle: {e}")
+
+    async def _adjust_ranges_and_reload(self):
+        """Ajusta rangos a ±5% del mercado y recarga el GridManager."""
+        try:
+            from app.services.binance_async import AsyncBinanceWrapper
+            import json
+            from pathlib import Path
+            wrapper = AsyncBinanceWrapper(ttl_seconds=2)
+            # Cargar config actual
+            cfg_path = Path(self.config_file)
+            data = json.loads(cfg_path.read_text())
+            symbols = [s for s in data.keys() if s != "_optimization_metadata"]
+            # Recalcular min/max
+            async def _upd(sym: str):
+                price = await wrapper.get_price(sym)
+                if price and price > 0:
+                    data[sym]["min_price"] = round(price * 0.95, 6)
+                    data[sym]["max_price"] = round(price * 1.05, 6)
+            await asyncio.gather(*(_upd(s) for s in symbols))
+            cfg_path.write_text(json.dumps(data, indent=2))
+            logger.info(f"Rangos ajustados ±5% para: {symbols}")
+            # Recargar GridManager
+            self.grid_manager = await create_optimized_grid_manager(self.config_file)
+            logger.info("GridManager recargado tras ajuste de rangos")
+        except Exception as e:
+            logger.error(f"Error ajustando rangos/reload: {e}")
 
     async def _monitor_system_health(self):
         """Monitor system health and send alerts"""
