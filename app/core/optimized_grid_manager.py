@@ -309,6 +309,9 @@ class OptimizedGridManager:
         Execute a complete grid trading cycle for all configured assets
         """
         try:
+            from time import perf_counter
+            from app.core.metrics import trading_metrics
+            cycle_start = perf_counter()
             # Verificar límites de riesgo antes de ejecutar trading
             # Comentado temporalmente para evitar errores
             # risk_status = await risk_manager.check_portfolio_risk()
@@ -547,6 +550,12 @@ class OptimizedGridManager:
             except Exception as e:
                 logger.error(f"Error actualizando métricas: {e}")
             
+            # Registrar duración de ciclo grid
+            duration = perf_counter() - cycle_start
+            try:
+                trading_metrics.record_grid_cycle_duration(duration)
+            except Exception:
+                pass
             return trading_results
             
         except Exception as e:
