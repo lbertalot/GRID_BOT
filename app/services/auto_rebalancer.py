@@ -249,8 +249,9 @@ class AutoRebalancer:
                     continue
                 
             # Ejecutar compra
-            order_result = await self.execute_buy_order(symbol, needed_quantity)
-                
+            try:
+                order_result = await self.execute_buy_order(symbol, needed_quantity)
+                    
                 results.append({
                     "symbol": symbol,
                     "status": "success",
@@ -258,9 +259,9 @@ class AutoRebalancer:
                     "usdt_spent": needed_usdt,
                     "order_result": order_result
                 })
-                
+                    
                 logger.info(f"Rebalanceo exitoso para {symbol}")
-                
+                    
             except Exception as e:
                 logger.error(f"Error ejecutando rebalanceo para {need['symbol']}: {e}")
                 results.append({
