@@ -29,6 +29,19 @@ graph TD
   I --> J["Grafana"]
 ```
 
+### Actualizaciones recientes (implementadas)
+- Wrapper asíncrono para Binance con caché y rate limiting:
+  - `app/services/binance_async.py` usando `asyncio.to_thread` para no bloquear, caché Redis/memoria (`app/services/cache.py`) con TTL configurable (default 5s) y rate limiting + backoff.
+  - Integrado en `app/services/binance_data_sync.py` y `app/core/optimized_grid_manager.py`.
+- Feature flags de trading:
+  - `PAPER_TRADING` y `BINANCE_TESTNET` en `app/core/config.py`, respetados por `app/services/binance_service.py` y `app/services/auto_rebalancer.py` (simula órdenes en paper mode).
+- Validaciones de órdenes reforzadas:
+  - `app/services/order_validation.py` valida y ajusta `stepSize`, `tickSize`, `minQty`, `maxQty`, `minNotional` y precio para órdenes LIMIT.
+- Métricas ampliadas:
+  - Nueva métrica `grid_cycle_duration_seconds` para duración de ciclos grid y utilitario `record_symbol_error`.
+- Modelado ORM y migraciones:
+  - Modelos: `performance_metrics`, `alerts`, `system_config` y migración Alembic correspondiente.
+
 ### Flujos de usuario clave
 - Gestión de órdenes y grid:
   - POST `/api/trade/order`: ejecuta orden (BUY/SELL, MARKET/LIMIT)
@@ -89,9 +102,11 @@ graph TD
   - `trades` (`app/models/trade.py`)
     - id (PK), symbol, side, quantity, entry_price, exit_price, profit_loss, timestamp
 
-- Tablas definidas en SQL init (no modeladas en ORM):
-  - `performance_metrics`, `alerts`, `system_config` (presentes en `app/db/init_db.py`)
-  - Recomendación: crear modelos SQLAlchemy para estas tablas.
+- Nuevos modelos ORM añadidos:
+  - `performance_metrics` (`app/models/performance_metrics.py`)
+  - `alerts` (`app/models/alerts.py`)
+  - `system_config` (`app/models/system_config.py`)
+  - Migración: `alembic/versions/20250813_add_perf_alerts_sysconfig.py`.
 
 - ER simplificado:
 
@@ -164,44 +179,33 @@ erDiagram
 - Ruido en logs:
   - Reducción aplicada: consola a WARNING, handlers dirigidos a archivos, filtro de símbolos inválidos.
 
----
+- Bloqueos por IO:
+  - Mitigación implementada: encapsulamiento en `asyncio.to_thread` y caché con TTL para precios/klines.
 
 ## RFC — Mejoras propuestas y plan técnico
 
 ### Funcionalidades pendientes/incompletas
-- Modelado ORM de `performance_metrics`, `alerts`, `system_config` (existen en SQL init).
-- Consistencia async: llamadas Binance síncronas dentro de rutas async.
-- “Paper trading”/testnet consistente en todos los servicios y tareas.
-- Endpoints de estrategias: historial/klines bloqueante; agregar caché/cola.
-- Métricas: cobertura de negocios (PnL por estrategia, latencias, errores Binance), cardinalidad de labels controlada.
-- Hardening de auth y secrets: evitar API_KEY por defecto en producción.
+- Endpoints de estrategias: histórico/klines aún dependiente de cliente sync en partes; evaluar más caché/cola y cliente WS.
+- Métricas: ampliar cobertura de negocio (PnL por estrategia/símbolo con series limitadas) y revisión de cardinalidad.
+- Hardening de auth/secrets: evitar defaults en producción y uso de secret manager.
+- Dashboards: paneles Grafana específicos para Celery, scheduler y nuevas métricas.
 
 ### Plan técnico propuesto
 - Base de datos:
   - Crear modelos ORM para tablas faltantes y migraciones Alembic alineadas.
   - Unificar init/upgrade DB (usar migrations en lugar de SQL manual donde sea posible).
 
-- Asincronía y rendimiento:
-  - Encapsular llamadas blocking en `asyncio.to_thread(...)` o usar clientes async equivalentes.
-  - Incorporar caché (Redis) para precios/históricos breves (TTL corto).
-  - Rate limiting y backoff para Binance.
+- Asincronía y rendimiento (parcialmente implementado):
+  - Ya implementado: `asyncio.to_thread` + caché (Redis/memoria, TTL corto) + rate limiting/backoff para Binance.
+  - Pendiente: extender a históricos/estrategias y evaluar WS para datos en tiempo real.
 
 - Trading y validaciones:
-  - Normalizador de símbolos extensible (prefijos LD, locked, etc.) con tabla de mapeo.
-  - Endurecer `order_validation.py` para `minNotional` y redondeos por `stepSize`/`tickSize`.
+  - Normalizador de símbolos extensible (prefijos LD, locked, etc.).
+  - Ya implementado: `order_validation.py` reforzado (minNotional, min/maxQty, stepSize/tickSize, precio LIMIT).
 
 - Observabilidad:
-  - Métricas de negocio y SLIs: latencia por endpoint, ratio de errores Binance, tiempo de ciclo grid, PnL por estrategia/símbolo.
-  - Dashboards Grafana: paneles por tareas Celery y scheduler.
-
-- Seguridad y configuración:
-  - Gestionar secretos vía variables de entorno/secret manager; eliminar defaults en runtime.
-  - Modo `PAPER_TRADING`/testnet con feature flag DI para servicios/tareas.
-
-- CI/CD y calidad:
-  - Pipeline con tests + lint + seguridad (bandit).
-  - Tests de contrato para endpoints (mocks Binance), y pruebas de integración DB.
-  - Fijar versiones en `requirements.txt` y añadir `requirements-lock` reproducible.
+  - Ya implementado: `grid_cycle_duration_seconds` y utilitario `record_symbol_error`.
+  - Pendiente: PnL por estrategia/símbolo con cardinalidad controlada y paneles Grafana.
 
 ### Riesgos y mitigaciones
 - Riesgo: bloqueos por IO en rutas críticas
@@ -215,18 +219,15 @@ erDiagram
 
 ### Priorización
 - Alta:
-  - Modelos ORM faltantes + migraciones
-  - Normalización de símbolos y robustez validaciones
-  - Asincronía correcta para llamadas Binance
-  - Métricas críticas y reducción de latencias
+  - Normalización de símbolos y robustez validaciones (refinamientos)
+  - Asincronía completa para llamadas Binance en estrategias/históricos
+  - Métricas de negocio adicionales (PnL por estrategia/símbolo)
 - Media:
-  - Caché Redis para precios/histórico, rate limiting
-  - Paper mode consistente
+  - Caché Redis para históricos y rate limiting refinado
+  - Paper mode consistente en todas las tareas/background
   - Seguridad de secretos
 - Baja:
   - Mejoras de dashboards, documentación extendida, backtests avanzados
-
----
 
 ## Anexos
 
