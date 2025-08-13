@@ -15,7 +15,7 @@ import math
 
 import requests
 from pydantic import BaseModel, Field
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from binance import Client
 from dotenv import load_dotenv
 
@@ -60,6 +60,13 @@ class AssetConfig(BaseModel):
             data.get('max_price'),
             data.get('grids')
         )
+
+    @model_validator(mode='after')
+    def ensure_grid_levels(self):
+        # Garantiza niveles de grilla calculados si no vienen en el JSON
+        if (not self.grid_levels) and self.min_price and self.max_price and self.grids:
+            self.grid_levels = calculate_grid_levels(self.min_price, self.max_price, self.grids)
+        return self
 
 
 class GridManagerConfig(BaseModel):
