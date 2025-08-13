@@ -32,6 +32,7 @@ from app.services.order_validation import OrderValidator
 from app.models.asset_limit import AssetLimit
 from app.services.risk_manager import risk_manager, RiskStatus
 from app.services.metrics_service import metrics_service
+from app.services.strategy_manager import strategy_manager
 from app.services.binance_async import AsyncBinanceWrapper
 
 # Configurar logging optimizado
@@ -357,6 +358,13 @@ class OptimizedGridManager:
             balances = await self.get_asset_balances()
             symbols = [asset.symbol for asset in self.config.assets.values() if asset.is_active]
             prices = await self.get_current_prices(symbols)
+            # Adaptación de estrategia (no bloquea, usa colector async)
+            try:
+                changes = await strategy_manager.adapt_manager(self, symbols)
+                if changes:
+                    logger.info(f"🧠 Adaptación aplicada por StrategyManager: {changes}")
+            except Exception as e:
+                logger.warning(f"No se pudo adaptar estrategia en este ciclo: {e}")
             optimal_quantities = self.calculate_optimal_quantities(balances, prices)
             trading_results = []
             
