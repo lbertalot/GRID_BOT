@@ -1,8 +1,8 @@
 {
   "BTCUSDT": {
     "symbol": "BTCUSDT",
-    "min_price": 112000.0,
-    "max_price": 118500.0,
+    "min_price": 116821.4905,
+    "max_price": 129118.4895,
     "grids": 6,
     "quantity": 0.0001,
     "last_action": null,
@@ -10,8 +10,8 @@
   },
   "ETHUSDT": {
     "symbol": "ETHUSDT",
-    "min_price": 3400.0,
-    "max_price": 3800.0,
+    "min_price": 4485.1495,
+    "max_price": 4957.2705,
     "grids": 6,
     "quantity": 0.003,
     "last_action": null,
@@ -19,22 +19,22 @@
   },
   "SPKUSDT": {
     "symbol": "SPKUSDT",
-    "min_price": 0.08,
-    "max_price": 0.14,
+    "min_price": 0.089249,
+    "max_price": 0.098643,
     "grids": 8,
     "quantity": 120.0,
     "last_action": null,
     "is_active": true
   },
   "_optimization_metadata": {
-    "optimized_at": "2025-08-04 09:35:00",
-    "optimization_version": "11.0",
-    "ajuste_tipo": "Configuración optimizada para precios actuales con mayor sensibilidad",
+    "optimized_at": "2025-08-13 17:54:11",
+    "optimization_version": "auto-range-\u00b15%",
+    "ajuste_tipo": "Configuraci\u00f3n optimizada para precios actuales con mayor sensibilidad",
     "cambios": [
-      "Aumentado número de grids para mayor precisión",
+      "Aumentado n\u00famero de grids para mayor precisi\u00f3n",
       "Ajustado rangos para precios actuales del mercado",
-      "Optimizada sensibilidad de detección de señales",
-      "Configuración más agresiva para ejecutar operaciones"
+      "Optimizada sensibilidad de detecci\u00f3n de se\u00f1ales",
+      "Configuraci\u00f3n m\u00e1s agresiva para ejecutar operaciones"
     ],
     "precios_actuales": {
       "BTCUSDT": "~114600",
@@ -42,4 +42,4 @@
       "SPKUSDT": "~0.122"
     }
   }
-} 
+}
