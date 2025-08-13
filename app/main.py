@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import logging
@@ -15,6 +15,7 @@ from app.db.init_db import init_db
 from app.scheduler.optimized_scheduler import start_optimized_scheduler, stop_optimized_scheduler
 from app.services.balance_updater import update_balances_in_db
 from app.services.asset_limit_updater import update_asset_limits_in_db
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -147,6 +148,14 @@ async def test_endpoint():
     Endpoint de prueba.
     """
     return {"message": "Endpoint funcionando"} 
+
+# Endpoint Prometheus estándar para compatibilidad con scrape de Prometheus
+@app.get("/metrics")
+async def prometheus_root_metrics():
+    try:
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Error generando métricas: {str(e)}"})
 
 # --- Aliases públicos sin auth para compatibilidad con tests ---
 from app.api.trade import place_order as protected_place_order, run_grid as protected_run_grid
