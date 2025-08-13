@@ -32,6 +32,7 @@ from app.services.order_validation import OrderValidator
 from app.models.asset_limit import AssetLimit
 from app.services.risk_manager import risk_manager, RiskStatus
 from app.services.metrics_service import metrics_service
+from app.services.binance_async import AsyncBinanceWrapper
 
 # Configurar logging optimizado
 from app.core.optimized_logging import setup_optimized_logging
@@ -94,6 +95,12 @@ class OptimizedGridManager:
         self.asset_limits: Dict[str, AssetLimit] = {}
         self.insufficient_funds: Dict[str, Dict] = {} # Nuevo: para registrar activos con saldo insuficiente
         self.config_file_path: Optional[str] = None  # Para recargar configuración
+        # Wrapper asíncrono con caché y rate limiting para evitar bloqueos
+        self.async_binance = AsyncBinanceWrapper(
+            ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "5")),
+            rate_per_sec=float(os.getenv("BINANCE_RATE_PER_SEC", "5")),
+            burst=int(os.getenv("BINANCE_RATE_BURST", "10"))
+        )
         
     async def _load_asset_limits(self):
         """Load asset trading limits from the database."""
@@ -171,7 +178,8 @@ class OptimizedGridManager:
                 from binance.exceptions import BinanceAPIException, BinanceRequestException
                 
                 try:
-                    account_info = self.client.get_account()
+                    # Evitar bloqueo en loop async
+                    account_info = await asyncio.to_thread(self.client.get_account)
                 except BinanceAPIException as e:
                     if e.code == -2015:
                         logger.error("❌ API Secret required for private endpoints")
@@ -213,16 +221,18 @@ class OptimizedGridManager:
             if not self.client:
                 return {}
             
-            prices = {}
-            for symbol in symbols:
+            # Consultas concurrentes con caché/TTL para minimizar latencia y presión a la API
+            results: Dict[str, float] = {}
+            async def _fetch(sym: str):
                 try:
-                    ticker = self.client.get_symbol_ticker(symbol=symbol)
-                    prices[symbol] = float(ticker['price'])
+                    price = await self.async_binance.get_price(sym)
                 except Exception as e:
-                    logger.warning(f"Error obteniendo precio para {symbol}: {e}")
-                    prices[symbol] = 0
-            
-            return prices
+                    logger.warning(f"Error obteniendo precio para {sym}: {e}")
+                    price = 0.0
+                results[sym] = price
+
+            await asyncio.gather(*[_fetch(s) for s in symbols])
+            return results
         except Exception as e:
             logger.error(f"Error obteniendo precios: {e}")
             return {}
@@ -615,12 +625,15 @@ class OptimizedGridManager:
                 
                 logger.info(f"💰 Creando orden real en Binance: {action} {quantity} {symbol}")
                 
-                order = self.client.create_order(
-                    symbol=symbol,
-                    side=action,
-                    type='MARKET',
-                    quantity=quantity
-                )
+                # Ejecutar llamada bloqueante en hilo para no bloquear el loop
+                def _create_order():
+                    return self.client.create_order(
+                        symbol=symbol,
+                        side=action,
+                        type='MARKET',
+                        quantity=quantity
+                    )
+                order = await asyncio.to_thread(_create_order)
                 
                 logger.info(f"✅ Orden real creada: {order.get('orderId', 'unknown')}")
                 return order
