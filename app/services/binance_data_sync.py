@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from binance import Client
 from binance.exceptions import BinanceAPIException
+from app.services.binance_async import AsyncBinanceWrapper
 import json
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class BinanceDataSync:
         
         # Inicializar cliente de Binance
         self.client = None
+        self.async_binance = AsyncBinanceWrapper(ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "5")))
         self._initialize_binance_client()
         
         # Cache para información de símbolos
@@ -64,7 +66,7 @@ class BinanceDataSync:
         
         try:
             # Obtener información de la cuenta
-            account_info = self.client.get_account()
+            account_info = await asyncio.to_thread(self.client.get_account)
             
             # Conectar a la base de datos
             conn = await self.get_db_connection()
@@ -129,7 +131,7 @@ class BinanceDataSync:
         
         try:
             # Obtener información de la cuenta
-            account_info = self.client.get_account()
+            account_info = await asyncio.to_thread(self.client.get_account)
             balances = account_info.get("balances", [])
             
             # Conectar a la base de datos
@@ -191,8 +193,7 @@ class BinanceDataSync:
                             elif asset == "BUSD":
                                 value_usdt = total
                             else:
-                                ticker = self.client.get_symbol_ticker(symbol=f"{asset}USDT")
-                                price_usdt = float(ticker["price"])
+                                price_usdt = await self.async_binance.get_price(f"{asset}USDT")
                                 value_usdt = total * price_usdt
                             
                             total_value_usdt += value_usdt
@@ -222,7 +223,7 @@ class BinanceDataSync:
         
         try:
             # Obtener información del exchange
-            exchange_info = self.client.get_exchange_info()
+            exchange_info = await asyncio.to_thread(self.client.get_exchange_info)
             
             # Conectar a la base de datos
             conn = await self.get_db_connection()
@@ -308,7 +309,7 @@ class BinanceDataSync:
         
         try:
             # Obtener operaciones recientes
-            trades = self.client.get_recent_trades(symbol=symbol, limit=limit)
+            trades = await asyncio.to_thread(self.client.get_recent_trades, symbol=symbol, limit=limit)
             
             # Conectar a la base de datos
             conn = await self.get_db_connection()
@@ -359,7 +360,7 @@ class BinanceDataSync:
         
         try:
             # Obtener datos de velas
-            klines = self.client.get_klines(symbol=symbol, interval=interval, limit=limit)
+            klines = await self.async_binance.get_klines(symbol, interval, limit)
             
             # Conectar a la base de datos
             conn = await self.get_db_connection()
@@ -428,7 +429,7 @@ class BinanceDataSync:
         
         try:
             # Obtener información de la cuenta
-            account_info = self.client.get_account()
+            account_info = await asyncio.to_thread(self.client.get_account)
             
             # Calcular métricas básicas
             total_trades = 0
