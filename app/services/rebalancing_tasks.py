@@ -1,19 +1,25 @@
 from app.core.celery_app import celery_app
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True)
 def check_and_rebalance(self):
-    """Verifica y ejecuta rebalanceo automático"""
+    """Verifica y ejecuta rebalanceo automático (llamando al AutoRebalancer)."""
     try:
+        from app.services.auto_rebalancer import auto_rebalancer
         logger.info("Verificando necesidad de rebalanceo")
-        
-        # TODO: Implementar lógica de rebalanceo real
-        logger.info("Rebalanceo simulado completado")
-        
-        return {"status": "success", "message": "Rebalancing check completed"}
-        
+
+        async def _run():
+            status = await auto_rebalancer.get_rebalance_status()
+            if status.get('assets_needing_rebalance', 0) > 0 and status.get('can_rebalance', False):
+                return await auto_rebalancer.check_and_rebalance()
+            return {"status": "skipped", "reason": "no_rebalance_needed", "status_snapshot": status}
+
+        result = asyncio.run(_run())
+        logger.info(f"Resultado rebalanceo: {result.get('status')}")
+        return result
     except Exception as e:
         logger.error(f"Error en rebalanceo: {e}")
-        raise self.retry(countdown=300, max_retries=2) 
+        raise self.retry(countdown=300, max_retries=2)
