@@ -28,6 +28,8 @@ class MetricsService:
     def __init__(self):
         self.initial_portfolio_value = None
         self.last_calculation = None
+        # Mantener conteo previo de trades por (symbol, side) para incrementar Counters
+        self._last_trades_count_by_symbol_side: Dict[tuple, int] = {}
         
     async def calculate_portfolio_metrics(self) -> Dict:
         """
@@ -307,6 +309,30 @@ class MetricsService:
             
             # Actualizar estado del bot
             trading_metrics.update_bot_status(is_active=True, strategy="grid")
+
+            # Incrementar contador de trades en base a DB (diferencias)
+            try:
+                db = SessionLocal()
+                rows = db.query(Trade.symbol, Trade.side, func.count(Trade.id)).group_by(Trade.symbol, Trade.side).all()
+                total_trades = 0
+                successful_trades = 0
+                for symbol, side, count in rows:
+                    total_trades += int(count)
+                    # Delta contra último valor
+                    key = (symbol, side)
+                    previous = self._last_trades_count_by_symbol_side.get(key, 0)
+                    delta = int(count) - int(previous)
+                    if delta > 0:
+                        trading_metrics.trades_executed_total.labels(side=side, asset=symbol, strategy="grid").inc(delta)
+                        self._last_trades_count_by_symbol_side[key] = int(count)
+
+                # Calcular tasa de éxito global (0-1)
+                successful_trades = db.query(func.count(Trade.id)).filter(Trade.profit_loss.isnot(None), Trade.profit_loss > 0).scalar() or 0
+                if total_trades > 0:
+                    trading_metrics.trades_success_rate.labels(strategy="grid").set(successful_trades / total_trades)
+                db.close()
+            except Exception as e:
+                logger.warning(f"No se pudo actualizar trades_executed_total/trades_success_rate: {e}")
             
             logger.info(f"✅ Métricas actualizadas: Profit=${total_profit:.2f}, Portfolio=${portfolio_value:.2f}, ROI={roi_daily:.2f}%")
             
