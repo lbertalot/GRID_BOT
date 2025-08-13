@@ -32,12 +32,8 @@ TRADE_COUNT = Counter('trades_total', 'Total number of trades')
 # Indicador simple del estado de trading (sin labels para uso directo set(0/1))
 TRADING_ACTIVE = Gauge('trading_active', 'Indica si el trading está activo (1) o inactivo (0)')
 
-# Crear aplicación FastAPI
-app = FastAPI(
-    title="GridBot Trading Platform",
-    description="Plataforma de trading automatizado con estrategias avanzadas",
-    version="2.0.0"
-)
+# NOTA: Esta app quedó deprecada. Usar app.main:app
+app = FastAPI(title="DEPRECATED", version="0.0.0")
 
 # Configurar CORS
 app.add_middleware(
@@ -306,6 +302,28 @@ async def stop_trading():
     except Exception as e:
         logger.error(f"Error deteniendo trading: {e}")
         REQUEST_COUNT.labels(method='POST', endpoint='/api/v1/trading/stop', status='500').inc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/trading/cycle")
+async def trigger_trading_cycle():
+    """Dispara un ciclo de trading en background vía Celery."""
+    try:
+        from app.services.trading_tasks import execute_trading_cycle
+        # Encolar tarea asíncrona
+        try:
+            execute_trading_cycle.delay()
+            status = "queued"
+        except Exception:
+            # Fallback: ejecutar inline de forma síncrona (bloqueante corto)
+            execute_trading_cycle()
+            status = "executed"
+        return {
+            "status": "success",
+            "message": f"Trading cycle {status}",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error disparando ciclo de trading: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/config")
