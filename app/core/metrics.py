@@ -147,6 +147,13 @@ trading_volume_usdt = Counter(
     ['asset', 'strategy']
 )
 
+# Duración de ciclos grid (para medir performance de ciclos completos)
+grid_cycle_duration_seconds = Histogram(
+    'grid_cycle_duration_seconds',
+    'Duración del ciclo grid en segundos',
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
+)
+
 # ============================================================================
 # MÉTRICAS DE API
 # ============================================================================
@@ -271,6 +278,18 @@ def record_order_failure(symbol: str, side: str, error_type: str):
         trading_metrics.record_error(error_type, "grid")
     except Exception as e:
         print(f"Error registrando fallo de orden: {e}")
+
+def record_symbol_error(symbol: str, error_type: str):
+    """
+    Registra un error asociado a un símbolo específico.
+    """
+    try:
+        # Para evitar crear demasiadas series, limitar error_type a un conjunto pequeño si se desea
+        from prometheus_client import Counter
+        # Registrar en un contador derivado del total de errores del bot por compatibilidad mínima
+        bot_errors_total.labels(error_type=error_type, strategy="grid").inc()
+    except Exception as e:
+        print(f"Error registrando error por símbolo: {e}")
 
 def update_balance(asset: str, free: float, locked: float):
     """
