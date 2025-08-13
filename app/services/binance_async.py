@@ -10,6 +10,7 @@ from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
 from app.services.cache import get_async_cache
+from app.services.order_validation import OrderValidator
 
 
 class RateLimiter:
@@ -56,6 +57,8 @@ class AsyncBinanceWrapper:
         self.ttl = ttl_seconds
         self.price_rl = RateLimiter(rate_per_sec, burst)
         self.klines_rl = RateLimiter(rate_per_sec, burst)
+        # Validador de órdenes (ajuste step/tick/minNotional)
+        self.validator = OrderValidator(self.client)
 
     async def _with_backoff(self, coro_func, *args, **kwargs):
         delay = 0.5
@@ -105,5 +108,31 @@ class AsyncBinanceWrapper:
         kl = await self._with_backoff(_call)
         await self.cache.set(key, kl, self.ttl)
         return kl
+
+    async def create_market_order(self, symbol: str, side: str, quantity: float) -> dict:
+        """Crea una orden de mercado aplicando validación de cantidad/precio.
+        - Ajusta cantidad a stepSize
+        - Usa backoff ante errores 429/-1003/-1015
+        - Ejecuta en to_thread para no bloquear
+        """
+        # Validación/ajuste
+        validation = await asyncio.to_thread(self.validator.validate_order_parameters, symbol, quantity, side, 'MARKET')
+        if not validation.get('is_valid', False):
+            # Levantar error con detalles de validación
+            errors = " | ".join(validation.get('errors') or [])
+            raise ValueError(f"Parámetros inválidos: {errors}")
+        adjusted_qty = float(validation['quantity_info']['adjusted_quantity'])
+
+        async def _call():
+            def _do():
+                return self.client.create_order(
+                    symbol=symbol.upper(),
+                    side=side.upper(),
+                    type='MARKET',
+                    quantity=adjusted_qty
+                )
+            return await asyncio.to_thread(_do)
+
+        return await self._with_backoff(_call)
 
 

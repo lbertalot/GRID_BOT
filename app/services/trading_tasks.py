@@ -12,6 +12,8 @@ from app.core.optimized_grid_manager import create_optimized_grid_manager
 from app.services.metrics_service import MetricsService
 from app.services.fund_manager import fund_manager
 from app.services.telegram_alert import send_telegram_alert
+from app.services.alert_tasks import notify_consecutive_api_failures
+from app.services.binance_async import AsyncBinanceWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,16 @@ def execute_trading_cycle():
         
         # Ejecutar ciclo de trading
         logger.info("🔄 Ejecutando ciclo de grid trading...")
+        # Comprobación rápida de conectividad y rate limit centralizado
+        try:
+            price = asyncio.run(AsyncBinanceWrapper().get_price("BTCUSDT"))
+            logger.info(f"🔎 BTC precio pre-ciclo: {price}")
+        except Exception as e:
+            logger.warning(f"Fallo conectividad Binance pre-ciclo: {e}")
+            try:
+                notify_consecutive_api_failures.delay("binance", 3)
+            except Exception:
+                pass
         results = asyncio.run(manager.execute_grid_trading_cycle())
         
         # Analizar resultados
