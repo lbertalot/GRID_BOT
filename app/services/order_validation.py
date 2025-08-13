@@ -1,6 +1,6 @@
 import math
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 from binance import Client
 from binance.exceptions import BinanceAPIException
@@ -30,7 +30,11 @@ class OrderValidator:
                             'quoteAsset': s['quoteAsset'],
                             'stepSize': float(filters.get('LOT_SIZE', {}).get('stepSize', '0.001')),
                             'minQty': float(filters.get('LOT_SIZE', {}).get('minQty', '0.001')),
+                            'maxQty': float(filters.get('LOT_SIZE', {}).get('maxQty', '1000000.0')),
                             'minNotional': float(filters.get('MIN_NOTIONAL', {}).get('minNotional', '5.0')),
+                            'tickSize': float(filters.get('PRICE_FILTER', {}).get('tickSize', '0.01')),
+                            'minPrice': float(filters.get('PRICE_FILTER', {}).get('minPrice', '0.0')),
+                            'maxPrice': float(filters.get('PRICE_FILTER', {}).get('maxPrice', '0.0')),
                             'pricePrecision': s['quotePrecision'],
                             'quantityPrecision': s['baseAssetPrecision']
                         }
@@ -40,6 +44,16 @@ class OrderValidator:
             logger.error(f"Error obteniendo información del símbolo {symbol}: {e}")
             return None
     
+    def _round_to_step(self, value: float, step: float) -> float:
+        if step <= 0:
+            return value
+        return math.floor(value / step) * step
+
+    def _round_to_tick(self, price: float, tick: float) -> float:
+        if tick <= 0:
+            return price
+        return math.floor(price / tick) * tick
+
     def adjust_quantity_precision(self, quantity: float, symbol: str) -> Dict[str, Any]:
         """Ajusta la cantidad a la precisión requerida por Binance y retorna información detallada"""
         try:
@@ -48,18 +62,23 @@ class OrderValidator:
                 # Fallback a valores por defecto
                 step_size = 0.001
                 min_qty = 0.001
+                max_qty = 1000000.0
                 min_notional = 5.0
             else:
                 step_size = symbol_info['stepSize']
                 min_qty = symbol_info['minQty']
+                max_qty = symbol_info.get('maxQty', 1000000.0)
                 min_notional = symbol_info['minNotional']
             
             # Ajustar a la precisión requerida
-            adjusted_quantity = math.floor(quantity / step_size) * step_size
+            adjusted_quantity = self._round_to_step(quantity, step_size)
             
             # Asegurar que no sea menor que el mínimo
             if adjusted_quantity < min_qty:
                 adjusted_quantity = min_qty
+            # Limitar al máximo si aplica
+            if adjusted_quantity > max_qty:
+                adjusted_quantity = max_qty
             
             # Redondear a la precisión correcta
             precision = int(-math.log10(step_size))
@@ -70,6 +89,7 @@ class OrderValidator:
                 'adjusted_quantity': adjusted_quantity,
                 'step_size': step_size,
                 'min_qty': min_qty,
+                'max_qty': max_qty,
                 'min_notional': min_notional,
                 'precision': precision,
                 'symbol_info': symbol_info
@@ -81,14 +101,19 @@ class OrderValidator:
                 'adjusted_quantity': quantity,
                 'step_size': 0.001,
                 'min_qty': 0.001,
+                'max_qty': 1000000.0,
                 'min_notional': 5.0,
                 'precision': 3,
                 'symbol_info': None,
                 'error': str(e)
             }
     
-    def validate_order_parameters(self, symbol: str, quantity: float, side: str, order_type: str = 'MARKET') -> Dict[str, Any]:
-        """Valida los parámetros de una orden antes de ejecutarla"""
+    def validate_order_parameters(self, symbol: str, quantity: float, side: str, order_type: str = 'MARKET', price: Optional[float] = None) -> Dict[str, Any]:
+        """Valida los parámetros de una orden antes de ejecutarla.
+        - Ajusta cantidad a `stepSize`
+        - Ajusta precio (si LIMIT) a `tickSize` y valida rangos de precio
+        - Valida `minQty`/`maxQty` y `minNotional`
+        """
         try:
             # Ajustar cantidad
             quantity_info = self.adjust_quantity_precision(quantity, symbol)
@@ -96,9 +121,28 @@ class OrderValidator:
             # Obtener precio actual para validaciones
             ticker = self.client.get_symbol_ticker(symbol=symbol.upper())
             current_price = float(ticker["price"])
+
+            # Calcular precio considerado para notional/validación
+            symbol_info = quantity_info['symbol_info'] or {}
+            tick_size = float(symbol_info.get('tickSize', 0.01) or 0.01)
+            min_price = float(symbol_info.get('minPrice', 0.0) or 0.0)
+            max_price = float(symbol_info.get('maxPrice', 0.0) or 0.0)
+
+            adjusted_price = None
+            if order_type.upper() == 'LIMIT':
+                if price is None:
+                    raise ValueError("Precio requerido para órdenes LIMIT")
+                adjusted_price = self._round_to_tick(price, tick_size)
+                # Validar rango de precio si min/max definidos
+                if min_price > 0 and adjusted_price < min_price:
+                    raise ValueError(f"Precio {adjusted_price} es menor que el mínimo permitido {min_price}")
+                if max_price > 0 and adjusted_price > max_price:
+                    raise ValueError(f"Precio {adjusted_price} es mayor que el máximo permitido {max_price}")
+            else:
+                adjusted_price = current_price
             
             # Calcular valor notional
-            notional_value = quantity_info['adjusted_quantity'] * current_price
+            notional_value = quantity_info['adjusted_quantity'] * adjusted_price
             
             # Validaciones
             errors = []
@@ -106,12 +150,16 @@ class OrderValidator:
             
             if quantity_info['adjusted_quantity'] < quantity_info['min_qty']:
                 errors.append(f"Cantidad {quantity_info['adjusted_quantity']} es menor al mínimo {quantity_info['min_qty']}")
+            if quantity_info['adjusted_quantity'] > quantity_info['max_qty']:
+                errors.append(f"Cantidad {quantity_info['adjusted_quantity']} supera el máximo {quantity_info['max_qty']}")
             
             if notional_value < quantity_info['min_notional']:
                 errors.append(f"Valor notional ${notional_value:.2f} es menor al mínimo ${quantity_info['min_notional']}")
             
             if quantity_info['original_quantity'] != quantity_info['adjusted_quantity']:
                 warnings.append(f"Cantidad ajustada de {quantity_info['original_quantity']} a {quantity_info['adjusted_quantity']} por precisión")
+            if order_type.upper() == 'LIMIT' and adjusted_price != price:
+                warnings.append(f"Precio ajustado de {price} a {adjusted_price} por tickSize {tick_size}")
             
             return {
                 'is_valid': len(errors) == 0,
@@ -119,6 +167,7 @@ class OrderValidator:
                 'warnings': warnings,
                 'quantity_info': quantity_info,
                 'current_price': current_price,
+                'adjusted_price': adjusted_price,
                 'notional_value': notional_value,
                 'recommended_quantity': quantity_info['adjusted_quantity']
             }
@@ -130,6 +179,7 @@ class OrderValidator:
                 'warnings': [],
                 'quantity_info': None,
                 'current_price': None,
+                'adjusted_price': None,
                 'notional_value': None,
                 'recommended_quantity': None
             }
