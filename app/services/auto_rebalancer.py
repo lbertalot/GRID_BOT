@@ -224,18 +224,17 @@ class AutoRebalancer:
         results = []
         
         for need in rebalance_needs:
-            try:
-                symbol = need['symbol']
-                base_asset = need['base_asset']
-                needed_quantity = need['needed_quantity']
-                
-                logger.info(f"Ejecutando rebalanceo para {symbol}: {needed_quantity} {base_asset}")
-                
-                # Verificar que tenemos suficiente USDT
-                usdt_balance = await self.get_usdt_balance()
-                needed_usdt = need['needed_usdt']
-                
-                if usdt_balance < needed_usdt:
+            symbol = need['symbol']
+            base_asset = need['base_asset']
+            needed_quantity = need['needed_quantity']
+            
+            logger.info(f"Ejecutando rebalanceo para {symbol}: {needed_quantity} {base_asset}")
+            
+            # Verificar que tenemos suficiente USDT
+            usdt_balance = await self.get_usdt_balance()
+            needed_usdt = need['needed_usdt']
+            
+            if usdt_balance < needed_usdt:
                     logger.warning(f"USDT insuficiente para {symbol}. "
                                  f"Disponible: ${usdt_balance:.2f}, "
                                  f"Necesario: ${needed_usdt:.2f}")
