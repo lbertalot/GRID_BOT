@@ -9,18 +9,28 @@ import json
 from prometheus_client import generate_latest, Counter, Histogram, Gauge
 import asyncio
 
+# Importar configuración de SQLAlchemy ANTES de cualquier import de SQLAlchemy
+from app.core.sqlalchemy_logging import configure_sqlalchemy_logging
+configure_sqlalchemy_logging()
+
 # Importar el servicio de sincronización de Binance
 from app.services.binance_data_sync import binance_sync
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configurar logging optimizado
+from app.core.optimized_logging import setup_optimized_logging
+logger = setup_optimized_logging()
 
-# Métricas de Prometheus
-REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
-REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency')
-TRADING_ACTIVE = Gauge('trading_active', 'Trading system status')
+# Métricas Prometheus básicas usadas en los endpoints
+REQUEST_COUNT = Counter(
+    'request_total',
+    'HTTP requests count',
+    ['method', 'endpoint', 'status']
+)
+
 TRADE_COUNT = Counter('trades_total', 'Total number of trades')
+
+# Indicador simple del estado de trading (sin labels para uso directo set(0/1))
+TRADING_ACTIVE = Gauge('trading_active', 'Indica si el trading está activo (1) o inactivo (0)')
 
 # Crear aplicación FastAPI
 app = FastAPI(

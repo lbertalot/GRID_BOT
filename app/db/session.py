@@ -14,7 +14,11 @@ if DATABASE_URL and "+asyncpg" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
 
 # Configurar engine para PostgreSQL
-engine = create_engine(DATABASE_URL, echo=settings.debug)
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

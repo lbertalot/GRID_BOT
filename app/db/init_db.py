@@ -4,6 +4,7 @@ Script para inicializar la base de datos de GridBot
 """
 
 import asyncio
+from sqlalchemy import create_engine, text
 import asyncpg
 import logging
 from datetime import datetime
@@ -156,6 +157,34 @@ async def init_database():
     except Exception as e:
         logger.error(f"Error inicializando base de datos: {e}")
         raise
+
+def init_db() -> bool:
+    """Wrapper síncrono para crear tablas mínimas en contextos sync (tests/app startup)."""
+    try:
+        engine = create_engine(DATABASE_URL)
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        # Ejecutar el SQL de creación mínimo vía asyncpg es complejo en sync; crear tablas clave mínimas aquí
+        # Se confía en rutas de sincronización para completar asset_limits.
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS trades (
+                    id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(20) NOT NULL,
+                    side VARCHAR(10) NOT NULL,
+                    quantity DECIMAL(20, 8) NOT NULL,
+                    entry_price DECIMAL(20, 8) NOT NULL,
+                    exit_price DECIMAL(20, 8),
+                    profit_loss DECIMAL(20, 8),
+                    status VARCHAR(20) DEFAULT 'PENDING',
+                    order_id VARCHAR(100),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+        return True
+    except Exception as e:
+        logger.error(f"init_db() fallo: {e}")
+        return False
 
 async def check_database_connection():
     """Verificar conexión a la base de datos"""
