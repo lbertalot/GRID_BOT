@@ -1,0 +1,129 @@
+{
+  "BTCUSDT": {
+    "symbol": "BTCUSDT",
+    "min_price": 114000.0,
+    "max_price": 116000.0,
+    "grids": 5,
+    "quantity": 0.0001,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 50.0,
+    "max_orders": 3
+  },
+  "ETHUSDT": {
+    "symbol": "ETHUSDT",
+    "min_price": 4900.0,
+    "max_price": 5100.0,
+    "grids": 5,
+    "quantity": 0.002,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 40.0,
+    "max_orders": 3
+  },
+  "BNBUSDT": {
+    "symbol": "BNBUSDT",
+    "min_price": 580.0,
+    "max_price": 620.0,
+    "grids": 6,
+    "quantity": 0.05,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 60.0,
+    "max_orders": 4
+  },
+  "ADAUSDT": {
+    "symbol": "ADAUSDT",
+    "min_price": 0.45,
+    "max_price": 0.50,
+    "grids": 8,
+    "quantity": 50.0,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 50.0,
+    "max_orders": 4
+  },
+  "DOTUSDT": {
+    "symbol": "DOTUSDT",
+    "min_price": 6.5,
+    "max_price": 7.2,
+    "grids": 7,
+    "quantity": 5.0,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 45.0,
+    "max_orders": 4
+  },
+  "LINKUSDT": {
+    "symbol": "LINKUSDT",
+    "min_price": 13.5,
+    "max_price": 14.5,
+    "grids": 6,
+    "quantity": 2.0,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 40.0,
+    "max_orders": 3
+  },
+  "MATICUSDT": {
+    "symbol": "MATICUSDT",
+    "min_price": 0.55,
+    "max_price": 0.62,
+    "grids": 8,
+    "quantity": 50.0,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 35.0,
+    "max_orders": 4
+  },
+  "AVAXUSDT": {
+    "symbol": "AVAXUSDT",
+    "min_price": 25.0,
+    "max_price": 28.0,
+    "grids": 6,
+    "quantity": 1.0,
+    "last_action": null,
+    "is_active": true,
+    "investment_amount": 30.0,
+    "max_orders": 3
+  },
+  "_optimization_metadata": {
+    "optimized_at": "2025-08-24 16:01:00",
+    "optimization_version": "balance-391usdt-optimized",
+    "total_balance": 391.75,
+    "total_investment": 350.0,
+    "reserve_usdt": 41.75,
+    "ajuste_tipo": "Configuración optimizada para balance de $391.75 USDT",
+    "cambios": [
+      "Rangos ajustados a precios actuales del mercado",
+      "Cantidades optimizadas para cumplir mínimos de Binance",
+      "Distribución de capital en múltiples activos",
+      "Configuración conservadora para evitar pérdidas",
+      "Reserva de $41.75 USDT para emergencias"
+    ],
+    "estrategia": {
+      "max_daily_loss": 2.0,
+      "stop_loss_percent": 5.0,
+      "take_profit_percent": 8.0,
+      "max_concurrent_orders": 20,
+      "commission_aware": true,
+      "min_profit_after_commission": 0.5
+    },
+    "precios_actuales": {
+      "BTCUSDT": "~114574",
+      "ETHUSDT": "~4936",
+      "BNBUSDT": "~600",
+      "ADAUSDT": "~0.47",
+      "DOTUSDT": "~6.8",
+      "LINKUSDT": "~14.0",
+      "MATICUSDT": "~0.58",
+      "AVAXUSDT": "~26.5"
+    },
+    "risk_management": {
+      "max_position_size": 15.0,
+      "max_daily_trades": 50,
+      "min_balance_threshold": 20.0,
+      "emergency_stop": true
+    }
+  }
+}

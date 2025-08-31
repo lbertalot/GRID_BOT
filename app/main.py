@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi import HTTPException
 
 from app.api import trade, strategies, metrics, prometheus, optimized_routes, risk_routes, config_routes, strategy_routes, metrics_routes
-from app.api import alert_routes, binance_sync_routes, test_routes
+from app.api import alert_routes, binance_sync_routes, test_routes, commission_routes
 from app.core.auth import get_api_key
 from app.core.error_handlers import validation_exception_handler, http_exception_handler, general_exception_handler
 from app.db.init_db import init_db
@@ -75,6 +75,7 @@ app.include_router(strategy_routes.router, tags=["Strategies"])
 app.include_router(alert_routes.router)
 app.include_router(binance_sync_routes.router)
 app.include_router(test_routes.router)
+app.include_router(commission_routes.router)
 
 # Configuración de plantillas
 templates = Jinja2Templates(directory="app/templates")

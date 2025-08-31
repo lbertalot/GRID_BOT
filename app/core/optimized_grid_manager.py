@@ -34,6 +34,7 @@ from app.services.risk_manager import risk_manager, RiskStatus
 from app.services.metrics_service import metrics_service
 from app.services.strategy_manager import strategy_manager
 from app.services.binance_async import AsyncBinanceWrapper
+from app.services.commission_manager import commission_manager
 
 # Configurar logging optimizado
 from app.core.optimized_logging import setup_optimized_logging
@@ -612,16 +613,30 @@ class OptimizedGridManager:
             return None
 
     async def _place_order(self, symbol: str, action: str, quantity: float) -> Optional[Dict]:
-        """Place an order on Binance (Paper Trading or Real)"""
+        """Place an order on Binance (Paper Trading or Real) with commission validation"""
         try:
             # Verificar modo Paper Trading
             paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
+            
+            # Obtener precio actual para cálculos de comisión
+            current_price = await self.async_binance.get_price(symbol)
+            notional_value = quantity * current_price
+            
+            # Calcular comisión antes de ejecutar la orden
+            commission = commission_manager.calculate_commission(notional_value, 'MARKET', symbol)
+            commission_percentage = (commission / notional_value * 100) if notional_value > 0 else 0
+            
+            logger.info(f"💰 Comisión calculada para {action} {quantity} {symbol}: ${commission:.6f} USDT ({commission_percentage:.3f}%)")
+            
+            # Validar si la comisión es excesiva (más del 1%)
+            if commission_percentage > 1.0:
+                logger.warning(f"⚠️ Comisión alta detectada: {commission_percentage:.3f}% para {symbol}")
             
             if paper_trading:
                 # Simular orden en modo Paper Trading
                 logger.info(f"📄 Simulando orden en modo Paper Trading: {action} {quantity} {symbol}")
                 
-                # Crear orden simulada
+                # Crear orden simulada con información de comisión
                 simulated_order = {
                     'orderId': f"paper_{int(datetime.now().timestamp())}",
                     'symbol': symbol,
@@ -636,10 +651,16 @@ class OptimizedGridManager:
                     'time': int(datetime.now().timestamp() * 1000),
                     'updateTime': int(datetime.now().timestamp() * 1000),
                     'isWorking': False,
-                    'origQuoteOrderQty': '0'
+                    'origQuoteOrderQty': '0',
+                    'commission_info': {
+                        'commission_usdt': commission,
+                        'commission_percentage': commission_percentage,
+                        'notional_value': notional_value,
+                        'order_type': 'MARKET'
+                    }
                 }
                 
-                logger.info(f"✅ Orden simulada creada: {simulated_order['orderId']}")
+                logger.info(f"✅ Orden simulada creada: {simulated_order['orderId']} - Comisión: ${commission:.6f} USDT")
                 return simulated_order
             
             else:
@@ -665,7 +686,15 @@ class OptimizedGridManager:
                     )
                 order = await asyncio.to_thread(_create_order)
                 
-                logger.info(f"✅ Orden real creada: {order.get('orderId', 'unknown')}")
+                # Agregar información de comisión al resultado
+                order['commission_info'] = {
+                    'commission_usdt': commission,
+                    'commission_percentage': commission_percentage,
+                    'notional_value': notional_value,
+                    'order_type': 'MARKET'
+                }
+                
+                logger.info(f"✅ Orden real creada: {order.get('orderId', 'unknown')} - Comisión: ${commission:.6f} USDT")
                 return order
                 
         except Exception as e:
