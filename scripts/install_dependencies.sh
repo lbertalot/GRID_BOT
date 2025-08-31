@@ -20,38 +20,15 @@ if [[ "$VIRTUAL_ENV" == "" ]]; then
     fi
 fi
 
-# Mostrar opciones
+# Instalación unificada
 echo ""
-echo "📦 Opciones de instalación:"
-echo "1) Instalación estándar (python-binance)"
-echo "2) Instalación con WebSocket avanzado (unicorn-binance-websocket-api)"
-echo "3) Instalación completa (ambas librerías)"
+echo "📦 Instalando dependencias unificadas..."
+echo "   (Incluye python-binance + unicorn-binance-websocket-api + ML)"
 echo ""
 
-read -p "Seleccione una opción (1-3): " choice
-
-case $choice in
-    1)
-        echo "📥 Instalando dependencias estándar..."
-        pip install -r requirements.txt
-        echo "✅ Instalación estándar completada"
-        ;;
-    2)
-        echo "📥 Instalando dependencias con WebSocket avanzado..."
-        pip install -r requirements_websocket.txt
-        echo "✅ Instalación con WebSocket avanzado completada"
-        ;;
-    3)
-        echo "📥 Instalando dependencias completas..."
-        pip install -r requirements.txt
-        pip install unicorn-binance-websocket-api==1.45.0
-        echo "✅ Instalación completa finalizada"
-        ;;
-    *)
-        echo "❌ Opción inválida"
-        exit 1
-        ;;
-esac
+echo "📥 Instalando todas las dependencias..."
+pip install -r requirements.txt
+echo "✅ Instalación unificada completada"
 
 echo ""
 echo "🔍 Verificando instalación..."
