@@ -7,6 +7,7 @@ import math
 from binance import Client
 from binance.exceptions import BinanceAPIException
 from app.core.config import settings
+from app.services.commission_manager import commission_manager
 
 # from app.core.metrics import record_binance_api_call, binance_connection_status
 
@@ -184,7 +185,7 @@ class BinanceService:
             }
     
     def validate_order_parameters(self, symbol: str, quantity: float, side: str, order_type: str = 'MARKET') -> Dict[str, Any]:
-        """Valida los parámetros de una orden antes de ejecutarla"""
+        """Valida los parámetros de una orden antes de ejecutarla incluyendo comisiones"""
         try:
             # Ajustar cantidad
             quantity_info = self.adjust_quantity_precision(quantity, symbol)
@@ -194,6 +195,9 @@ class BinanceService:
             
             # Calcular valor notional
             notional_value = quantity_info['adjusted_quantity'] * current_price
+            
+            # Calcular comisión
+            commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
             
             # Validaciones
             errors = []
@@ -208,6 +212,11 @@ class BinanceService:
             if quantity_info['original_quantity'] != quantity_info['adjusted_quantity']:
                 warnings.append(f"Cantidad ajustada de {quantity_info['original_quantity']} a {quantity_info['adjusted_quantity']} por precisión")
             
+            # Validación de comisión
+            commission_percentage = (commission / notional_value * 100) if notional_value > 0 else 0
+            if commission_percentage > 1.0:  # Si la comisión es más del 1%
+                warnings.append(f"Comisión alta: {commission_percentage:.2f}% (${commission:.6f} USDT)")
+            
             return {
                 'is_valid': len(errors) == 0,
                 'errors': errors,
@@ -215,6 +224,8 @@ class BinanceService:
                 'quantity_info': quantity_info,
                 'current_price': current_price,
                 'notional_value': notional_value,
+                'commission_usdt': commission,
+                'commission_percentage': commission_percentage,
                 'recommended_quantity': quantity_info['adjusted_quantity']
             }
         except Exception as e:
@@ -226,6 +237,8 @@ class BinanceService:
                 'quantity_info': None,
                 'current_price': None,
                 'notional_value': None,
+                'commission_usdt': None,
+                'commission_percentage': None,
                 'recommended_quantity': None
             }
 
@@ -249,13 +262,20 @@ class BinanceService:
             raise
     
     def execute_trading_order(self, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
-        """Coloca una orden en Binance"""
+        """Coloca una orden en Binance con cálculo de comisiones"""
         if self.simulation_mode:
             logger.info(f"🔄 Modo simulación: Simulando orden {side} {quantity} {symbol} @ {price}")
             return self._simulate_order(symbol, side, order_type, quantity, price)
         
         try:
             start_time = time.time()
+            
+            # Calcular comisión antes de ejecutar la orden
+            current_price = price if price else self.get_current_price(symbol)
+            notional_value = quantity * current_price
+            commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
+            
+            logger.info(f"💰 Comisión calculada para {side} {quantity} {symbol}: ${commission:.6f} USDT")
             
             if order_type == "MARKET":
                 if side == "BUY":
@@ -271,7 +291,15 @@ class BinanceService:
             duration = time.time() - start_time
             # record_binance_api_call("execute_trading_order", "success", duration)
             
-            logger.info(f"✅ Orden colocada exitosamente: {order['orderId']}")
+            # Agregar información de comisión al resultado
+            order['commission_info'] = {
+                'commission_usdt': commission,
+                'commission_rate': commission / notional_value if notional_value > 0 else 0,
+                'notional_value': notional_value,
+                'order_type': order_type
+            }
+            
+            logger.info(f"✅ Orden colocada exitosamente: {order['orderId']} - Comisión: ${commission:.6f} USDT")
             return order
             
         except BinanceAPIException as e:
@@ -297,6 +325,57 @@ class BinanceService:
             # record_binance_api_call("get_open_orders", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo órdenes abiertas: {e}")
             raise
+    
+    def validate_grid_profitability(self, symbol: str, min_price: float, max_price: float, quantity: float, num_levels: int, min_profit_percentage: float = 0.5) -> Dict[str, Any]:
+        """
+        Valida la rentabilidad de una estrategia de grid trading considerando comisiones
+        
+        Args:
+            symbol: Símbolo del par
+            min_price: Precio mínimo del grid
+            max_price: Precio máximo del grid
+            quantity: Cantidad por nivel
+            num_levels: Número de niveles
+            min_profit_percentage: Porcentaje mínimo de ganancia requerido
+            
+        Returns:
+            Dict con análisis de rentabilidad
+        """
+        try:
+            # Obtener análisis de grid ajustado para comisiones
+            grid_analysis = commission_manager.adjust_grid_levels_for_commissions(
+                min_price, max_price, num_levels, quantity, min_profit_percentage, 'MARKET', symbol
+            )
+            
+            # Calcular estadísticas
+            profitable_levels = sum(1 for level in grid_analysis['profitability_analysis'] if level['is_profitable'])
+            total_levels = len(grid_analysis['profitability_analysis'])
+            profitability_rate = (profitable_levels / total_levels * 100) if total_levels > 0 else 0
+            
+            # Calcular ganancia total estimada
+            total_net_profit = sum(level['net_profit'] for level in grid_analysis['profitability_analysis'])
+            total_commission = grid_analysis['commission_per_trade'] * total_levels
+            
+            return {
+                'is_profitable': profitability_rate >= 80,  # Al menos 80% de niveles rentables
+                'profitability_rate': profitability_rate,
+                'profitable_levels': profitable_levels,
+                'total_levels': total_levels,
+                'total_net_profit': total_net_profit,
+                'total_commission': total_commission,
+                'commission_per_trade': grid_analysis['commission_per_trade'],
+                'adjusted_levels': grid_analysis['adjusted_levels'],
+                'profitability_analysis': grid_analysis['profitability_analysis'],
+                'recommendation': 'PROCEED' if profitability_rate >= 80 else 'ADJUST_PARAMETERS'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error validando rentabilidad de grid: {e}")
+            return {
+                'is_profitable': False,
+                'error': str(e),
+                'recommendation': 'ERROR'
+            }
     
     def cancel_order(self, symbol: str, order_id: int) -> Dict[str, Any]:
         """Cancela una orden"""

@@ -7,6 +7,7 @@ import os
 from typing import Dict, Optional, Tuple
 from decimal import Decimal, ROUND_DOWN
 from dotenv import load_dotenv
+from app.services.commission_manager import commission_manager
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,11 @@ class FundManager:
         side: str, 
         quantity: float, 
         price: float,
-        balances: Dict[str, float]
+        balances: Dict[str, float],
+        order_type: str = 'MARKET'
     ) -> Tuple[bool, str, Dict]:
         """
-        Valida si se pueden ejecutar los requisitos de trading
+        Valida si se pueden ejecutar los requisitos de trading considerando comisiones
         
         Args:
             symbol: Símbolo del par (ej: BTCUSDT)
@@ -38,6 +40,7 @@ class FundManager:
             quantity: Cantidad a operar
             price: Precio actual
             balances: Balances disponibles
+            order_type: Tipo de orden (MARKET/LIMIT)
             
         Returns:
             Tuple[bool, str, Dict]: (es_válido, mensaje, detalles)
@@ -49,6 +52,9 @@ class FundManager:
             
             # Calcular valor nocional
             notional_value = quantity * price
+            
+            # Calcular comisión
+            commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
             
             # Validar valor mínimo
             if notional_value < self.min_notional:
@@ -67,16 +73,17 @@ class FundManager:
                 }
             
             if side == "BUY":
-                # Para compras, necesitamos USDT
+                # Para compras, necesitamos USDT (incluyendo comisión)
                 usdt_balance = balances.get(quote_asset, 0)
-                required_usdt = notional_value
+                required_usdt = notional_value + commission  # Incluir comisión
                 available_usdt = usdt_balance * self.safety_margin  # Aplicar margen de seguridad
                 
                 if required_usdt > available_usdt:
-                    return False, f"Saldo USDT insuficiente para compra: ${required_usdt:.2f} > ${available_usdt:.2f}", {
+                    return False, f"Saldo USDT insuficiente para compra (incluyendo comisión): ${required_usdt:.2f} > ${available_usdt:.2f}", {
                         "required_usdt": required_usdt,
                         "available_usdt": available_usdt,
                         "usdt_balance": usdt_balance,
+                        "commission_usdt": commission,
                         "safety_margin": self.safety_margin,
                         "shortage": required_usdt - available_usdt
                     }
@@ -99,11 +106,14 @@ class FundManager:
             # Todas las validaciones pasaron
             return True, "Validación exitosa", {
                 "notional_value": notional_value,
+                "commission_usdt": commission,
+                "commission_percentage": (commission / notional_value * 100) if notional_value > 0 else 0,
                 "base_asset": base_asset,
                 "quote_asset": quote_asset,
                 "side": side,
                 "quantity": quantity,
-                "price": price
+                "price": price,
+                "order_type": order_type
             }
             
         except Exception as e:
