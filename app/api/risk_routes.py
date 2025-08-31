@@ -1,210 +1,373 @@
 #!/usr/bin/env python3
 """
-API Routes para Gestión de Riesgos
+Endpoints para el RiskManager evolucionado.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, List, Optional
-from pydantic import BaseModel
+from typing import Dict, Any, List
 from datetime import datetime
 
-from app.services.risk_manager import risk_manager, RiskLevel, RiskStatus
-# from app.core.auth import get_current_user  # Comentado temporalmente
+from app.core.risk_manager import RiskManager, MarketRegime, RegimePrediction
+from app.services.hybrid_ml_engine import HybridMLEngine
+from app.services.strategy_selector import StrategySelector, StrategySpec, AccountState
 
-router = APIRouter(prefix="/api/v1/risk", tags=["Risk Management"])
+router = APIRouter(prefix="/api/v2/risk", tags=["risk"])
 
-class RiskStatusResponse(BaseModel):
-    """Respuesta del estado de riesgo"""
-    status: str
-    trading_enabled: bool
-    emergency_stop: bool
-    metrics: Dict
-    limits: Dict
-    last_updated: str
+# Dependencias
+def get_risk_manager() -> RiskManager:
+    """Obtiene instancia del RiskManager."""
+    # TODO: Implementar inyección de dependencias real
+    return RiskManager()
 
-class EmergencyStopRequest(BaseModel):
-    """Request para activar/desactivar parada de emergencia"""
-    enabled: bool
-    reason: Optional[str] = None
+def get_ml_engine() -> HybridMLEngine:
+    """Obtiene instancia del HybridMLEngine."""
+    # TODO: Implementar inyección de dependencias real
+    return HybridMLEngine()
 
-class RiskAlertResponse(BaseModel):
-    """Respuesta de alerta de riesgo"""
-    level: str
-    message: str
-    timestamp: str
-    action_required: bool
+def get_strategy_selector(risk_manager: RiskManager = Depends(get_risk_manager)) -> StrategySelector:
+    """Obtiene instancia del StrategySelector."""
+    # TODO: Implementar inyección de dependencias real
+    return StrategySelector(risk_manager)
 
-class AssetRiskResponse(BaseModel):
-    """Respuesta de riesgo por activo"""
-    symbol: str
-    status: str
-    exposure: float
-    position_value: float
-    risk_level: str
 
-@router.get("/status", response_model=RiskStatusResponse)
-async def get_risk_status():
-    """Obtiene el estado actual del sistema de gestión de riesgos"""
+@router.get("/status")
+async def get_risk_status(risk_manager: RiskManager = Depends(get_risk_manager)) -> Dict[str, Any]:
+    """
+    Obtiene el estado actual del riesgo.
+    
+    Returns:
+        Estado del riesgo incluyendo exposición, pérdidas, breaker state, etc.
+    """
     try:
-        status_data = await risk_manager.get_risk_status()
-        return RiskStatusResponse(**status_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estado de riesgo: {str(e)}")
-
-@router.post("/emergency-stop")
-async def set_emergency_stop(request: EmergencyStopRequest):
-    """Activa o desactiva la parada de emergencia"""
-    try:
-        await risk_manager.set_emergency_stop(request.enabled)
-        
-        action = "activada" if request.enabled else "desactivada"
-        message = f"Parada de emergencia {action}"
-        if request.reason:
-            message += f" - Razón: {request.reason}"
-        
+        status = risk_manager.get_risk_status()
         return {
-            "status": "success",
-            "message": message,
-            "emergency_stop": request.enabled,
+            "success": True,
+            "data": status,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error configurando parada de emergencia: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting risk status: {str(e)}")
 
-@router.get("/portfolio/check")
-async def check_portfolio_risk():
-    """Verifica el riesgo del portafolio completo"""
-    try:
-        risk_status = await risk_manager.check_portfolio_risk()
-        risk_metrics = await risk_manager.calculate_risk_metrics()
+
+@router.post("/emergency-stop")
+async def trigger_emergency_stop(
+    reason: str,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Activa el stop de emergencia.
+    
+    Args:
+        reason: Razón del stop de emergencia
         
+    Returns:
+        Confirmación del stop de emergencia
+    """
+    try:
+        risk_manager.trigger_emergency_stop(reason)
         return {
-            "status": risk_status.value,
-            "risk_level": "critical" if risk_status == RiskStatus.STOP_TRADING else 
-                         "high" if risk_status == RiskStatus.DANGER else
-                         "medium" if risk_status == RiskStatus.WARNING else "low",
-            "metrics": {
-                "total_exposure": f"{risk_metrics.total_exposure:.2%}",
-                "current_daily_loss": f"{risk_metrics.current_daily_loss:.2%}",
-                "largest_position": f"{risk_metrics.largest_position:.2%}",
-                "portfolio_volatility": f"{risk_metrics.portfolio_volatility:.2%}",
-                "sharpe_ratio": f"{risk_metrics.sharpe_ratio:.2f}",
-                "max_drawdown": f"{risk_metrics.max_drawdown:.2%}",
-                "risk_score": f"{risk_metrics.risk_score:.2f}"
+            "success": True,
+            "message": f"Emergency stop triggered: {reason}",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error triggering emergency stop: {str(e)}")
+
+
+@router.post("/reset-emergency-stop")
+async def reset_emergency_stop(
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Resetea el stop de emergencia.
+    
+    Returns:
+        Confirmación del reset
+    """
+    try:
+        risk_manager.reset_emergency_stop()
+        return {
+            "success": True,
+            "message": "Emergency stop reset successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error resetting emergency stop: {str(e)}")
+
+
+@router.post("/update-metrics")
+async def update_risk_metrics(
+    daily_loss: float,
+    total_exposure: float,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Actualiza métricas de riesgo.
+    
+    Args:
+        daily_loss: Pérdida diaria en porcentaje
+        total_exposure: Exposición total en porcentaje
+        
+    Returns:
+        Confirmación de actualización
+    """
+    try:
+        risk_manager.update_metrics(daily_loss, total_exposure)
+        return {
+            "success": True,
+            "message": "Risk metrics updated successfully",
+            "data": {
+                "daily_loss": daily_loss,
+                "total_exposure": total_exposure
             },
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error verificando riesgo del portafolio: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating risk metrics: {str(e)}")
 
-@router.get("/asset/{symbol}", response_model=AssetRiskResponse)
-async def check_asset_risk(symbol: str):
-    """Verifica el riesgo de un activo específico"""
-    try:
-        risk_status = await risk_manager.check_asset_risk(symbol)
-        position = risk_manager._get_asset_position(symbol)
+
+@router.post("/apply-regime-filter")
+async def apply_market_regime_filter(
+    regime: MarketRegime,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Aplica filtro de régimen de mercado.
+    
+    Args:
+        regime: Régimen de mercado a aplicar
         
-        return AssetRiskResponse(
-            symbol=symbol,
-            status=risk_status.value,
-            exposure=position['value'] if position else 0.0,
-            position_value=position['value'] if position else 0.0,
-            risk_level="critical" if risk_status == RiskStatus.STOP_TRADING else 
-                      "high" if risk_status == RiskStatus.DANGER else
-                      "medium" if risk_status == RiskStatus.WARNING else "low"
-        )
+    Returns:
+        Confirmación de aplicación del filtro
+    """
+    try:
+        risk_manager.apply_market_regime_filter(regime)
+        return {
+            "success": True,
+            "message": f"Market regime filter applied: {regime.value}",
+            "data": {
+                "regime": regime.value,
+                "max_exposure_pct": risk_manager.max_total_exposure_pct,
+                "min_profit_bps": risk_manager.min_profit_bps
+            },
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error verificando riesgo del activo {symbol}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error applying regime filter: {str(e)}")
 
-@router.post("/stop-loss/{symbol}")
-async def execute_stop_loss(symbol: str):
-    """Ejecuta stop-loss para un activo específico"""
+
+@router.get("/circuit-breaker-status")
+async def get_circuit_breaker_status(
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Obtiene el estado del circuit breaker.
+    
+    Returns:
+        Estado del circuit breaker
+    """
     try:
-        success = await risk_manager.execute_stop_loss(symbol)
+        breaker_state = risk_manager.check_circuit_breaker()
+        return {
+            "success": True,
+            "data": {
+                "breaker_state": breaker_state.value,
+                "emergency_stop": risk_manager.emergency_stop,
+                "current_regime": risk_manager.current_regime.value
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting circuit breaker status: {str(e)}")
+
+
+@router.post("/calculate-position-size")
+async def calculate_position_size(
+    symbol: str,
+    account_equity: float,
+    atr: float,
+    winrate_estimate: float,
+    avg_win_loss_ratio: float,
+    price: float,
+    risk_per_trade_pct: float = 0.02,
+    cap_symbol_pct: float = 0.20,
+    cap_equity_pct: float = 0.80,
+    cap_daily_loss_pct: float = 0.05,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Calcula tamaño de posición dinámico usando Kelly fraccional.
+    
+    Args:
+        symbol: Símbolo del trading pair
+        account_equity: Equity de la cuenta
+        atr: Average True Range
+        winrate_estimate: Estimación de winrate
+        avg_win_loss_ratio: Ratio promedio ganancia/pérdida
+        price: Precio actual
+        risk_per_trade_pct: Porcentaje de riesgo por trade
+        cap_symbol_pct: Límite por símbolo
+        cap_equity_pct: Límite por equity
+        cap_daily_loss_pct: Límite por pérdida diaria
         
-        if success:
-            return {
-                "status": "success",
-                "message": f"Stop-loss ejecutado exitosamente para {symbol}",
+    Returns:
+        Tamaño de posición calculado
+    """
+    try:
+        from app.core.risk_manager import PositionSizeParams
+        
+        params = PositionSizeParams(
+            symbol=symbol,
+            account_equity=account_equity,
+            atr=atr,
+            winrate_estimate=winrate_estimate,
+            avg_win_loss_ratio=avg_win_loss_ratio,
+            price=price,
+            risk_per_trade_pct=risk_per_trade_pct,
+            cap_symbol_pct=cap_symbol_pct,
+            cap_equity_pct=cap_equity_pct,
+            cap_daily_loss_pct=cap_daily_loss_pct
+        )
+        
+        position_size = risk_manager.calculate_dynamic_position_size(params)
+        
+        return {
+            "success": True,
+            "data": {
                 "symbol": symbol,
+                "position_size_usdt": position_size,
+                "position_size_pct": position_size / account_equity,
+                "params": {
+                    "account_equity": account_equity,
+                    "atr": atr,
+                    "winrate_estimate": winrate_estimate,
+                    "avg_win_loss_ratio": avg_win_loss_ratio,
+                    "price": price
+                }
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating position size: {str(e)}")
+
+
+@router.post("/calculate-trailing-stop")
+async def calculate_trailing_stop(
+    symbol: str,
+    entry_price: float,
+    atr: float,
+    multiplier_atr: float = 2.0,
+    is_long: bool = True,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Calcula trailing stop adaptativo basado en ATR.
+    
+    Args:
+        symbol: Símbolo del trading pair
+        entry_price: Precio de entrada
+        atr: Average True Range
+        multiplier_atr: Multiplicador ATR
+        is_long: Si es posición larga
+        
+    Returns:
+        Precio del stop loss
+    """
+    try:
+        from app.core.risk_manager import TrailingStopParams
+        
+        params = TrailingStopParams(
+            symbol=symbol,
+            entry_price=entry_price,
+            atr=atr,
+            multiplier_atr=multiplier_atr,
+            is_long=is_long
+        )
+        
+        stop_price = risk_manager.get_adaptive_trailing_stop(params)
+        
+        return {
+            "success": True,
+            "data": {
+                "symbol": symbol,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "atr": atr,
+                "multiplier_atr": multiplier_atr,
+                "is_long": is_long,
+                "distance_pct": abs(stop_price - entry_price) / entry_price
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating trailing stop: {str(e)}")
+
+
+@router.post("/update-trailing-stop")
+async def update_trailing_stop(
+    symbol: str,
+    current_price: float,
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Actualiza trailing stop con el precio actual.
+    
+    Args:
+        symbol: Símbolo del trading pair
+        current_price: Precio actual
+        
+    Returns:
+        Nuevo precio de stop loss (si se actualizó)
+    """
+    try:
+        new_stop = risk_manager.update_trailing_stop(symbol, current_price)
+        
+        if new_stop is not None:
+            return {
+                "success": True,
+                "data": {
+                    "symbol": symbol,
+                    "new_stop_price": new_stop,
+                    "current_price": current_price,
+                    "updated": True
+                },
                 "timestamp": datetime.now().isoformat()
             }
         else:
             return {
-                "status": "error",
-                "message": f"No se pudo ejecutar stop-loss para {symbol}",
-                "symbol": symbol,
+                "success": True,
+                "data": {
+                    "symbol": symbol,
+                    "current_price": current_price,
+                    "updated": False,
+                    "message": "No trailing stop update needed"
+                },
                 "timestamp": datetime.now().isoformat()
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error ejecutando stop-loss para {symbol}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating trailing stop: {str(e)}")
 
-@router.get("/metrics")
-async def get_risk_metrics():
-    """Obtiene métricas detalladas de riesgo"""
+
+@router.get("/trailing-stops")
+async def get_trailing_stops(
+    risk_manager: RiskManager = Depends(get_risk_manager)
+) -> Dict[str, Any]:
+    """
+    Obtiene todos los trailing stops activos.
+    
+    Returns:
+        Lista de trailing stops activos
+    """
     try:
-        risk_metrics = await risk_manager.calculate_risk_metrics()
+        trailing_stops = risk_manager.trailing_stops
         
         return {
-            "total_exposure": f"{risk_metrics.total_exposure:.2%}",
-            "current_daily_loss": f"{risk_metrics.current_daily_loss:.2%}",
-            "largest_position": f"{risk_metrics.largest_position:.2%}",
-            "portfolio_volatility": f"{risk_metrics.portfolio_volatility:.2%}",
-            "sharpe_ratio": f"{risk_metrics.sharpe_ratio:.2f}",
-            "max_drawdown": f"{risk_metrics.max_drawdown:.2%}",
-            "risk_score": f"{risk_metrics.risk_score:.2f}",
-            "limits": {
-                "max_daily_loss": f"{risk_manager.max_daily_loss_percentage:.2%}",
-                "max_position_size": f"{risk_manager.max_position_size_percentage:.2%}",
-                "max_total_exposure": f"{risk_manager.max_total_exposure_percentage:.2%}",
-                "stop_loss_percentage": f"{risk_manager.stop_loss_percentage:.2%}",
-                "max_drawdown": f"{risk_manager.max_drawdown_percentage:.2%}"
+            "success": True,
+            "data": {
+                "trailing_stops": trailing_stops,
+                "count": len(trailing_stops)
             },
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo métricas de riesgo: {str(e)}")
-
-@router.get("/alerts")
-async def get_recent_alerts():
-    """Obtiene alertas de riesgo recientes"""
-    try:
-        # Obtener las últimas alertas (simulado)
-        alerts = []
-        for alert_key, timestamp in list(risk_manager.last_alerts.items())[-10:]:
-            level, message = alert_key.split("_", 1)
-            alerts.append({
-                "level": level,
-                "message": message[:100] + "..." if len(message) > 100 else message,
-                "timestamp": timestamp.isoformat(),
-                "action_required": level in ["critical", "high"]
-            })
-        
-        return {
-            "alerts": alerts,
-            "total_alerts": len(alerts),
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo alertas: {str(e)}")
-
-@router.get("/health")
-async def risk_health_check():
-    """Health check del sistema de gestión de riesgos"""
-    try:
-        # Verificar que el RiskManager esté funcionando
-        status = await risk_manager.get_risk_status()
-        
-        return {
-            "status": "healthy",
-            "risk_manager": "operational",
-            "trading_enabled": risk_manager.trading_enabled,
-            "emergency_stop": risk_manager.emergency_stop,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        } 
+        raise HTTPException(status_code=500, detail=f"Error getting trailing stops: {str(e)}") 

@@ -3,303 +3,485 @@
 Rutas API para Gestión de Estrategias de Trading
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field
-import uuid
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 
-from app.strategies.base import StrategyType
-from app.services.strategy_factory import strategy_factory
-from app.services.strategy_factory import StrategyFactory
-from app.strategies.dca_strategy import DCAConfig
-from app.strategies.scalping_strategy import ScalpingConfig
+from app.core.risk_manager import RiskManager, MarketRegime, RegimePrediction
+from app.services.hybrid_ml_engine import HybridMLEngine
+from app.services.strategy_selector import StrategySelector, StrategySpec, AccountState
+from app.services.backtesting_service import BacktestingService, BacktestConfig
 
-router = APIRouter(prefix="/api/v1/strategies", tags=["Strategies"])
+router = APIRouter(prefix="/api/v2/strategies", tags=["strategies"])
 
-# Modelos de request/response
-class StrategyCreateRequest(BaseModel):
-    """Request para crear una nueva estrategia"""
-    symbol: str = Field(..., description="Símbolo del activo")
-    strategy_type: StrategyType = Field(..., description="Tipo de estrategia")
-    investment_amount: float = Field(gt=0, description="Cantidad a invertir en USDT")
-    risk_tolerance: float = Field(ge=0.1, le=1.0, default=0.5, description="Tolerancia al riesgo")
-    
-    # Parámetros específicos de DCA
-    frequency_hours: Optional[int] = Field(None, description="Frecuencia de inversión en horas (DCA)")
-    max_investments: Optional[int] = Field(None, description="Máximo número de inversiones (DCA)")
-    price_threshold: Optional[float] = Field(None, description="Umbral de precio para comprar (DCA)")
-    
-    # Parámetros específicos de Scalping
-    entry_threshold: Optional[float] = Field(None, description="Umbral de entrada (Scalping)")
-    profit_target: Optional[float] = Field(None, description="Objetivo de ganancia (Scalping)")
-    stop_loss: Optional[float] = Field(None, description="Stop loss (Scalping)")
-    max_position_size: Optional[float] = Field(None, description="Tamaño máximo de posición (Scalping)")
-    max_hold_time_minutes: Optional[int] = Field(None, description="Tiempo máximo de retención (Scalping)")
+# Dependencias
+def get_risk_manager() -> RiskManager:
+    """Obtiene instancia del RiskManager."""
+    return RiskManager()
 
-class StrategyResponse(BaseModel):
-    """Response para información de estrategia"""
-    strategy_id: str
+def get_ml_engine() -> HybridMLEngine:
+    """Obtiene instancia del HybridMLEngine."""
+    return HybridMLEngine()
+
+def get_strategy_selector(risk_manager: RiskManager = Depends(get_risk_manager)) -> StrategySelector:
+    """Obtiene instancia del StrategySelector."""
+    return StrategySelector(risk_manager)
+
+def get_backtesting_service() -> BacktestingService:
+    """Obtiene instancia del BacktestingService."""
+    return BacktestingService()
+
+
+class ExecuteIntelligentRequest(BaseModel):
+    """Request para ejecución inteligente de estrategia"""
     symbol: str
-    strategy_type: str
-    status: str
-    is_running: bool
-    last_execution: Optional[str]
-    metrics: Dict[str, Any]
+    account_state: AccountState
+    paper_mode: bool = True
+    quick_backtest: bool = True
 
-class StrategyExecutionResponse(BaseModel):
-    """Response para ejecución de estrategia"""
-    strategy_id: str
-    success: bool
-    orders_executed: int
-    total_profit: float
-    total_volume: float
-    error_message: Optional[str]
 
-@router.get("/available", response_model=List[Dict[str, Any]])
-async def get_available_strategies():
-    """Obtiene la lista de estrategias disponibles"""
+class BacktestRequest(BaseModel):
+    """Request para backtesting"""
+    symbol: str
+    strategy_spec: StrategySpec
+    start_date: datetime
+    end_date: datetime
+    initial_capital: float = 10000.0
+    walk_forward: bool = True
+    commission: float = 0.001
+    slippage: float = 0.0005
+
+
+@router.post("/execute_intelligent")
+async def execute_intelligent_strategy(
+    request: ExecuteIntelligentRequest,
+    background_tasks: BackgroundTasks,
+    risk_manager: RiskManager = Depends(get_risk_manager),
+    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    strategy_selector: StrategySelector = Depends(get_strategy_selector)
+) -> Dict[str, Any]:
+    """
+    Ejecuta estrategia inteligente con predicción de régimen y selección automática.
+    
+    Steps:
+    1. Check health & risk
+    2. Predict regime
+    3. Select strategy
+    4. Simulate quick backtest check (shadow)
+    5. Enqueue actual execution task in Celery
+    """
     try:
-        strategies = strategy_factory.get_available_strategies()
-        return strategies
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estrategias: {str(e)}")
-
-@router.post("/create", response_model=StrategyResponse)
-async def create_strategy(request: StrategyCreateRequest):
-    """Crea una nueva estrategia de trading"""
-    try:
-        # Crear configuración específica según el tipo de estrategia
-        config_kwargs = {
-            "symbol": request.symbol,
-            "strategy_type": request.strategy_type,
-            "investment_amount": request.investment_amount,
-            "risk_tolerance": request.risk_tolerance
+        # Step 1: Check health & risk
+        breaker_state = risk_manager.check_circuit_breaker()
+        if breaker_state.value in ["danger", "stopped"]:
+            return {
+                "success": False,
+                "message": f"Circuit breaker active: {breaker_state.value}",
+                "data": {
+                    "breaker_state": breaker_state.value,
+                    "emergency_stop": risk_manager.emergency_stop
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Step 2: Predict regime (mock data for now)
+        # TODO: Implementar predicción real con datos de mercado
+        mock_features = {
+            "rsi": 50.0,
+            "macd": 0.0,
+            "volatility": 0.02,
+            "volume": 1000000.0
         }
         
-        if request.strategy_type == StrategyType.DCA:
-            # Agregar parámetros específicos de DCA
-            if request.frequency_hours:
-                config_kwargs["frequency_hours"] = request.frequency_hours
-            if request.max_investments:
-                config_kwargs["max_investments"] = request.max_investments
-            if request.price_threshold:
-                config_kwargs["price_threshold"] = request.price_threshold
+        # Mock recent data
+        import pandas as pd
+        mock_data = pd.DataFrame({
+            'close': [100.0] * 60,
+            'volume': [1000000.0] * 60,
+            'high': [101.0] * 60,
+            'low': [99.0] * 60,
+            'rsi': [50.0] * 60,
+            'macd': [0.0] * 60,
+            'bb_upper': [102.0] * 60,
+            'bb_lower': [98.0] * 60,
+            'atr': [1.0] * 60,
+            'volatility': [0.02] * 60,
+            'returns': [0.001] * 60
+        })
+        
+        regime_prediction = await ml_engine.predict_regime(
+            request.symbol, mock_data, mock_features
+        )
+        
+        # Step 3: Select strategy
+        strategy_spec = strategy_selector.select_strategy(
+            regime_prediction, request.symbol, request.account_state
+        )
+        
+        # Step 4: Quick backtest check (shadow)
+        if request.quick_backtest:
+            backtest_service = get_backtesting_service()
             
-            config = strategy_factory.create_config(StrategyType.DCA, **config_kwargs)
+            # Backtest rápido con datos recientes
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=7)  # Última semana
             
-        elif request.strategy_type == StrategyType.SCALPING:
-            # Agregar parámetros específicos de Scalping
-            if request.entry_threshold:
-                config_kwargs["entry_threshold"] = request.entry_threshold
-            if request.profit_target:
-                config_kwargs["profit_target"] = request.profit_target
-            if request.stop_loss:
-                config_kwargs["stop_loss"] = request.stop_loss
-            if request.max_position_size:
-                config_kwargs["max_position_size"] = request.max_position_size
-            if request.max_hold_time_minutes:
-                config_kwargs["max_hold_time_minutes"] = request.max_hold_time_minutes
-            
-            config = strategy_factory.create_config(StrategyType.SCALPING, **config_kwargs)
-            
+            try:
+                backtest_result = await backtest_service.run_backtest(
+                    strategy_spec, request.symbol, start_date, end_date,
+                    initial_capital=request.account_state.total_equity
+                )
+                
+                # Verificar si el backtest es aceptable
+                if backtest_result.max_drawdown > 0.1:  # Más de 10% drawdown
+                    return {
+                        "success": False,
+                        "message": "Backtest failed: excessive drawdown",
+                        "data": {
+                            "max_drawdown": backtest_result.max_drawdown,
+                            "strategy": strategy_spec.strategy_name.value
+                        },
+                        "timestamp": datetime.now().isoformat()
+                    }
+                
+                backtest_passed = True
+                backtest_metrics = backtest_result.metrics_json
+                
+            except Exception as e:
+                backtest_passed = False
+                backtest_metrics = {"error": str(e)}
         else:
-            raise HTTPException(status_code=400, detail=f"Tipo de estrategia no soportado: {request.strategy_type}")
+            backtest_passed = True
+            backtest_metrics = {}
         
-        if not config:
-            raise HTTPException(status_code=400, detail="Error creando configuración de estrategia")
+        # Step 5: Enqueue execution task (mock)
+        if backtest_passed and not request.paper_mode:
+            # TODO: Implementar enqueue real con Celery
+            background_tasks.add_task(
+                execute_strategy_task,
+                request.symbol,
+                strategy_spec,
+                request.account_state
+            )
+            execution_enqueued = True
+        else:
+            execution_enqueued = False
         
-        # Crear estrategia
-        strategy = strategy_factory.create_strategy(request.strategy_type, config)
-        if not strategy:
-            raise HTTPException(status_code=400, detail="Error creando estrategia")
-        
-        # Generar ID único
-        strategy_id = str(uuid.uuid4())
-        
-        # Iniciar estrategia
-        success = await strategy_factory.start_strategy(strategy_id, strategy)
-        if not success:
-            raise HTTPException(status_code=500, detail="Error iniciando estrategia")
-        
-        # Obtener estado de la estrategia
-        status = await strategy_factory.get_strategy_status(strategy_id)
-        
-        return StrategyResponse(
-            strategy_id=strategy_id,
-            symbol=request.symbol,
-            strategy_type=request.strategy_type.value,
-            status="active",
-            is_running=True,
-            last_execution=status.get("last_execution"),
-            metrics=status.get("metrics", {})
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creando estrategia: {str(e)}")
-
-@router.get("/list", response_model=List[StrategyResponse])
-async def list_strategies():
-    """Obtiene la lista de todas las estrategias activas"""
-    try:
-        statuses = await strategy_factory.get_all_strategies_status()
-        strategies = []
-        
-        for strategy_id, status in statuses.items():
-            strategies.append(StrategyResponse(
-                strategy_id=strategy_id,
-                symbol=status.get("symbol", ""),
-                strategy_type=status.get("strategy_type", ""),
-                status="active" if status.get("is_running") else "stopped",
-                is_running=status.get("is_running", False),
-                last_execution=status.get("last_execution"),
-                metrics=status.get("metrics", {})
-            ))
-        
-        return strategies
+        return {
+            "success": True,
+            "message": "Intelligent strategy execution completed",
+            "data": {
+                "symbol": request.symbol,
+                "regime_prediction": regime_prediction.dict(),
+                "strategy_spec": strategy_spec.dict(),
+                "breaker_state": breaker_state.value,
+                "backtest_passed": backtest_passed,
+                "backtest_metrics": backtest_metrics,
+                "execution_enqueued": execution_enqueued,
+                "paper_mode": request.paper_mode
+            },
+            "timestamp": datetime.now().isoformat()
+        }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estrategias: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error executing intelligent strategy: {str(e)}")
 
-@router.get("/{strategy_id}", response_model=StrategyResponse)
-async def get_strategy(strategy_id: str):
-    """Obtiene información de una estrategia específica"""
-    try:
-        status = await strategy_factory.get_strategy_status(strategy_id)
-        if not status:
-            raise HTTPException(status_code=404, detail="Estrategia no encontrada")
-        
-        return StrategyResponse(
-            strategy_id=strategy_id,
-            symbol=status.get("symbol", ""),
-            strategy_type=status.get("strategy_type", ""),
-            status="active" if status.get("is_running") else "stopped",
-            is_running=status.get("is_running", False),
-            last_execution=status.get("last_execution"),
-            metrics=status.get("metrics", {})
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estrategia: {str(e)}")
 
-@router.post("/{strategy_id}/execute", response_model=StrategyExecutionResponse)
-async def execute_strategy(strategy_id: str):
-    """Ejecuta una estrategia específica"""
+@router.get("/last_decision")
+async def get_last_decision(
+    symbol: str,
+    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    strategy_selector: StrategySelector = Depends(get_strategy_selector)
+) -> Dict[str, Any]:
+    """
+    Obtiene la última decisión de estrategia para un símbolo.
+    
+    Returns:
+        Última predicción de régimen + especificación de estrategia + reasoning
+    """
     try:
-        result = await strategy_factory.execute_strategy(strategy_id)
-        if not result:
-            raise HTTPException(status_code=404, detail="Estrategia no encontrada o no activa")
-        
-        return StrategyExecutionResponse(
-            strategy_id=strategy_id,
-            success=result.success,
-            orders_executed=len(result.orders),
-            total_profit=result.total_profit,
-            total_volume=result.total_volume,
-            error_message=result.error_message
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error ejecutando estrategia: {str(e)}")
-
-@router.post("/execute-all", response_model=Dict[str, StrategyExecutionResponse])
-async def execute_all_strategies():
-    """Ejecuta todas las estrategias activas"""
-    try:
-        results = await strategy_factory.execute_all_strategies()
-        response = {}
-        
-        for strategy_id, result in results.items():
-            response[strategy_id] = StrategyExecutionResponse(
-                strategy_id=strategy_id,
-                success=result.success,
-                orders_executed=len(result.orders),
-                total_profit=result.total_profit,
-                total_volume=result.total_volume,
-                error_message=result.error_message
+        # Obtener última predicción
+        if symbol in ml_engine.last_predictions:
+            regime_prediction = ml_engine.last_predictions[symbol]
+        else:
+            # Mock prediction si no hay datos
+            regime_prediction = RegimePrediction(
+                long_regime=MarketRegime.RANGE,
+                short_regime=MarketRegime.RANGE,
+                long_conf=0.5,
+                short_conf=0.5
             )
         
-        return response
+        # Mock account state
+        account_state = AccountState(
+            total_equity=10000.0,
+            available_balance=5000.0,
+            total_exposure=0.5,
+            daily_pnl=0.02,
+            max_drawdown=0.05,
+            risk_score=0.3
+        )
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error ejecutando estrategias: {str(e)}")
-
-@router.delete("/{strategy_id}")
-async def stop_strategy(strategy_id: str):
-    """Detiene una estrategia específica"""
-    try:
-        success = await strategy_factory.stop_strategy(strategy_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Estrategia no encontrada")
+        # Obtener estrategia
+        strategy_spec = strategy_selector.select_strategy(
+            regime_prediction, symbol, account_state
+        )
         
-        return {"message": f"Estrategia {strategy_id} detenida correctamente"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deteniendo estrategia: {str(e)}")
-
-@router.get("/summary")
-async def get_strategies_summary():
-    """Obtiene un resumen de todas las estrategias"""
-    try:
-        summary = strategy_factory.get_strategy_summary()
-        return summary
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo resumen: {str(e)}")
-
-@router.get("/{strategy_id}/detailed-status")
-async def get_strategy_detailed_status(strategy_id: str):
-    """Obtiene el estado detallado de una estrategia específica"""
-    try:
-        status = await strategy_factory.get_strategy_status(strategy_id)
-        if not status:
-            raise HTTPException(status_code=404, detail="Estrategia no encontrada")
-        
-        return status
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estado detallado: {str(e)}")
-
-@router.post("/{strategy_id}/start")
-async def start_strategy(strategy_id: str):
-    """Inicia una estrategia específica"""
-    try:
-        # Verificar si la estrategia existe
-        status = await strategy_factory.get_strategy_status(strategy_id)
-        if not status:
-            raise HTTPException(status_code=404, detail="Estrategia no encontrada")
-        
-        if status.get("is_running"):
-            return {"message": f"Estrategia {strategy_id} ya está ejecutándose"}
-        
-        # La estrategia ya debería estar iniciada al crearse
-        return {"message": f"Estrategia {strategy_id} iniciada correctamente"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error iniciando estrategia: {str(e)}")
-
-@router.get("/health")
-async def strategies_health():
-    """Health check para el sistema de estrategias"""
-    try:
-        summary = strategy_factory.get_strategy_summary()
         return {
-            "status": "healthy",
-            "active_strategies": summary.get("active_strategies", 0),
-            "total_profit": summary.get("total_profit", 0.0),
-            "total_executions": summary.get("total_executions", 0)
+            "success": True,
+            "data": {
+                "symbol": symbol,
+                "regime_prediction": regime_prediction.dict(),
+                "strategy_spec": strategy_spec.dict(),
+                "account_state": account_state.dict(),
+                "features_used": {
+                    "rsi": 50.0,
+                    "macd": 0.0,
+                    "volatility": 0.02,
+                    "volume": 1000000.0
+                },
+                "confidences": {
+                    "long_regime": regime_prediction.long_conf,
+                    "short_regime": regime_prediction.short_conf,
+                    "strategy": strategy_spec.confidence
+                }
+            },
+            "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en health check: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error getting last decision: {str(e)}")
+
+
+@router.post("/backtest/run")
+async def run_backtest(
+    request: BacktestRequest,
+    backtest_service: BacktestingService = Depends(get_backtesting_service)
+) -> Dict[str, Any]:
+    """
+    Ejecuta backtesting de una estrategia.
+    
+    Args:
+        request: Parámetros del backtest
+        
+    Returns:
+        Resultado del backtesting
+    """
+    try:
+        # Configurar backtest
+        config = BacktestConfig(
+            initial_capital=request.initial_capital,
+            commission=request.commission,
+            slippage=request.slippage,
+            walk_forward=request.walk_forward
+        )
+        
+        if request.walk_forward:
+            results = await backtest_service.run_walk_forward_backtest(
+                request.strategy_spec, request.symbol, request.start_date, request.end_date, config
+            )
+        else:
+            result = await backtest_service.run_backtest(
+                request.strategy_spec, request.symbol, request.start_date, request.end_date,
+                initial_capital=request.initial_capital, config=config
+            )
+            results = [result]
+        
+        # Generar resumen
+        summary = backtest_service.get_backtest_summary(results)
+        
+        return {
+            "success": True,
+            "data": {
+                "symbol": request.symbol,
+                "strategy": request.strategy_spec.strategy_name.value,
+                "start_date": request.start_date.isoformat(),
+                "end_date": request.end_date.isoformat(),
+                "results_count": len(results),
+                "summary": summary,
+                "detailed_results": [result.dict() for result in results]
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error running backtest: {str(e)}")
+
+
+@router.get("/backtest/results")
+async def get_backtest_results(
+    symbol: Optional[str] = None,
+    strategy: Optional[str] = None,
+    limit: int = 10,
+    backtest_service: BacktestingService = Depends(get_backtesting_service)
+) -> Dict[str, Any]:
+    """
+    Obtiene resultados de backtesting.
+    
+    Args:
+        symbol: Filtrar por símbolo
+        strategy: Filtrar por estrategia
+        limit: Número máximo de resultados
+        
+    Returns:
+        Lista de resultados de backtesting
+    """
+    try:
+        results = backtest_service.backtest_results
+        
+        # Filtrar resultados
+        if symbol:
+            results = [r for r in results if r.symbol == symbol]
+        
+        if strategy:
+            results = [r for r in results if r.strategy_hash == strategy]
+        
+        # Limitar resultados
+        results = results[-limit:] if limit > 0 else results
+        
+        return {
+            "success": True,
+            "data": {
+                "results": [result.dict() for result in results],
+                "total_count": len(results),
+                "filters": {
+                    "symbol": symbol,
+                    "strategy": strategy,
+                    "limit": limit
+                }
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting backtest results: {str(e)}")
+
+
+@router.get("/ml/status")
+async def get_ml_status(
+    symbol: Optional[str] = None,
+    ml_engine: HybridMLEngine = Depends(get_ml_engine)
+) -> Dict[str, Any]:
+    """
+    Obtiene el estado de los modelos de ML.
+    
+    Args:
+        symbol: Símbolo específico (opcional)
+        
+    Returns:
+        Estado de los modelos de ML
+    """
+    try:
+        if symbol:
+            status = ml_engine.get_model_status(symbol)
+        else:
+            # Obtener estado de todos los símbolos
+            status = {}
+            for sym in ["BTCUSDT", "ETHUSDT", "ADAUSDT"]:  # Mock symbols
+                status[sym] = ml_engine.get_model_status(sym)
+        
+        return {
+            "success": True,
+            "data": status,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting ML status: {str(e)}")
+
+
+@router.post("/ml/train")
+async def train_ml_model(
+    symbol: str,
+    start_date: datetime,
+    end_date: datetime,
+    model_type: str = "LSTM",
+    background_tasks: BackgroundTasks,
+    ml_engine: HybridMLEngine = Depends(get_ml_engine)
+) -> Dict[str, Any]:
+    """
+    Entrena modelo de ML para un símbolo.
+    
+    Args:
+        symbol: Símbolo del trading pair
+        start_date: Fecha de inicio de datos
+        end_date: Fecha de fin de datos
+        model_type: Tipo de modelo (LSTM/Transformer)
+        
+    Returns:
+        Confirmación del entrenamiento
+    """
+    try:
+        # Mock historical data
+        import pandas as pd
+        import numpy as np
+        
+        date_range = pd.date_range(start=start_date, end=end_date, freq='1H')
+        n_periods = len(date_range)
+        
+        # Generar datos sintéticos
+        np.random.seed(42)
+        base_price = 100.0
+        returns = np.random.normal(0.0001, 0.02, n_periods)
+        prices = base_price * np.exp(np.cumsum(returns))
+        
+        df = pd.DataFrame({
+            'timestamp': date_range,
+            'open': prices * (1 + np.random.normal(0, 0.001, n_periods)),
+            'high': prices * (1 + np.abs(np.random.normal(0, 0.005, n_periods))),
+            'low': prices * (1 - np.abs(np.random.normal(0, 0.005, n_periods))),
+            'close': prices,
+            'volume': np.random.lognormal(10, 1, n_periods),
+            'rsi': np.random.uniform(20, 80, n_periods),
+            'macd': np.random.normal(0, 0.1, n_periods),
+            'bb_upper': prices * 1.02,
+            'bb_lower': prices * 0.98,
+            'atr': np.random.uniform(0.5, 2.0, n_periods),
+            'volatility': np.random.uniform(0.01, 0.05, n_periods),
+            'returns': returns
+        })
+        
+        # Enqueue training task
+        background_tasks.add_task(
+            train_model_task,
+            ml_engine,
+            df,
+            symbol,
+            model_type
+        )
+        
+        return {
+            "success": True,
+            "message": f"ML model training enqueued for {symbol}",
+            "data": {
+                "symbol": symbol,
+                "model_type": model_type,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "data_points": len(df)
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error training ML model: {str(e)}")
+
+
+# Background tasks
+async def execute_strategy_task(symbol: str, strategy_spec: StrategySpec, account_state: AccountState):
+    """Background task para ejecutar estrategia."""
+    # TODO: Implementar ejecución real de estrategia
+    print(f"Executing strategy {strategy_spec.strategy_name.value} for {symbol}")
+
+
+async def train_model_task(ml_engine: HybridMLEngine, df: pd.DataFrame, symbol: str, model_type: str):
+    """Background task para entrenar modelo."""
+    try:
+        from app.services.hybrid_ml_engine import DeepModelConfig
+        
+        config = DeepModelConfig(model_type=model_type)
+        await ml_engine.train_deep_model(df, symbol, config=config)
+        print(f"Model training completed for {symbol}")
+    except Exception as e:
+        print(f"Error training model for {symbol}: {e}") 
