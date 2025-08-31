@@ -1,539 +1,436 @@
-# 🤖 GridBot Trading Platform
+# GridBot V2.5 - "Low-Risk, Predictive & Adaptive Grid"
 
-Una plataforma completa de trading automatizado que implementa estrategias avanzadas de trading algorítmico, incluyendo Grid Trading, DCA, Scalping y Machine Learning, diseñada para operar en el mercado de criptomonedas de Binance.
+## 🚀 Resumen Ejecutivo
 
-## 🚀 Características Principales
+GridBot V2.5 representa una evolución significativa del sistema de trading automatizado, introduciendo capacidades predictivas y adaptativas avanzadas. Esta versión implementa un enfoque de gestión de riesgos sofisticado con Kelly fraccional, predicción de régimen de mercado mediante machine learning híbrido, y selección automática de estrategias.
 
-### 📊 Trading Automatizado
-- **Grid Trading**: Estrategia de trading en rangos de precios con optimización automática
-- **DCA (Dollar Cost Averaging)**: Compra automática periódica con parámetros configurables
-- **Scalping**: Trading de alta frecuencia con gestión de riesgos
-- **RSI/MACD**: Indicadores técnicos integrados
-- **Trailing Stop**: Stop-loss dinámico basado en volatilidad
+## 🎯 Características Principales
 
-### 🧠 Machine Learning
-- **Motor ML**: River para aprendizaje incremental en tiempo real
-- **Predicción de Régimen**: Detección automática de mercados alcistas/bajistas
-- **Features Avanzadas**: Volatilidad, RSI, ATR, volumen, spread
-- **Adaptación Automática**: Ajuste dinámico de estrategias según condiciones de mercado
-- **Detección de Cambios**: ADWIN para detectar cambios de régimen
+### 🔒 Gestión de Riesgos Evolucionada
+- **Kelly Fraccional**: Cálculo dinámico de tamaño de posición basado en winrate y ratio ganancia/pérdida
+- **Trailing Stops Adaptativos**: Stops dinámicos basados en ATR (Average True Range)
+- **Circuit Breaker**: Sistema de protección automática con múltiples niveles
+- **Filtros de Régimen**: Ajuste automático de exposición según condiciones de mercado
 
-### 📈 Monitoreo y Análisis
-- **Dashboard en Tiempo Real**: Grafana con métricas avanzadas
-- **Métricas de Rendimiento**: ROI, Sharpe Ratio, Maximum Drawdown, Volatilidad
-- **Alertas Automáticas**: Telegram, Email, Slack
-- **Análisis de Riesgo**: Sistema integral de gestión de riesgos
-- **Reportes Detallados**: Exportación de datos y análisis histórico
+### 🤖 Machine Learning Híbrido
+- **Modelos Deep Learning**: LSTM y Transformer para predicción de régimen a largo plazo
+- **River ML**: Aprendizaje online para predicción a corto plazo
+- **Predicción de Régimen**: Identificación automática de condiciones de mercado (BULL, BEAR, RANGE, HIGH_VOL)
 
-### 🔒 Gestión de Riesgos
-- **Stop-Loss Automático**: Fijo y dinámico basado en volatilidad
-- **Position Sizing**: Tamaño de posición dinámico
-- **Límites de Exposición**: Por activo y portafolio completo
-- **Rebalanceo Automático**: Mantenimiento de saldos operativos
-- **Parada de Emergencia**: Activación manual/automática
+### 🎯 Selección Automática de Estrategias
+- **StrategySelector**: Selección inteligente basada en predicciones y estado de cuenta
+- **Estrategias Adaptativas**: Grid Trading, DCA, Scalping, Hedging según condiciones
+- **Parámetros Dinámicos**: Ajuste automático de parámetros según volatilidad y riesgo
 
-### 🌐 Escalabilidad
-- **Arquitectura Modular**: Componentes independientes y reutilizables
-- **Soporte Multi-Exchange**: Preparado para múltiples exchanges
-- **API Pública**: Documentación completa con OpenAPI/Swagger
-- **White-Label**: Soluciones personalizables para empresas
+### 📊 Backtesting Avanzado
+- **vectorbt**: Simulación de alta precisión con comisiones y slippage
+- **Walk-Forward Analysis**: Validación robusta con ventanas deslizantes
+- **Métricas Completas**: Sharpe, Sortino, Max Drawdown, Win Rate
 
-## 🏗️ Arquitectura
+### 🔗 Cliente Binance Mejorado
+- **Validación de Filtros**: Prevención de errores API con validación completa
+- **Rate Limiting**: Token bucket con backoff exponencial y jitter
+- **WebSocket**: Conexiones en tiempo real con fallback automático
+- **Métricas**: Monitoreo completo de latencia y errores
+
+## 🏗️ Arquitectura del Sistema
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   API Gateway   │    │   Trading       │
-│   (React)       │◄──►│   (Nginx)       │◄──►│   Engine        │
+│   HybridMLEngine│    │ StrategySelector│    │  RiskManager    │
+│                 │    │                 │    │                 │
+│ • LSTM/Transformer│  │ • Regime Analysis│   │ • Kelly Fractional│
+│ • River ML      │    │ • Strategy Logic │   │ • Trailing Stops │
+│ • Regime Predict│    │ • Dynamic Params │   │ • Circuit Breaker│
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   PostgreSQL    │    │   Redis         │    │   Celery        │
-│   (Database)    │◄──►│   (Cache)       │◄──►│   (Tasks)       │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Prometheus    │    │   Grafana       │    │   Alertmanager  │
-│   (Metrics)     │◄──►│   (Dashboards)  │◄──►│   (Alerts)      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │ BacktestingService│
+                    │                 │
+                    │ • vectorbt      │
+                    │ • Walk-Forward  │
+                    │ • Performance   │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │ BinanceClient   │
+                    │                 │
+                    │ • Validation    │
+                    │ • Rate Limiting │
+                    │ • WebSocket     │
+                    └─────────────────┘
 ```
 
-## 📋 Requisitos Previos
+## 📁 Estructura de Archivos
 
-- **Docker**: Versión 20.10 o superior
-- **Docker Compose**: Versión 2.0 o superior
-- **Git**: Para clonar el repositorio
-- **API Keys de Binance**: Para trading real
-- **Python 3.11+**: Para desarrollo local
+```
+app/
+├── core/
+│   └── risk_manager.py          # RiskManager evolucionado
+├── exchanges/
+│   ├── __init__.py
+│   ├── exceptions.py            # Excepciones personalizadas
+│   └── binance_client.py        # Cliente Binance mejorado
+├── services/
+│   ├── hybrid_ml_engine.py      # Motor ML híbrido
+│   ├── strategy_selector.py     # Selector de estrategias
+│   └── backtesting_service.py   # Servicio de backtesting
+└── api/
+    ├── risk_routes.py           # Endpoints de riesgo
+    └── strategy_routes.py       # Endpoints de estrategias
 
-## 🚀 Instalación Rápida
+tests/
+├── test_risk_manager_v2.py      # Tests del RiskManager
+└── test_strategy_selector.py    # Tests del StrategySelector
 
-### 1. Clonar el Repositorio
+scripts/
+└── test_v25_implementation.py   # Script de pruebas completo
+```
+
+## 🚀 Instalación y Configuración
+
+### Requisitos del Sistema
 ```bash
-git clone https://github.com/tu-usuario/grid-bot.git
-cd grid-bot
+Python 3.11+
+PostgreSQL 13+
+Redis 6+
+Docker & Docker Compose
 ```
 
-### 2. Configurar Variables de Entorno
+### Dependencias Principales
 ```bash
+pip install -r requirements.txt
+```
+
+Dependencias clave:
+- `fastapi>=0.104.0`
+- `pydantic>=2.0.0`
+- `tensorflow>=2.13.0`
+- `river>=0.20.0`
+- `vectorbt>=0.25.0`
+- `prometheus-client>=0.17.0`
+- `aiohttp>=3.8.0`
+- `websockets>=11.0.0`
+
+### Configuración del Entorno
+```bash
+# Copiar archivo de configuración
 cp env.example .env
-# Editar .env con tus API keys de Binance
+
+# Configurar variables de entorno
+BINANCE_API_KEY=your_api_key
+BINANCE_API_SECRET=your_api_secret
+BINANCE_TESTNET=true
+DATABASE_URL=postgresql://user:pass@localhost/gridbot
+REDIS_URL=redis://localhost:6379
 ```
 
-### 3. Iniciar con Script Automático
+## 🧪 Ejecución de Pruebas
+
+### Tests Unitarios
 ```bash
-./scripts/start.sh
+# Ejecutar todos los tests
+pytest tests/ -v
+
+# Tests específicos
+pytest tests/test_risk_manager_v2.py -v
+pytest tests/test_strategy_selector.py -v
 ```
 
-### 4. Acceder a la Plataforma
-- **API**: http://localhost:8000
-- **Grafana**: http://localhost:3000 (admin/gridbot123)
-- **Prometheus**: http://localhost:9090
-- **Flower**: http://localhost:5555
-- **Documentación API**: http://localhost:8000/docs
-
-## ⚙️ Configuración Manual
-
-### 1. Configurar Variables de Entorno
-Edita el archivo `.env` con tus credenciales:
-
+### Script de Pruebas Completo
 ```bash
-# Binance API Keys (OBLIGATORIO)
-BINANCE_API_KEY=tu_api_key_aqui
-BINANCE_SECRET_KEY=tu_secret_key_aqui
-
-# Telegram (OPCIONAL)
-TELEGRAM_BOT_TOKEN=tu_bot_token_aqui
-TELEGRAM_CHAT_ID=tu_chat_id_aqui
-
-# Seguridad
-SECRET_KEY=tu_secret_key_super_segura
-
-# Configuración de Trading
-PAPER_TRADING=false
-BINANCE_TESTNET=false
+# Ejecutar script de verificación V2.5
+python scripts/test_v25_implementation.py
 ```
 
-### 2. Construir e Iniciar Servicios
+### Cobertura de Tests
 ```bash
-# Construir imágenes
-docker-compose build
-
-# Iniciar servicios
-docker-compose up -d
-
-# Ver logs
-docker-compose logs -f
+pytest --cov=app tests/ --cov-report=html
 ```
 
-### 3. Verificar Instalación
-```bash
-# Verificar estado de servicios
-docker-compose ps
+## 📊 API Endpoints
 
-# Verificar API
-curl http://localhost:8000/health
-
-# Verificar base de datos
-docker-compose exec db psql -U griduser -d gridbot -c "SELECT version();"
-```
-
-## 📊 Monitoreo y Métricas
-
-### Prometheus
-- **URL**: http://localhost:9090
-- **Métricas**: Latencia, throughput, errores, métricas de trading
-- **Retención**: 200 horas de datos históricos
-
-### Grafana
-- **URL**: http://localhost:3000
-- **Usuario**: admin
-- **Contraseña**: gridbot123
-- **Dashboards**: 
-  - Trading Overview
-  - Performance Metrics
-  - Risk Management
-  - System Health
-
-### Alertas
-- **Telegram**: Alertas automáticas de trading y sistema
-- **Email**: Alertas de sistema (configurable)
-- **Slack**: Integración opcional
-
-## 🔧 Desarrollo
-
-### Estructura del Proyecto
-```
-grid-bot/
-├── app/                    # Código de la aplicación
-│   ├── api/               # Endpoints de la API (50+ endpoints)
-│   │   ├── trade.py       # Trading básico
-│   │   ├── strategies.py  # Estrategias múltiples
-│   │   ├── config_routes.py # Optimización de configuración
-│   │   ├── risk_routes.py # Gestión de riesgos
-│   │   ├── metrics_routes.py # Métricas y monitoreo
-│   │   └── commission_routes.py # Gestión de comisiones
-│   ├── core/              # Componentes core
-│   │   ├── optimized_grid_manager.py # Gestor principal de grid trading
-│   │   ├── risk_manager.py # Sistema de gestión de riesgos
-│   │   ├── commission_manager.py # Gestor de comisiones
-│   │   ├── metrics_manager.py # Gestor de métricas
-│   │   └── celery_app.py  # Configuración de tareas asíncronas
-│   ├── services/          # Servicios especializados
-│   │   ├── binance_service.py # Integración con Binance
-│   │   ├── auto_rebalancer.py # Rebalanceo automático
-│   │   ├── ml_engine.py   # Motor de machine learning
-│   │   ├── telegram_alert.py # Alertas por Telegram
-│   │   └── strategy_factory.py # Factory de estrategias
-│   ├── models/            # Modelos de base de datos
-│   ├── schemas/           # Esquemas Pydantic
-│   └── main.py           # Aplicación principal FastAPI
-├── docker/                # Configuración Docker
-├── scripts/               # Scripts de utilidad
-├── tests/                 # Tests automatizados
-└── docs/                  # Documentación
-```
-
-### Comandos de Desarrollo
-```bash
-# Ejecutar tests
-docker-compose exec api pytest
-
-# Ver logs en tiempo real
-docker-compose logs -f api
-
-# Acceder a la base de datos
-docker-compose exec db psql -U griduser -d gridbot
-
-# Reconstruir servicios
-docker-compose build --no-cache
-docker-compose up -d
-
-# Ejecutar migraciones
-docker-compose exec api alembic upgrade head
-```
-
-## 🧪 Testing
-
-### Ejecutar Tests
-```bash
-# Tests unitarios
-docker-compose exec api pytest tests/unit/
-
-# Tests de integración
-docker-compose exec api pytest tests/integration/
-
-# Tests completos con cobertura
-docker-compose exec api pytest --cov=app tests/
-
-# Tests de performance
-docker-compose exec api pytest tests/performance/
-```
-
-### Tests Disponibles
-- **Unit Tests**: Funciones individuales y componentes
-- **Integration Tests**: APIs y servicios
-- **E2E Tests**: Flujos completos de trading
-- **Performance Tests**: Carga y estrés
-- **Security Tests**: Validación de seguridad
-
-## 📈 APIs y Endpoints
-
-### Trading APIs
-```bash
-# Colocar orden
-POST /api/trade/order
-{
-    "symbol": "BTCUSDT",
-    "side": "BUY",
-    "quantity": 0.001,
-    "price": 45000.0
-}
-
-# Ejecutar grid trading
-POST /api/trade/run_grid
-{
-    "symbol": "BTCUSDT",
-    "min_price": 44000.0,
-    "max_price": 46000.0,
-    "grids": 10,
-    "quantity": 0.001
-}
-
-# Obtener balances
-GET /api/trade/balances
-
-# Obtener precio
-GET /api/trade/price/{symbol}
-```
-
-### Estrategias APIs
-```bash
-# Estrategias disponibles
-GET /api/v1/strategies/available
-
-# Crear estrategia
-POST /api/v1/strategies/create
-{
-    "symbol": "BTCUSDT",
-    "strategy_type": "DCA",
-    "investment_amount": 100.0,
-    "risk_tolerance": 0.5,
-    "frequency_hours": 24,
-    "max_investments": 10
-}
-
-# Ejecutar estrategia
-POST /api/v1/strategies/execute
-{
-    "strategy_id": "uuid",
-    "force": false
-}
-```
-
-### Configuración APIs
-```bash
-# Optimizar configuración
-POST /api/v1/config/optimize
-{
-    "symbol": "BTCUSDT",
-    "strategy": "grid_optimization",
-    "investment_amount": 100.0,
-    "risk_tolerance": 0.5,
-    "max_grids": 20,
-    "time_horizon": 7
-}
-
-# Análisis de mercado
-GET /api/v1/config/market-analysis/{symbol}
-```
-
-### Gestión de Riesgos APIs
+### Risk Management (v2)
 ```bash
 # Estado de riesgo
-GET /api/v1/risk/status
+GET /api/v2/risk/status
 
-# Parada de emergencia
-POST /api/v1/risk/emergency-stop
-{
-    "enabled": true,
-    "reason": "Mercado volátil"
+# Activar stop de emergencia
+POST /api/v2/risk/emergency-stop
+Body: {"reason": "string"}
+
+# Calcular tamaño de posición
+POST /api/v2/risk/calculate-position-size
+Body: {
+  "symbol": "BTCUSDT",
+  "account_equity": 10000.0,
+  "atr": 0.02,
+  "winrate_estimate": 0.6,
+  "avg_win_loss_ratio": 1.5,
+  "price": 50000.0
 }
 
-# Verificar portafolio
-GET /api/v1/risk/portfolio/check
-
-# Riesgo por activo
-GET /api/v1/risk/asset/{symbol}
-```
-
-### Métricas APIs
-```bash
-# Métricas de rentabilidad
-GET /api/v1/metrics/profitability
-
-# Resumen de métricas
-GET /api/v1/metrics/summary
-
-# Métricas por activo
-GET /api/v1/metrics/assets
-
-# Métricas Prometheus
-GET /api/v1/metrics/prometheus
-```
-
-### Comisiones APIs
-```bash
-# Tasas de comisión
-GET /api/v1/commissions/rates
-
-# Calcular comisión
-POST /api/v1/commissions/calculate
-{
-    "symbol": "BTCUSDT",
-    "quantity": 0.001,
-    "price": 45000.0,
-    "side": "BUY",
-    "order_type": "MARKET"
-}
-
-# Validar rentabilidad
-POST /api/v1/commissions/validate-profitability
-{
-    "symbol": "BTCUSDT",
-    "min_price": 44000.0,
-    "max_price": 46000.0,
-    "quantity": 0.001,
-    "num_levels": 10,
-    "min_profit_percentage": 0.5
+# Trailing stop adaptativo
+POST /api/v2/risk/calculate-trailing-stop
+Body: {
+  "symbol": "BTCUSDT",
+  "entry_price": 50000.0,
+  "atr": 1000.0,
+  "multiplier_atr": 2.0,
+  "is_long": true
 }
 ```
 
-## 🔒 Seguridad
-
-### Autenticación
-- **API Key**: Bearer token authentication
-- **Rate Limiting**: Límites por endpoint
-- **Input Validation**: Validación con Pydantic
-- **Error Sanitization**: Sanitización de errores
-
-### Manejo de Errores
-- **Error Handler**: Sistema centralizado
-- **Retry Logic**: Reintentos automáticos
-- **Graceful Degradation**: Degradación elegante
-- **Error Logging**: Logging estructurado
-
-### Monitoreo de Seguridad
-- **Audit Logs**: Logs de auditoría
-- **Access Control**: Control de acceso
-- **Data Encryption**: Encriptación de datos sensibles
-- **Backup Strategy**: Estrategia de respaldo
-
-## 📊 Performance y Escalabilidad
-
-### Optimizaciones
-- **Async/Await**: Programación asíncrona
-- **Connection Pooling**: Pool de conexiones
-- **Caching**: Cache en múltiples niveles
-- **Rate Limiting**: Control de velocidad
-
-### Métricas de Performance
-- **Response Time**: < 100ms para APIs
-- **Throughput**: 1000+ requests/segundo
-- **Uptime**: 99.9% disponibilidad
-- **Error Rate**: < 0.1% tasa de errores
-
-### Escalabilidad
-- **Horizontal Scaling**: Escalado horizontal
-- **Load Balancing**: Balanceo de carga
-- **Microservices**: Arquitectura de microservicios
-- **Auto-scaling**: Escalado automático
-
-## 📈 Roadmap
-
-### Fase 1: MVP (Q1 2025) ✅
-- [x] Sistema de grid trading básico
-- [x] Integración con Binance
-- [x] Dashboard básico
-- [x] Alertas por Telegram
-- [x] Gestión de riesgos básica
-- [x] Sistema de comisiones
-- [x] Rebalanceo automático
-
-### Fase 2: Mejoras Core (Q2 2025) 🚧
-- [x] Múltiples estrategias de trading (DCA, Scalping, RSI/MACD)
-- [x] Machine learning básico (River)
-- [x] API pública documentada
-- [x] Backtesting avanzado
-- [x] Optimización automática de parámetros
-- [x] Sistema de métricas avanzado
-
-### Fase 3: Escalabilidad (Q3 2025) 📋
-- [ ] Arquitectura multi-tenant
-- [ ] Multi-exchange support
-- [ ] Marketplace de estrategias
-- [ ] White-label solutions
-- [ ] Deep Learning integration
-- [ ] Reinforcement Learning
-
-### Fase 4: Enterprise (Q4 2025) 📋
-- [ ] Integraciones enterprise
-- [ ] Reporting avanzado
-- [ ] Compliance tools
-- [ ] Professional services
-- [ ] Advanced ML models
-- [ ] Real-time analytics
-
-## 🤝 Contribuir
-
-### 1. Fork el Proyecto
+### Estrategias Inteligentes (v2)
 ```bash
-git clone https://github.com/tu-usuario/grid-bot.git
-cd grid-bot
+# Ejecutar estrategia inteligente
+POST /api/v2/strategies/execute_intelligent
+Body: {
+  "symbol": "BTCUSDT",
+  "account_state": {...},
+  "paper_mode": true,
+  "quick_backtest": true
+}
+
+# Última decisión de estrategia
+GET /api/v2/strategies/last_decision?symbol=BTCUSDT
+
+# Ejecutar backtest
+POST /api/v2/strategies/backtest/run
+Body: {
+  "symbol": "BTCUSDT",
+  "strategy_spec": {...},
+  "start_date": "2024-01-01T00:00:00Z",
+  "end_date": "2024-01-31T23:59:59Z",
+  "initial_capital": 10000.0,
+  "walk_forward": true
+}
+
+# Estado de modelos ML
+GET /api/v2/strategies/ml/status?symbol=BTCUSDT
 ```
 
-### 2. Crear Rama de Feature
-```bash
-git checkout -b feature/nueva-funcionalidad
+## 🔧 Configuración Avanzada
+
+### RiskManager
+```python
+from app.core.risk_manager import RiskManager
+
+# Configuración personalizada
+risk_manager = RiskManager()
+risk_manager.fractional_kelly = 0.25  # 25% de Kelly
+risk_manager.min_kelly_confidence = 0.6
+risk_manager.default_multiplier_atr = 2.0
 ```
 
-### 3. Hacer Cambios
-```bash
-# Hacer cambios en el código
-# Agregar tests
-# Actualizar documentación
+### HybridMLEngine
+```python
+from app.services.hybrid_ml_engine import HybridMLEngine, DeepModelConfig
+
+# Configuración de modelo deep learning
+config = DeepModelConfig(
+    model_type="LSTM",
+    sequence_length=60,
+    hidden_units=128,
+    epochs=100
+)
+
+ml_engine = HybridMLEngine()
+await ml_engine.train_deep_model(df, "BTCUSDT", config=config)
 ```
 
-### 4. Commit y Push
-```bash
-git add .
-git commit -m "feat: agregar nueva funcionalidad"
-git push origin feature/nueva-funcionalidad
+### StrategySelector
+```python
+from app.services.strategy_selector import StrategySelector
+
+# Configuración de estrategias
+selector = StrategySelector(risk_manager)
+
+# Selección automática
+strategy_spec = selector.select_strategy(
+    regime_prediction, "BTCUSDT", account_state
+)
 ```
 
-### 5. Crear Pull Request
-- Describir cambios realizados
-- Incluir tests si aplica
-- Actualizar documentación
+## 📈 Métricas y Monitoreo
 
-## 📝 Licencia
+### Métricas Prometheus
+```yaml
+# Métricas de riesgo
+kelly_fraction_used{symbol="BTCUSDT"}
+position_size_usdt{symbol="BTCUSDT", strategy="dynamic"}
+daily_loss_pct{symbol="BTCUSDT"}
+total_exposure_pct{symbol="BTCUSDT"}
+circuit_breaker_triggered{reason="daily_loss_limit"}
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+# Métricas de ML
+regime_predictions_total{symbol="BTCUSDT", long="BULL_TREND", short="RANGE"}
+regime_confidence{symbol="BTCUSDT", horizon="long"}
+model_accuracy{model_type="deep", symbol="BTCUSDT"}
 
-## 🆘 Soporte
+# Métricas de ejecución
+orders_rejected_total{reason="price_below_min", symbol="BTCUSDT"}
+api_rate_limit_hits_total{endpoint="order"}
+ws_lag_ms{symbol="BTCUSDT", type="bookTicker"}
+```
 
-### Documentación
-- [PRD - Product Requirements Document](PRD.md)
-- [RFC - Request for Comments](RFC.md)
-- [Guía de Usuario](docs/USER_GUIDE.md)
-- [API Documentation](http://localhost:8000/docs)
-- [Deployment Guide](docs/DEPLOYMENT.md)
+### Dashboards Grafana
+- **Risk & Guardrails**: Exposición, drawdown, breaker state
+- **Execution Health**: Latencia WebSocket, rechazos, rate limits
+- **ML Performance**: Precisión de modelos, predicciones de régimen
+- **Strategy Performance**: Rendimiento por estrategia y símbolo
 
-### Comunidad
-- [Issues](https://github.com/tu-usuario/grid-bot/issues)
-- [Discussions](https://github.com/tu-usuario/grid-bot/discussions)
-- [Telegram Group](https://t.me/gridbot_community)
+## 🔒 Seguridad y Mejores Prácticas
 
-### Soporte Técnico
+### Gestión de Credenciales
+```bash
+# Usar secrets manager en producción
+export BINANCE_API_KEY=$(aws secretsmanager get-secret-value --secret-id binance-api-key --query SecretString --output text)
+export BINANCE_API_SECRET=$(aws secretsmanager get-secret-value --secret-id binance-api-secret --query SecretString --output text)
+```
+
+### Validación de Entrada
+- Todos los endpoints validan entrada con Pydantic
+- Validación de filtros de Binance antes de enviar órdenes
+- Rate limiting automático para prevenir abuso
+
+### Logging y Auditoría
+```python
+import logging
+
+# Configuración de logging estructurado
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+```
+
+## 🚀 Deployment
+
+### Docker Compose
+```yaml
+version: '3.8'
+services:
+  gridbot:
+    build: .
+    environment:
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - prometheus
+      - grafana
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: gridbot
+      POSTGRES_USER: gridbot
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+  redis:
+    image: redis:6-alpine
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+```
+
+### Kubernetes
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gridbot
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gridbot
+  template:
+    metadata:
+      labels:
+        app: gridbot
+    spec:
+      containers:
+      - name: gridbot
+        image: gridbot:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: BINANCE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: binance-secrets
+              key: api-key
+```
+
+## 📚 Documentación Adicional
+
+### Guías de Usuario
+- [Guía de Inicio Rápido](Docs/GUIA_USUARIO_PRINCIPIANTE.md)
+- [Configuración Avanzada](Docs/CONFIGURACION_OPTIMIZADA_391USDT.md)
+- [Monitoreo y Alertas](Docs/MONITORING_GUIDE.md)
+
+### Análisis Técnico
+- [Mejores Prácticas](Docs/ANALISIS_BEST_PRACTICES_OPTIMIZACION.md)
+- [Análisis de Errores](Docs/ANALISIS_ERRORES_SOLUCIONADOS.md)
+- [Implementación Binance](Docs/BINANCE_API_ANALISIS_IMPLEMENTACION.md)
+
+### Reportes de Estado
+- [Estado Actual](Docs/ESTADO_ACTUAL_Y_MEJORAS.md)
+- [Reporte de Deployment](Docs/DEPLOYMENT_VERIFICATION_REPORT.md)
+- [Verificación Final](Docs/VERIFICACION_FINAL_SISTEMA.md)
+
+## 🤝 Contribución
+
+### Estándares de Código
+- Python 3.11+ con type hints
+- Pydantic para validación de datos
+- Tests unitarios con pytest
+- Documentación con docstrings
+
+### Proceso de Desarrollo
+1. Fork del repositorio
+2. Crear feature branch
+3. Implementar cambios con tests
+4. Ejecutar script de pruebas V2.5
+5. Crear Pull Request
+
+### Checklist de PR
+- [ ] Tests unitarios > 85% cobertura
+- [ ] Tests de integración pasando
+- [ ] Documentación actualizada
+- [ ] Métricas Prometheus agregadas
+- [ ] Validación de entrada implementada
+
+## 📞 Soporte
+
+### Canales de Soporte
+- **Issues**: GitHub Issues para bugs y feature requests
+- **Discussions**: GitHub Discussions para preguntas generales
+- **Documentación**: Wiki del proyecto para guías detalladas
+
+### Contacto
 - **Email**: support@gridbot.com
 - **Telegram**: @gridbot_support
-- **Discord**: [GridBot Community](https://discord.gg/gridbot)
-
-## ⚠️ Disclaimer
-
-Este software es para fines educativos y de investigación. El trading de criptomonedas conlleva riesgos significativos. No garantizamos ganancias y no somos responsables de pérdidas financieras. Usa este software bajo tu propia responsabilidad.
-
-## 📊 Estado del Proyecto
-
-### Métricas Actuales
-- **Versión**: 2.0.0
-- **Endpoints API**: 50+
-- **Estrategias**: 4 (Grid, DCA, Scalping, RSI/MACD)
-- **Servicios**: 15+
-- **Tests**: 100+ casos
-- **Cobertura**: >90%
-
-### Funcionalidades Implementadas
-- ✅ Grid Trading Automatizado
-- ✅ Gestión de Riesgos Integral
-- ✅ Machine Learning con River
-- ✅ Sistema de Comisiones
-- ✅ Rebalanceo Automático
-- ✅ Monitoreo con Prometheus/Grafana
-- ✅ Alertas por Telegram
-- ✅ API REST Completa
-- ✅ Documentación Automática
-- ✅ Tests Automatizados
-- ✅ Docker Compose
-- ✅ Logging Estructurado
-- ✅ Rate Limiting
-- ✅ Validación de Input
-- ✅ Manejo de Errores
+- **Discord**: GridBot Community
 
 ---
 
-**Desarrollado con ❤️ por el equipo GridBot**
+## 🎉 Conclusión
 
-**Última actualización**: Enero 2025  
-**Versión**: 2.0.0
+GridBot V2.5 representa un salto significativo en la automatización de trading, combinando gestión de riesgos sofisticada con machine learning predictivo y selección automática de estrategias. El sistema está diseñado para ser robusto, escalable y fácil de mantener, proporcionando una base sólida para el trading automatizado de alta frecuencia.
+
+**¡Bienvenido al futuro del trading automatizado! 🚀**

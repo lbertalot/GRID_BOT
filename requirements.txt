@@ -1,7 +1,7 @@
 # FastAPI y servidor web
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+python-multipart==0.0.7
 
 # Base de datos y ORM
 SQLAlchemy==2.0.23
@@ -14,9 +14,9 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
 
-# Trading y exchanges
+# Trading y exchanges (ambas librerías para máxima compatibilidad)
 python-binance==1.0.19
-# Alternativa más robusta para WebSocket: unicorn-binance-websocket-api==1.45.0
+unicorn-binance-websocket-api==1.45.0
 ccxt==4.1.77
 
 # Scheduler y tareas asíncronas
@@ -30,6 +30,12 @@ numpy==1.24.3
 pandas==2.1.4
 scikit-learn==1.3.2
 scipy==1.11.4
+
+# Deep Learning y ML avanzado (versiones compatibles)
+tensorflow==2.15.0
+river==0.21.0
+vectorbt==0.26.0
+keras==2.15.0
 
 # Monitoreo y métricas
 prometheus-client==0.19.0
@@ -51,5 +57,5 @@ requests>=2.32.4
 websockets==10.4
 
 # Dependencias adicionales para mejoras de rendimiento y seguridad
-cryptography>=45.0.4
+cryptography>=41.0.7
 bcrypt==4.1.2
