@@ -379,19 +379,17 @@ spec:
 ## 📚 Documentación Adicional
 
 ### Guías de Usuario
-- [Guía de Inicio Rápido](Docs/GUIA_USUARIO_PRINCIPIANTE.md)
-- [Configuración Avanzada](Docs/CONFIGURACION_OPTIMIZADA_391USDT.md)
+- [Guía de Deployment](Docs/DEPLOYMENT_GUIDE.md)
+- [Configuración de Binance](Docs/BINANCE_SETUP_GUIDE.md)
 - [Monitoreo y Alertas](Docs/MONITORING_GUIDE.md)
 
-### Análisis Técnico
-- [Mejores Prácticas](Docs/ANALISIS_BEST_PRACTICES_OPTIMIZACION.md)
-- [Análisis de Errores](Docs/ANALISIS_ERRORES_SOLUCIONADOS.md)
-- [Implementación Binance](Docs/BINANCE_API_ANALISIS_IMPLEMENTACION.md)
+### Documentación Técnica
+- [Verificación de Tests](Docs/VERIFICACION_TESTS_FINAL.md)
+- [Resumen de Actualizaciones](Docs/RESUMEN_FINAL_ACTUALIZACION.md)
+- [Comandos Rápidos](Docs/QUICK_COMMANDS.md)
 
-### Reportes de Estado
-- [Estado Actual](Docs/ESTADO_ACTUAL_Y_MEJORAS.md)
-- [Reporte de Deployment](Docs/DEPLOYMENT_VERIFICATION_REPORT.md)
-- [Verificación Final](Docs/VERIFICACION_FINAL_SISTEMA.md)
+### Índice de Documentación
+- [Índice Completo](Docs/INDEX_DOCUMENTACION.md)
 
 ## 🤝 Contribución
 
