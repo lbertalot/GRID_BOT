@@ -230,6 +230,9 @@ class OptimizedGridManager:
             if not self.client:
                 return {}
             
+            # Filtrar símbolos válidos (excluir metadatos)
+            valid_symbols = [s for s in symbols if not s.startswith('_')]
+            
             # Consultas concurrentes con caché/TTL para minimizar latencia y presión a la API
             results: Dict[str, float] = {}
             async def _fetch(sym: str):
@@ -240,7 +243,7 @@ class OptimizedGridManager:
                     price = 0.0
                 results[sym] = price
 
-            await asyncio.gather(*[_fetch(s) for s in symbols])
+            await asyncio.gather(*[_fetch(s) for s in valid_symbols])
             return results
         except Exception as e:
             logger.error(f"Error obteniendo precios: {e}")
@@ -956,7 +959,7 @@ async def create_optimized_grid_manager(config_file: str) -> Optional[OptimizedG
         
         assets = {}
         for symbol, data in config_data.items():
-            if symbol != "_optimization_metadata":
+            if symbol not in ["_optimization_metadata", "_emergency_metadata", "_consolidated_metadata"]:
                 assets[symbol] = AssetConfig(**data)
         
         grid_config = GridManagerConfig(

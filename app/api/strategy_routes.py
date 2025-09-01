@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+import pandas as pd
 
 from app.core.risk_manager import RiskManager, MarketRegime, RegimePrediction
 from app.services.hybrid_ml_engine import HybridMLEngine
@@ -95,7 +96,6 @@ async def execute_intelligent_strategy(
         }
         
         # Mock recent data
-        import pandas as pd
         mock_data = pd.DataFrame({
             'close': [100.0] * 60,
             'volume': [1000000.0] * 60,
@@ -396,9 +396,9 @@ async def train_ml_model(
     symbol: str,
     start_date: datetime,
     end_date: datetime,
-    model_type: str = "LSTM",
     background_tasks: BackgroundTasks,
-    ml_engine: HybridMLEngine = Depends(get_ml_engine)
+    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    model_type: str = "LSTM"
 ) -> Dict[str, Any]:
     """
     Entrena modelo de ML para un símbolo.

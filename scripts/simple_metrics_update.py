@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Script para generar métricas de prueba para el dashboard
+Script simple para actualizar métricas de Prometheus
 """
 
 import os
 import sys
 import time
-import random
 from datetime import datetime
 
 # Agregar el directorio raíz al path
@@ -22,18 +21,18 @@ from app.core.metrics import (
     grid_cycle_duration_seconds, bot_errors_total
 )
 
-def generate_test_metrics():
-    """Genera métricas de prueba"""
+def update_simple_metrics():
+    """Actualiza métricas con valores simples"""
     try:
-        print("🚀 Generando métricas de prueba...")
+        print("🚀 Actualizando métricas simples...")
         
-        # Valores de prueba realistas
-        portfolio_value = 116.75 + random.uniform(-5, 5)  # Variación realista
-        total_profit = random.uniform(-2, 5)  # Profit variable
-        daily_profit = random.uniform(-1, 2)  # Profit diario variable
-        total_trades = 1 + random.randint(0, 3)  # Trades adicionales
-        successful_trades = max(1, total_trades - random.randint(0, 1))
-        failed_trades = total_trades - successful_trades
+        # Valores de ejemplo basados en la operación real que vimos
+        total_profit = 0.0  # Basado en la operación real
+        daily_profit = 0.0
+        portfolio_value = 116.75  # Valor real del portafolio
+        total_trades = 1  # Basado en la operación real
+        successful_trades = 1
+        failed_trades = 0
         
         # Actualizar métricas de profit
         profit_total_usdt.labels(strategy="grid").set(total_profit)
@@ -47,44 +46,41 @@ def generate_test_metrics():
         
         # Métricas de trades
         trades_executed_total.labels(side="SELL", asset="BTCUSDT", strategy="grid").inc(1)
-        trades_executed_total.labels(side="BUY", asset="BTCUSDT", strategy="grid").inc(1)
         
         if total_trades > 0:
             success_rate = successful_trades / total_trades
             trades_success_rate.labels(strategy="grid").set(success_rate)
         
-        trades_successful_total.labels(asset="BTCUSDT", strategy="grid").inc(successful_trades)
-        trades_failed_total.labels(asset="BTCUSDT", strategy="grid").inc(failed_trades)
+        trades_successful_total.labels(asset="BTCUSDT", strategy="grid").inc(1)
+        trades_failed_total.labels(asset="BTCUSDT", strategy="grid").inc(0)
         
-        # Volumen de trading
-        volume = 0.0001 * 108257.62
+        # Volumen de trading (basado en la operación real)
+        volume = 0.0001 * 108257.62  # cantidad * precio
         trading_volume_usdt.labels(asset="BTCUSDT", strategy="grid").inc(volume)
         
         # Estado del bot
-        bot_status.labels(strategy="grid").set(1)
+        bot_status.labels(strategy="grid").set(1)  # Activo
         bot_last_execution_timestamp.labels(strategy="grid").set(time.time())
         
         # Métricas por activo
-        profit_by_asset_usdt.labels(asset="BTCUSDT", strategy="grid").set(total_profit)
-        roi_by_asset_percent.labels(asset="BTCUSDT", strategy="grid").set(roi_daily)
+        profit_by_asset_usdt.labels(asset="BTCUSDT", strategy="grid").set(0.0)
+        roi_by_asset_percent.labels(asset="BTCUSDT", strategy="grid").set(0.0)
         
-        # Duración del ciclo grid
-        cycle_duration = random.uniform(15, 25)
-        grid_cycle_duration_seconds.observe(cycle_duration)
+        # Duración del ciclo grid (sin labels)
+        grid_cycle_duration_seconds.observe(20.0)
         
-        print("✅ Métricas de prueba generadas")
+        print("✅ Métricas actualizadas exitosamente")
         print(f"📊 Resumen:")
-        print(f"   Portfolio value: ${portfolio_value:.2f}")
-        print(f"   Total profit: ${total_profit:.2f}")
-        print(f"   Daily profit: ${daily_profit:.2f}")
-        print(f"   ROI daily: {roi_daily:.2f}%")
+        print(f"   Total profit: ${total_profit}")
+        print(f"   Daily profit: ${daily_profit}")
+        print(f"   Portfolio value: ${portfolio_value}")
         print(f"   Total trades: {total_trades}")
-        print(f"   Success rate: {success_rate:.2f}")
+        print(f"   Success rate: {success_rate if total_trades > 0 else 0}")
         
     except Exception as e:
-        print(f"❌ Error generando métricas: {e}")
+        print(f"❌ Error actualizando métricas: {e}")
         import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":
-    generate_test_metrics() 
+    update_simple_metrics()

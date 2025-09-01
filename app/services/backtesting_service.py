@@ -12,7 +12,23 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import asyncio
 
-import vectorbt as vbt
+# Configurar numba antes de importar vectorbt
+os.environ['NUMBA_DISABLE_CACHE'] = '1'
+os.environ['NUMBA_CACHE_DIR'] = '/dev/null'
+
+try:
+    import vectorbt as vbt
+    print("✅ VectorBT importado correctamente")
+except Exception as e:
+    print(f"❌ Error importando VectorBT: {e}")
+    # Crear un mock de vectorbt para evitar errores
+    class MockVectorBT:
+        class Portfolio:
+            pass
+        class PortfolioStats:
+            pass
+    vbt = MockVectorBT()
+
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge
 

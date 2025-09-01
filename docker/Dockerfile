@@ -26,16 +26,29 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Configurar numba para evitar problemas de cache en Docker
+ENV NUMBA_CACHE_DIR=/tmp/numba_cache
+ENV NUMBA_DISABLE_JIT=0
+ENV NUMBA_DISABLE_CUDA=1
+ENV NUMBA_DISABLE_NVVM=1
+ENV NUMBA_DISABLE_LLVM=0
+# Deshabilitar cache de numba para evitar problemas con vectorbt
+ENV NUMBA_DISABLE_CACHE=1
+ENV NUMBA_CACHE_DIR=/dev/null
+
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
+
+# Crear directorio de cache de numba
+RUN mkdir -p /tmp/numba_cache && chmod 777 /tmp/numba_cache
 
 # Copiar código de la aplicación
 COPY . .
 
 # Crear directorios necesarios
 RUN mkdir -p /app/logs /app/data /app/cache /app/static && \
-    chown -R gridbot:gridbot /app
+    chown -R gridbot:gridbot /app /tmp/numba_cache
 
 # Cambiar al usuario no-root
 USER gridbot

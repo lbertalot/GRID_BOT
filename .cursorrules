@@ -60,4 +60,40 @@
      - Structure routes and dependencies clearly to optimize readability and maintainability.
   
   Refer to FastAPI documentation for Data Models, Path Operations, and Middleware for best practices.
-  
+  # Reglas maestras para GridBot v2.5 – "Fortaleza Adaptativa"
+
+## Contexto y objetivo
+Este repositorio contiene GridBot (FastAPI + Celery) enfocado en automatizar trading algorítmico con bajo riesgo.
+- Refactorización a versión 2.5
+- Implementar defensas, sizing adaptativo (Kelly Fraccional), ML predictivo, observabilidad robusta.
+- Stack: Python 3.11, FastAPI, async DB, Celery, Prometheus/Grafana, Docker.
+
+## Principios clave
+- Defensa primero: cada orden debe validar filtros (PRICE_FILTER, LOT_SIZE, MIN_NOTIONAL) usando `exchange_info`.
+- Adaptabilidad a mercado: sizing y estrategias varían según volatilidad (ATR) y régimen detectado por ML.
+- Sizing como ciencia: Kelly Fraccional calculado con límites duros definidos.
+- Observabilidad total: métricas por orden, lag, slippage, exposición, drawdown, breaker, etc.
+
+## Estilo y estructura de código
+- Prefiere funciones puras sobre clases cuando sea posible. Usa async def para I/O.
+- Modelo RORO (“receive object, return object”), tipado con Pydantic v2.
+- Estructura clara de directorios: routers, services, core, models/schemas, configs.
+- API en FastAPI con validación automática, excepciones HTTP, middleware para logging.
+- Manejo de errores anticipado (guard clauses, early returns, error factories).
+
+## Reglas de desarrollo
+- Validación de entradas ante todo; usa Pydantic para inputs/outputs en endpoints.
+- Usar middleware para capturar errores no esperados y registrar métricas centralizadas.
+- Excluir lógica síncrona en rutas; directorio limpio en `routers/` para rutas, `models/` para esquemas.
+- Key decisions logged (regime prediction, chosen strategy, sizing calculado).
+- Documentar con docstrings y ejemplos; respaldar con tests unitarios e integración, y cobertura > 85%.
+
+## Ejemplos de prácticas correctas
+```python
+# Tipo de route
+@router.post("/trade", response_model=TradeResponse)
+async def execute_trade(request: TradeRequest):
+    if not validator.validate_order(request):  # guard clause
+        raise HTTPException(status_code=400, detail="Invalid order parameters")
+    size = position_sizer.calculate_size_pct(request.symbol, account_equity, win_rate, payoff)
+    return {"order_size": size}

@@ -127,18 +127,24 @@ class StrategySelector:
             }
         }
         
-        # Métricas
-        self.strategy_selections = Counter(
-            'strategy_selections_total',
-            'Total strategy selections',
-            ['strategy', 'regime', 'volatility']
-        )
-        
-        self.strategy_confidence = Gauge(
-            'strategy_confidence',
-            'Strategy selection confidence',
-            ['strategy', 'regime']
-        )
+        # Métricas - usar try/except para evitar duplicación
+        try:
+            self.strategy_selections = Counter(
+                'strategy_selections_total',
+                'Total strategy selections',
+                ['strategy', 'regime', 'volatility']
+            )
+            
+            self.strategy_confidence = Gauge(
+                'strategy_confidence',
+                'Strategy selection confidence',
+                ['strategy', 'regime']
+            )
+        except ValueError:
+            # Si las métricas ya están registradas, usar las existentes
+            from prometheus_client import REGISTRY
+            self.strategy_selections = REGISTRY.get_sample_value('strategy_selections_total')
+            self.strategy_confidence = REGISTRY.get_sample_value('strategy_confidence')
         
         self.logger = logging.getLogger(__name__)
     

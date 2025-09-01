@@ -37,7 +37,7 @@ class BinanceClientSingleton:
             load_dotenv()
             
             api_key = os.getenv("BINANCE_API_KEY")
-            api_secret = os.getenv("BINANCE_SECRET_KEY")
+            api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
             testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
             
             if not api_key or not api_secret:
@@ -73,11 +73,15 @@ class BinanceClientSingleton:
             raise
     
     @property
-    def client(self) -> Client:
+    def client(self) -> Optional[Client]:
         """Retorna el cliente Binance inicializado"""
-        if self._client is None:
-            self._initialize_client()
-        return self._client
+        try:
+            if self._client is None:
+                self._initialize_client()
+            return self._client
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo cliente: {e}")
+            return None
     
     def get_account_info(self):
         """Obtiene información de la cuenta"""
@@ -153,5 +157,26 @@ class BinanceClientSingleton:
         """Obtiene información de un símbolo"""
         return self.client.get_symbol_info(symbol)
 
-# Instancia global
-binance_client_singleton = BinanceClientSingleton() 
+# Instancia global - inicialización lazy
+binance_client_singleton = None
+
+def get_binance_client_singleton():
+    """Obtiene la instancia singleton del cliente Binance con inicialización lazy"""
+    global binance_client_singleton
+    if binance_client_singleton is None:
+        try:
+            binance_client_singleton = BinanceClientSingleton()
+        except Exception as e:
+            logger.warning(f"No se pudo inicializar el cliente Binance: {e}")
+            # Crear una instancia dummy para evitar errores
+            binance_client_singleton = BinanceClientSingleton.__new__(BinanceClientSingleton)
+            binance_client_singleton._client = None
+            binance_client_singleton._initialized = True
+    return binance_client_singleton
+
+# Inicializar la instancia global
+try:
+    binance_client_singleton = get_binance_client_singleton()
+except Exception as e:
+    logger.error(f"Error inicializando singleton global: {e}")
+    binance_client_singleton = None 

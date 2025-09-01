@@ -349,6 +349,9 @@ class TradingMetrics:
         self.daily_profit_start = 0.0
         self.daily_profit_current = 0.0
         self.portfolio_initial_value = 0.0
+        # Referencias a métricas globales
+        self.trades_executed_total = trades_executed_total
+        self.trades_success_rate = trades_success_rate
         
     def update_profit_metrics(self, 
                             total_profit: float,

@@ -38,8 +38,8 @@ class AutoRebalancer:
         self.rebalance_frequency = 3600  # segundos (1 hora)
         
         # Usar cliente Binance Singleton
-        from app.services.binance_client_singleton import binance_client_singleton
-        self.binance_client = binance_client_singleton.client
+        from app.services.binance_client_singleton import get_binance_client_singleton
+        self.binance_client = get_binance_client_singleton().client
         # Si PAPER_TRADING está activo, avisar y evitar órdenes reales en otros métodos
         self.paper_trading = settings.paper_trading
         self.is_rebalancing = False

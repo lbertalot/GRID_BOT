@@ -16,25 +16,13 @@ router = APIRouter()
 async def prometheus_metrics():
     """Endpoint principal para métricas de Prometheus"""
     try:
-        # Ejecutar el script de generación de métricas
-        result = subprocess.run([
-            "python3", "/app/scripts/generate_profitability_metrics.py"
-        ], capture_output=True, text=True, cwd="/app")
+        # Generar métricas de Prometheus directamente
+        metrics_content = generate_latest()
         
-        if result.returncode != 0:
-            return {"error": f"Error ejecutando script: {result.stderr}"}
-        
-        # Leer las métricas generadas
-        try:
-            with open("/app/gridbot_profitability_metrics.txt", "r") as f:
-                metrics_content = f.read()
-            
-            return Response(
-                content=metrics_content,
-                media_type="text/plain"
-            )
-        except FileNotFoundError:
-            return {"error": "Archivo de métricas no encontrado"}
+        return Response(
+            content=metrics_content,
+            media_type="text/plain"
+        )
         
     except Exception as e:
         return {"error": f"Error generando métricas: {str(e)}"}
@@ -72,25 +60,13 @@ async def prometheus_strategy_metrics():
 async def prometheus_pnl_metrics():
     """Métricas de P&L para Prometheus (sin autenticación)"""
     try:
-        # Ejecutar el script de generación de métricas
-        result = subprocess.run([
-            "python3", "/app/generate_pnl_metrics.py"
-        ], capture_output=True, text=True, cwd="/app")
+        # Generar métricas de Prometheus directamente
+        metrics_content = generate_latest()
         
-        if result.returncode != 0:
-            return {"error": f"Error ejecutando script: {result.stderr}"}
-        
-        # Leer las métricas generadas
-        try:
-            with open("/app/gridbot_pnl_metrics.txt", "r") as f:
-                metrics_content = f.read()
-            
-            return Response(
-                content=metrics_content,
-                media_type="text/plain"
-            )
-        except FileNotFoundError:
-            return {"error": "Archivo de métricas no encontrado"}
+        return Response(
+            content=metrics_content,
+            media_type="text/plain"
+        )
         
     except Exception as e:
         return {"error": f"Error generando métricas: {str(e)}"}

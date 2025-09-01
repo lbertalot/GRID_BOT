@@ -83,9 +83,9 @@ class MetricsService:
         Obtiene los balances actuales de Binance usando Singleton
         """
         try:
-            from app.services.binance_client_singleton import binance_client_singleton
+            from app.services.binance_client_singleton import get_binance_client_singleton
             
-            balances = binance_client_singleton.get_balances()
+            balances = get_binance_client_singleton().get_balances()
             return balances
             
         except Exception as e:
@@ -108,8 +108,8 @@ class MetricsService:
                         if asset in ['BTC', 'ETH', 'BNB']:
                             symbol = f"{asset}USDT"
                             try:
-                                from app.services.binance_client_singleton import binance_client_singleton
-                                price = binance_client_singleton.get_symbol_price(symbol)
+                                from app.services.binance_client_singleton import get_binance_client_singleton
+                                price = get_binance_client_singleton().get_symbol_price(symbol)
                                 asset_value = amount * price
                                 total_value += asset_value
                             except Exception as e:
