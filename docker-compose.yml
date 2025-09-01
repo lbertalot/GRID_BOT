@@ -1,5 +1,3 @@
-#version: '3.8'
-
 services:
   # Base de datos principal con configuración mejorada
   db:
@@ -46,7 +44,7 @@ services:
     networks:
       - gridbot_network
 
-  # API principal con todas las mejoras
+  # API principal con todas las mejoras y configuración unificada
   api:
     build:
       context: .
@@ -73,18 +71,27 @@ services:
       - DOCKER_ENV=true
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - WEBSOCKET_ADVANCED=false
+      - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
       - BINANCE_TESTNET=false
+      # Configuración de Numba para evitar problemas de cache en Docker
+      - NUMBA_CACHE_DIR=/dev/null
+      - NUMBA_DISABLE_JIT=0
+      - NUMBA_DISABLE_CUDA=1
+      - NUMBA_DISABLE_NVVM=1
+      - NUMBA_DISABLE_CACHE=1
     volumes:
       - ./app:/app/app
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+      - ./.venv:/app/.venv
+      - numba_cache:/tmp/numba_cache
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --workers 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -114,15 +121,16 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
-      - WEBSOCKET_ADVANCED=false
+      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
+      - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
       - BINANCE_TESTNET=false
     volumes:
       - ./app:/app/app
-      - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
+      - ./.venv:/app/.venv
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
     healthcheck:
       test: ["CMD", "celery", "-A", "app.core.celery_app", "inspect", "ping"]
@@ -153,10 +161,11 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
     volumes:
       - ./app:/app/app
-      - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
+      - ./.venv:/app/.venv
     command: celery -A app.core.celery_app beat --loglevel=info
     networks:
       - gridbot_network
@@ -178,6 +187,8 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./.venv:/app/.venv
     command: celery -A app.core.celery_app flower --port=5555
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5555"]
@@ -261,7 +272,7 @@ services:
     networks:
       - gridbot_network
 
-  # Nginx como proxy reverso
+  # Nginx como proxy reverso (opcional para producción)
   nginx:
     image: nginx:alpine
     container_name: gridbot_nginx
@@ -276,6 +287,8 @@ services:
       - api
     networks:
       - gridbot_network
+    profiles:
+      - production
 
 volumes:
   pgdata:
@@ -283,6 +296,7 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  numba_cache:
 
 networks:
   gridbot_network:

@@ -11,7 +11,7 @@ import logging
 
 from app.core.optimized_grid_manager import OptimizedGridManager, create_optimized_grid_manager
 from app.services.telegram_alert import send_telegram_alert
-from app.services.auto_rebalancer import auto_rebalancer
+# from app.services.auto_rebalancer import auto_rebalancer  # Comentado temporalmente
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -127,44 +127,44 @@ async def reload_configuration(
 
 
 # Rebalancer endpoints
-@router.post("/rebalancer/execute")
-async def execute_rebalance(request: RebalanceRequest = RebalanceRequest()):
-    """Execute rebalancing operation"""
-    try:
-        logger.info("🔄 Ejecutando rebalanceo manual")
-        
-        result = await auto_rebalancer.check_and_rebalance()
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error ejecutando rebalanceo: {e}")
-        raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo: {e}")
+# @router.post("/rebalancer/execute")
+# async def execute_rebalance(request: RebalanceRequest = RebalanceRequest()):
+#     """Execute rebalancing operation"""
+#     try:
+#         logger.info("🔄 Ejecutando rebalanceo manual")
+#         
+#         result = await auto_rebalancer.check_and_rebalance()
+#         return result
+#         
+#     except Exception as e:
+#         logger.error(f"Error ejecutando rebalanceo: {e}")
+#         raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo: {e}")
 
 
-@router.get("/rebalancer/status")
-async def get_rebalance_status():
-    """Get rebalancer status"""
-    try:
-        status = await auto_rebalancer.get_rebalance_status()
-        return status
-        
-    except Exception as e:
-        logger.error(f"Error obteniendo status de rebalanceo: {e}")
-        raise HTTPException(status_code=500, detail=f"Error obteniendo status: {e}")
+# @router.get("/rebalancer/status")
+# async def get_rebalance_status():
+#     """Get rebalancer status"""
+#     try:
+#         status = await auto_rebalancer.get_rebalance_status()
+#         return status
+#         
+#     except Exception as e:
+#         logger.error(f"Error obteniendo status de rebalanceo: {e}")
+#         raise HTTPException(status_code=500, detail=f"Error obteniendo status: {e}")
 
 
-@router.post("/rebalancer/manual/{symbol}")
-async def manual_rebalance(symbol: str, usdt_amount: float):
-    """Execute manual rebalancing for a specific symbol"""
-    try:
-        logger.info(f"Ejecutando rebalanceo manual para {symbol}: ${usdt_amount}")
-        
-        result = await auto_rebalancer.manual_rebalance(symbol, usdt_amount)
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error ejecutando rebalanceo manual para {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo manual: {e}")
+# @router.post("/rebalancer/manual/{symbol}")
+# async def manual_rebalance(symbol: str, usdt_amount: float):
+#     """Execute manual rebalancing for a specific symbol"""
+#     try:
+#         logger.info(f"Ejecutando rebalanceo manual para {symbol}: ${usdt_amount}")
+#         
+#         result = await auto_rebalancer.manual_rebalance(symbol, usdt_amount)
+#         return result
+#         
+#     except Exception as e:
+#         logger.error(f"Error ejecutando rebalanceo manual para {symbol}: {e}")
+#         raise HTTPException(status_code=500, detail=f"Error ejecutando rebalanceo manual: {e}")
 
 
 # Grid manager restart endpoint
