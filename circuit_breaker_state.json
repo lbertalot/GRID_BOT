@@ -1,0 +1,10 @@
+{
+  "is_open": false,
+  "reason": null,
+  "opened_at": null,
+  "daily_loss": 0.0,
+  "total_loss": 0.0,
+  "consecutive_losses": 0,
+  "hourly_loss": 0.0,
+  "last_reset": "2025-09-01T22:29:11.568718"
+}

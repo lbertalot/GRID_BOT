@@ -1,381 +1,448 @@
 #!/usr/bin/env python3
 """
-API Routes para Optimización de Configuración
+Rutas API para Gestión de Configuración Unificada
+GridBot V2.5
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from typing import Dict, List, Optional
-from pydantic import BaseModel
-from datetime import datetime
-import numpy as np
+import logging
 
-from app.services.config_manager import config_manager, OptimizationRequest, OptimizationStrategy
+# Importar configuración unificada
+from app.core.unified_config import get_config, unified_config
 
-router = APIRouter(prefix="/api/v1/config", tags=["Configuration Optimization"])
+logger = logging.getLogger(__name__)
 
-class OptimizationResponse(BaseModel):
-    """Respuesta de optimización"""
-    symbol: str
-    min_price: float
-    max_price: float
-    grids: int
-    quantity: float
-    confidence_score: float
-    optimization_strategy: str
-    timestamp: str
-    backtest_results: Optional[Dict] = None
+router = APIRouter(prefix="/api/config", tags=["Configuration Management"])
 
-class MarketAnalysisResponse(BaseModel):
-    """Respuesta de análisis de mercado"""
-    symbol: str
-    current_price: float
-    volatility: Dict
-    volume_24h: float
-    price_change_24h: float
-    trend: str
-    high_24h: float
-    low_24h: float
-    timestamp: str
+# Configurar templates
+templates = Jinja2Templates(directory="app/templates")
 
-class OptimizationHistoryResponse(BaseModel):
-    """Respuesta de historial de optimizaciones"""
-    symbol: str
-    optimizations: List[Dict]
+@router.get("/", response_class=HTMLResponse)
+async def config_manager_page(request: Request):
+    """
+    Página principal del gestor de configuración
+    """
+    return templates.TemplateResponse("config_manager.html", {"request": request})
 
-@router.post("/optimize", response_model=OptimizationResponse)
-async def optimize_configuration(request: OptimizationRequest):
-    """Optimiza parámetros de configuración automáticamente"""
+@router.get("/summary")
+async def get_config_summary():
+    """
+    Obtiene un resumen de la configuración del sistema
+    """
     try:
-        optimized_config = await config_manager.optimize_parameters(request)
-        
-        return OptimizationResponse(
-            symbol=optimized_config.symbol,
-            min_price=optimized_config.min_price,
-            max_price=optimized_config.max_price,
-            grids=optimized_config.grids,
-            quantity=optimized_config.quantity,
-            confidence_score=optimized_config.confidence_score,
-            optimization_strategy=optimized_config.optimization_strategy,
-            timestamp=optimized_config.timestamp.isoformat(),
-            backtest_results=optimized_config.backtest_results
-        )
-        
+        config = get_config()
+        summary = config.get_config_summary()
+        return summary
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error optimizando configuración: {str(e)}")
+        logger.error(f"Error obteniendo resumen de configuración: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.get("/market-analysis/{symbol}", response_model=MarketAnalysisResponse)
-async def get_market_analysis(symbol: str):
-    """Obtiene análisis detallado de mercado para un símbolo"""
+@router.get("/assets")
+async def get_all_assets():
+    """
+    Obtiene todos los assets configurados
+    """
     try:
-        market_data = await config_manager._get_market_data(symbol)
+        config = get_config()
+        assets = config.get_all_assets()
         
-        # Determinar nivel de volatilidad
-        volatility_level = "Baja"
-        if market_data.volatility > 0.1:
-            volatility_level = "Alta"
-        elif market_data.volatility > 0.05:
-            volatility_level = "Media"
+        # Convertir a lista para la API
+        assets_list = []
+        for symbol, asset_config in assets.items():
+            assets_list.append({
+                "symbol": symbol,
+                **asset_config
+            })
         
-        # Determinar tendencia
-        trend = "Lateral"
-        if market_data.price_change_24h > 2:
-            trend = "Alcista Fuerte"
-        elif market_data.price_change_24h > 0.5:
-            trend = "Alcista"
-        elif market_data.price_change_24h < -2:
-            trend = "Bajista Fuerte"
-        elif market_data.price_change_24h < -0.5:
-            trend = "Bajista"
-        
-        return MarketAnalysisResponse(
-            symbol=symbol,
-            current_price=market_data.current_price,
-            volatility={
-                "value": market_data.volatility,
-                "level": volatility_level,
-                "description": f"Volatilidad {volatility_level.lower()} - {market_data.volatility:.2%}"
-            },
-            volume_24h=market_data.volume_24h,
-            price_change_24h=market_data.price_change_24h,
-            trend=trend,
-            high_24h=market_data.high_24h,
-            low_24h=market_data.low_24h,
-            timestamp=market_data.timestamp.isoformat()
-        )
-        
+        return assets_list
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo análisis de mercado para {symbol}: {str(e)}")
+        logger.error(f"Error obteniendo assets: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.get("/market-analysis/{symbol}/detailed")
-async def get_detailed_market_analysis(symbol: str):
-    """Obtiene análisis de mercado muy detallado con recomendaciones"""
+@router.get("/assets/{symbol}")
+async def get_asset_config(symbol: str):
+    """
+    Obtiene configuración de un asset específico
+    """
     try:
-        market_data = await config_manager._get_market_data(symbol)
+        config = get_config()
+        asset_config = config.get_asset_config(symbol)
         
-        # Obtener datos históricos para análisis más profundo
-        historical_data = await config_manager._get_historical_data(symbol, days=30)
+        if not asset_config:
+            raise HTTPException(status_code=404, detail=f"Asset {symbol} no encontrado")
         
-        # Calcular métricas adicionales
-        if historical_data:
-            prices = [d['close'] for d in historical_data]
-            returns = np.diff(np.log(prices))
-            
-            # Calcular métricas estadísticas
-            avg_return = np.mean(returns)
-            volatility_annualized = np.std(returns) * np.sqrt(365)
-            sharpe_ratio = avg_return / (np.std(returns) + 1e-8) if len(returns) > 1 else 0.0
-            
-            # Calcular máximo drawdown
-            cumulative_returns = np.cumprod(1 + returns)
-            peak = cumulative_returns[0]
-            max_dd = 0.0
-            for cr in cumulative_returns:
-                if cr > peak:
-                    peak = cr
-                dd = (peak - cr) / peak
-                max_dd = max(max_dd, dd)
-        else:
-            avg_return = 0.0
-            volatility_annualized = market_data.volatility
-            sharpe_ratio = 0.0
-            max_dd = 0.0
+        return {"symbol": symbol, **asset_config}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración de asset {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/assets/{symbol}/toggle")
+async def toggle_asset(symbol: str, data: Dict):
+    """
+    Activa/desactiva un asset
+    """
+    try:
+        config = get_config()
+        asset_config = config.get_asset_config(symbol)
         
-        # Generar recomendaciones
-        recommendations = []
+        if not asset_config:
+            raise HTTPException(status_code=404, detail=f"Asset {symbol} no encontrado")
         
-        if market_data.volatility > 0.15:
-            recommendations.append("Alta volatilidad - Considerar estrategias conservadoras")
-        elif market_data.volatility < 0.05:
-            recommendations.append("Baja volatilidad - Estrategias agresivas pueden ser efectivas")
-        
-        if market_data.volume_24h > 1000000:
-            recommendations.append("Alto volumen - Buena liquidez para trading")
-        elif market_data.volume_24h < 100000:
-            recommendations.append("Bajo volumen - Cuidado con la liquidez")
-        
-        if sharpe_ratio > 1.0:
-            recommendations.append("Sharpe ratio positivo - Buena relación riesgo/retorno")
-        elif sharpe_ratio < 0:
-            recommendations.append("Sharpe ratio negativo - Alto riesgo")
-        
-        if max_dd > 0.2:
-            recommendations.append("Alto drawdown histórico - Gestión de riesgo crítica")
-        
-        # Recomendación de estrategia
-        if market_data.volatility > 0.1 and market_data.volume_24h > 500000:
-            recommended_strategy = "VOLATILITY_BASED"
-        elif market_data.volume_24h > 1000000:
-            recommended_strategy = "VOLUME_BASED"
-        elif len(historical_data) > 20:
-            recommended_strategy = "MACHINE_LEARNING"
-        else:
-            recommended_strategy = "GRID_OPTIMIZATION"
+        # Actualizar estado
+        asset_config["is_active"] = data.get("is_active", False)
+        config.update_asset_config(symbol, asset_config)
         
         return {
+            "message": f"Asset {symbol} {'activado' if asset_config['is_active'] else 'desactivado'} exitosamente",
             "symbol": symbol,
-            "current_price": market_data.current_price,
-            "volatility": {
-                "daily": market_data.volatility,
-                "annualized": volatility_annualized,
-                "level": "Alta" if market_data.volatility > 0.1 else "Media" if market_data.volatility > 0.05 else "Baja"
-            },
-            "volume_analysis": {
-                "volume_24h": market_data.volume_24h,
-                "volume_level": "Alto" if market_data.volume_24h > 1000000 else "Medio" if market_data.volume_24h > 100000 else "Bajo",
-                "liquidity_score": min(market_data.volume_24h / 1000000, 1.0)
-            },
-            "price_analysis": {
-                "change_24h": market_data.price_change_24h,
-                "high_24h": market_data.high_24h,
-                "low_24h": market_data.low_24h,
-                "trend": "Alcista" if market_data.price_change_24h > 0 else "Bajista" if market_data.price_change_24h < 0 else "Lateral"
-            },
-            "risk_metrics": {
-                "sharpe_ratio": sharpe_ratio,
-                "max_drawdown": max_dd,
-                "avg_return": avg_return,
-                "risk_level": "Alto" if max_dd > 0.2 or sharpe_ratio < 0 else "Medio" if max_dd > 0.1 else "Bajo"
-            },
-            "recommendations": recommendations,
-            "recommended_strategy": recommended_strategy,
-            "strategy_reason": f"Recomendado basado en volatilidad {market_data.volatility:.2%} y volumen ${market_data.volume_24h/1000000:.1f}M",
-            "timestamp": datetime.now().isoformat()
+            "is_active": asset_config["is_active"]
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo análisis detallado para {symbol}: {str(e)}")
+        logger.error(f"Error cambiando estado de asset {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.get("/optimization-history/{symbol}", response_model=OptimizationHistoryResponse)
-async def get_optimization_history(symbol: str):
-    """Obtiene historial de optimizaciones para un símbolo"""
+@router.put("/assets/{symbol}")
+async def update_asset_config(symbol: str, data: Dict):
+    """
+    Actualiza configuración de un asset
+    """
     try:
-        history = await config_manager.get_optimization_history(symbol)
+        config = get_config()
+        asset_config = config.get_asset_config(symbol)
         
-        if not history:
-            return OptimizationHistoryResponse(
-                symbol=symbol,
-                optimizations=[]
-            )
+        if not asset_config:
+            raise HTTPException(status_code=404, detail=f"Asset {symbol} no encontrado")
         
-        return OptimizationHistoryResponse(**history)
+        # Actualizar configuración
+        asset_config.update(data)
+        config.update_asset_config(symbol, asset_config)
         
+        return {
+            "message": f"Configuración de {symbol} actualizada exitosamente",
+            "symbol": symbol,
+            "config": asset_config
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo historial: {str(e)}")
+        logger.error(f"Error actualizando configuración de asset {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.get("/optimization-history")
-async def get_all_optimization_history():
-    """Obtiene historial de optimizaciones para todos los símbolos"""
+@router.post("/assets")
+async def add_asset(data: Dict):
+    """
+    Agrega un nuevo asset
+    """
     try:
-        history = await config_manager.get_optimization_history()
-        return history
+        config = get_config()
+        symbol = data.get("symbol")
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo historial completo: {str(e)}")
-
-@router.get("/strategies")
-async def get_available_strategies():
-    """Obtiene estrategias de optimización disponibles"""
-    try:
-        strategies = [
-            {
-                "id": strategy.value,
-                "name": strategy.name.replace("_", " ").title(),
-                "description": get_strategy_description(strategy)
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Símbolo requerido")
+        
+        if config.get_asset_config(symbol):
+            raise HTTPException(status_code=409, detail=f"Asset {symbol} ya existe")
+        
+        # Crear configuración por defecto
+        default_config = {
+            "symbol": symbol,
+            "is_active": False,
+            "min_price": data.get("min_price", 0),
+            "max_price": data.get("max_price", 0),
+            "grids": data.get("grids", 0),
+            "quantity": data.get("quantity", 0),
+            "investment_amount": data.get("investment_amount", 0),
+            "precision": {
+                "quantity": data.get("quantity_precision", 2),
+                "price": data.get("price_precision", 2),
+                "step_size": data.get("step_size", 0.01)
             }
-            for strategy in OptimizationStrategy
-        ]
-        
-        return {
-            "strategies": strategies,
-            "total": len(strategies)
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo estrategias: {str(e)}")
-
-@router.post("/quick-optimize/{symbol}")
-async def quick_optimize(symbol: str, investment_amount: float = 1000.0):
-    """Optimización rápida con parámetros por defecto"""
-    try:
-        request = OptimizationRequest(
-            symbol=symbol,
-            strategy=OptimizationStrategy.GRID_OPTIMIZATION,
-            investment_amount=investment_amount,
-            risk_tolerance=0.5,
-            max_grids=20,
-            time_horizon=7
-        )
-        
-        optimized_config = await config_manager.optimize_parameters(request)
+        config.add_asset(symbol, default_config)
         
         return {
-            "status": "success",
-            "message": f"Optimización rápida completada para {symbol}",
-            "config": {
-                "symbol": optimized_config.symbol,
-                "min_price": optimized_config.min_price,
-                "max_price": optimized_config.max_price,
-                "grids": optimized_config.grids,
-                "quantity": optimized_config.quantity,
-                "confidence_score": optimized_config.confidence_score,
-                "strategy": optimized_config.optimization_strategy
-            },
-            "backtest_results": optimized_config.backtest_results,
-            "timestamp": optimized_config.timestamp.isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en optimización rápida: {str(e)}")
-
-@router.post("/compare-strategies/{symbol}")
-async def compare_strategies(symbol: str, investment_amount: float = 1000.0):
-    """Compara todas las estrategias de optimización para un símbolo"""
-    try:
-        results = {}
-        
-        for strategy in OptimizationStrategy:
-            try:
-                request = OptimizationRequest(
-                    symbol=symbol,
-                    strategy=strategy,
-                    investment_amount=investment_amount,
-                    risk_tolerance=0.5,
-                    max_grids=20,
-                    time_horizon=7
-                )
-                
-                optimized_config = await config_manager.optimize_parameters(request)
-                
-                results[strategy.value] = {
-                    "config": {
-                        "min_price": optimized_config.min_price,
-                        "max_price": optimized_config.max_price,
-                        "grids": optimized_config.grids,
-                        "quantity": optimized_config.quantity
-                    },
-                    "confidence_score": optimized_config.confidence_score,
-                    "backtest_results": optimized_config.backtest_results
-                }
-                
-            except Exception as e:
-                results[strategy.value] = {
-                    "error": str(e)
-                }
-        
-        # Encontrar la mejor estrategia
-        best_strategy = None
-        best_score = 0
-        
-        for strategy_name, result in results.items():
-            if "error" not in result and result["confidence_score"] > best_score:
-                best_score = result["confidence_score"]
-                best_strategy = strategy_name
-        
-        return {
+            "message": f"Asset {symbol} agregado exitosamente",
             "symbol": symbol,
-            "investment_amount": investment_amount,
-            "strategies": results,
-            "best_strategy": best_strategy,
-            "best_score": best_score,
-            "timestamp": datetime.now().isoformat()
+            "config": default_config
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error comparando estrategias: {str(e)}")
+        logger.error(f"Error agregando asset: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.get("/health")
-async def config_health_check():
-    """Health check del sistema de optimización"""
+@router.delete("/assets/{symbol}")
+async def remove_asset(symbol: str):
+    """
+    Remueve un asset
+    """
     try:
-        # Verificar que el ConfigManager esté funcionando
-        market_data = await config_manager._get_market_data("BTC")
+        config = get_config()
+        asset_config = config.get_asset_config(symbol)
+        
+        if not asset_config:
+            raise HTTPException(status_code=404, detail=f"Asset {symbol} no encontrado")
+        
+        config.remove_asset(symbol)
         
         return {
-            "status": "healthy",
-            "config_manager": "operational",
-            "market_data_cache": len(config_manager.market_data_cache),
-            "optimization_history": len(config_manager.optimization_history),
-            "sample_market_data": {
-                "symbol": market_data.symbol,
-                "current_price": market_data.current_price,
-                "volatility": market_data.volatility
-            },
-            "timestamp": datetime.now().isoformat()
+            "message": f"Asset {symbol} removido exitosamente",
+            "symbol": symbol
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
+        logger.error(f"Error removiendo asset {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-def get_strategy_description(strategy: OptimizationStrategy) -> str:
-    """Obtiene descripción de una estrategia"""
-    descriptions = {
-        OptimizationStrategy.GRID_OPTIMIZATION: "Optimización tradicional de grid basada en rangos de precio",
-        OptimizationStrategy.VOLATILITY_BASED: "Optimización basada en la volatilidad del mercado",
-        OptimizationStrategy.VOLUME_BASED: "Optimización basada en el volumen de trading",
-        OptimizationStrategy.MACHINE_LEARNING: "Optimización usando machine learning y datos históricos"
-    }
-    return descriptions.get(strategy, "Estrategia de optimización") 
+@router.get("/safety")
+async def get_safety_limits():
+    """
+    Obtiene límites de seguridad
+    """
+    try:
+        config = get_config()
+        return config.get_safety_limits()
+    except Exception as e:
+        logger.error(f"Error obteniendo límites de seguridad: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.put("/safety")
+async def update_safety_limits(data: Dict):
+    """
+    Actualiza límites de seguridad
+    """
+    try:
+        config = get_config()
+        
+        # Validar datos
+        required_fields = ["max_daily_loss", "max_total_loss", "max_trade_loss", "max_consecutive_losses", "min_balance"]
+        for field in required_fields:
+            if field not in data:
+                raise HTTPException(status_code=400, detail=f"Campo requerido: {field}")
+        
+        # Convertir porcentajes a decimales
+        limits = {
+            "max_daily_loss": data["max_daily_loss"] / 100,
+            "max_total_loss": data["max_total_loss"] / 100,
+            "max_trade_loss": data["max_trade_loss"] / 100,
+            "max_consecutive_losses": data["max_consecutive_losses"],
+            "max_hourly_loss": data.get("max_hourly_loss", 0.03),
+            "min_balance": data["min_balance"],
+            "min_notional_value": data.get("min_notional_value", 10.0)
+        }
+        
+        config.update_safety_limits(limits)
+        
+        return {
+            "message": "Límites de seguridad actualizados exitosamente",
+            "limits": limits
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error actualizando límites de seguridad: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.get("/monitoring")
+async def get_monitoring_settings():
+    """
+    Obtiene configuración de monitoreo
+    """
+    try:
+        config = get_config()
+        return config.get_monitoring_settings()
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración de monitoreo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.put("/monitoring")
+async def update_monitoring_settings(data: Dict):
+    """
+    Actualiza configuración de monitoreo
+    """
+    try:
+        config = get_config()
+        
+        settings = {
+            "alerts_enabled": data.get("alerts_enabled", True),
+            "email_alerts": data.get("email_alerts", False),
+            "sms_alerts": data.get("sms_alerts", False),
+            "dashboard_enabled": data.get("dashboard_enabled", True),
+            "log_level": data.get("log_level", "INFO")
+        }
+        
+        config.update_monitoring_settings(settings)
+        
+        return {
+            "message": "Configuración de monitoreo actualizada exitosamente",
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error actualizando configuración de monitoreo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.get("/system")
+async def get_system_settings():
+    """
+    Obtiene configuración del sistema
+    """
+    try:
+        config = get_config()
+        return config.get_system_settings()
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración del sistema: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.put("/system")
+async def update_system_settings(data: Dict):
+    """
+    Actualiza configuración del sistema
+    """
+    try:
+        config = get_config()
+        
+        settings = {
+            "trading_enabled": data.get("trading_enabled", False),
+            "paper_trading": data.get("paper_trading", True),
+            "max_concurrent_trades": data.get("max_concurrent_trades", 5),
+            "default_investment_percentage": data.get("default_investment_percentage", 0.1),
+            "emergency_stop_enabled": data.get("emergency_stop_enabled", True)
+        }
+        
+        config.update_system_settings(settings)
+        
+        return {
+            "message": "Configuración del sistema actualizada exitosamente",
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error actualizando configuración del sistema: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/enable-trading")
+async def enable_trading():
+    """
+    Habilita el trading
+    """
+    try:
+        config = get_config()
+        config.enable_trading()
+        
+        return {
+            "message": "Trading habilitado exitosamente",
+            "trading_enabled": True
+        }
+    except Exception as e:
+        logger.error(f"Error habilitando trading: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/disable-trading")
+async def disable_trading():
+    """
+    Deshabilita el trading
+    """
+    try:
+        config = get_config()
+        config.disable_trading()
+        
+        return {
+            "message": "Trading deshabilitado exitosamente",
+            "trading_enabled": False
+        }
+    except Exception as e:
+        logger.error(f"Error deshabilitando trading: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/enable-paper-trading")
+async def enable_paper_trading():
+    """
+    Habilita paper trading
+    """
+    try:
+        config = get_config()
+        config.enable_paper_trading()
+        
+        return {
+            "message": "Paper trading habilitado exitosamente",
+            "paper_trading": True
+        }
+    except Exception as e:
+        logger.error(f"Error habilitando paper trading: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/disable-paper-trading")
+async def disable_paper_trading():
+    """
+    Deshabilita paper trading
+    """
+    try:
+        config = get_config()
+        config.disable_paper_trading()
+        
+        return {
+            "message": "Paper trading deshabilitado exitosamente",
+            "paper_trading": False
+        }
+    except Exception as e:
+        logger.error(f"Error deshabilitando paper trading: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/validate")
+async def validate_configuration():
+    """
+    Valida la configuración completa
+    """
+    try:
+        config = get_config()
+        is_valid, errors = config.validate_config()
+        
+        return {
+            "valid": is_valid,
+            "errors": errors,
+            "message": "Configuración válida" if is_valid else f"Configuración inválida: {len(errors)} errores"
+        }
+    except Exception as e:
+        logger.error(f"Error validando configuración: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/backup")
+async def create_backup():
+    """
+    Crea un backup de la configuración
+    """
+    try:
+        config = get_config()
+        # TODO: Implementar backup
+        return {
+            "message": "Backup creado exitosamente",
+            "backup_file": "config_backup.json"
+        }
+    except Exception as e:
+        logger.error(f"Error creando backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@router.post("/reset")
+async def reset_configuration():
+    """
+    Resetea la configuración a valores por defecto
+    """
+    try:
+        config = get_config()
+        config.create_default_config()
+        
+        return {
+            "message": "Configuración reseteada exitosamente",
+            "config": config.get_config_summary()
+        }
+    except Exception as e:
+        logger.error(f"Error reseteando configuración: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}") 

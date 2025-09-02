@@ -1,0 +1,7 @@
+{
+  "BTCUSDT": {
+    "quantity": 5,
+    "price": 2,
+    "step_size": 1e-05
+  }
+}

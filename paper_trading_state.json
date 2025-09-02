@@ -1,0 +1,174 @@
+{
+  "current_balance": 916.835,
+  "positions": {
+    "BNBUSDT": {
+      "quantity": 0.1,
+      "avg_price": 851.7435897435897,
+      "unrealized_pnl": 0.0
+    }
+  },
+  "trade_history": [
+    {
+      "timestamp": "2025-09-01T22:31:24.340499",
+      "symbol": "BTCUSDT",
+      "side": "BUY",
+      "quantity": 0.001,
+      "price": 108000,
+      "total_cost": 108.0,
+      "balance_after": 892.0
+    },
+    {
+      "timestamp": "2025-09-01T22:31:24.340975",
+      "symbol": "ETHUSDT",
+      "side": "BUY",
+      "quantity": 0.01,
+      "price": 4400,
+      "total_cost": 44.0,
+      "balance_after": 848.0
+    },
+    {
+      "timestamp": "2025-09-01T22:31:24.341344",
+      "symbol": "BNBUSDT",
+      "side": "BUY",
+      "quantity": 0.1,
+      "price": 850,
+      "total_cost": 85.0,
+      "balance_after": 763.0
+    },
+    {
+      "timestamp": "2025-09-01T22:31:24.341710",
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "quantity": 0.001,
+      "price": 108500,
+      "total_revenue": 108.5,
+      "realized_pnl": 0.5,
+      "balance_after": 871.5
+    },
+    {
+      "timestamp": "2025-09-01T22:31:24.342204",
+      "symbol": "ETHUSDT",
+      "side": "SELL",
+      "quantity": 0.01,
+      "price": 4450,
+      "total_revenue": 44.5,
+      "realized_pnl": 0.5,
+      "balance_after": 916.0
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.023911",
+      "symbol": "BTCUSDT",
+      "side": "BUY",
+      "quantity": 0.0005,
+      "price": 108200,
+      "total_cost": 54.1,
+      "balance_after": 861.9
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.024825",
+      "symbol": "ETHUSDT",
+      "side": "BUY",
+      "quantity": 0.005,
+      "price": 4410,
+      "total_cost": 22.05,
+      "balance_after": 839.85
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.025331",
+      "symbol": "BNBUSDT",
+      "side": "BUY",
+      "quantity": 0.05,
+      "price": 855,
+      "total_cost": 42.75,
+      "balance_after": 797.1
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.025763",
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "quantity": 0.0005,
+      "price": 108600,
+      "total_revenue": 54.300000000000004,
+      "realized_pnl": 0.20000000000000284,
+      "balance_after": 851.4
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.026445",
+      "symbol": "ETHUSDT",
+      "side": "SELL",
+      "quantity": 0.005,
+      "price": 4430,
+      "total_revenue": 22.150000000000002,
+      "realized_pnl": 0.10000000000000142,
+      "balance_after": 873.55
+    },
+    {
+      "timestamp": "2025-09-01T22:45:02.027259",
+      "symbol": "BNBUSDT",
+      "side": "SELL",
+      "quantity": 0.05,
+      "price": 860,
+      "total_revenue": 43.0,
+      "realized_pnl": 0.4166666666666714,
+      "balance_after": 916.55
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.239404",
+      "symbol": "BTCUSDT",
+      "side": "BUY",
+      "quantity": 0.0003,
+      "price": 108100,
+      "total_cost": 32.43,
+      "balance_after": 884.12
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.240013",
+      "symbol": "ETHUSDT",
+      "side": "BUY",
+      "quantity": 0.003,
+      "price": 4405,
+      "total_cost": 13.215,
+      "balance_after": 870.905
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.240808",
+      "symbol": "BNBUSDT",
+      "side": "BUY",
+      "quantity": 0.03,
+      "price": 852,
+      "total_cost": 25.56,
+      "balance_after": 845.345
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.241359",
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "quantity": 0.0003,
+      "price": 108400,
+      "total_revenue": 32.519999999999996,
+      "realized_pnl": 0.0899999999999963,
+      "balance_after": 877.865
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.241928",
+      "symbol": "ETHUSDT",
+      "side": "SELL",
+      "quantity": 0.003,
+      "price": 4420,
+      "total_revenue": 13.26,
+      "realized_pnl": 0.04499999999999993,
+      "balance_after": 891.125
+    },
+    {
+      "timestamp": "2025-09-01T22:47:02.242473",
+      "symbol": "BNBUSDT",
+      "side": "SELL",
+      "quantity": 0.03,
+      "price": 857,
+      "total_revenue": 25.709999999999997,
+      "realized_pnl": 0.15769230769230802,
+      "balance_after": 916.835
+    }
+  ],
+  "last_updated": "2025-09-01T22:47:02.242480"
+}

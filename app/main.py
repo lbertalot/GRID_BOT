@@ -67,7 +67,7 @@ app.include_router(strategies.router)  # expone /strategy/* sin prefijo
 app.include_router(metrics.router, prefix="/api", tags=["Metrics"])
 app.include_router(metrics_routes.router)  # Ya tiene prefix /api/v1/metrics
 app.include_router(risk_routes.router, tags=["Risk Management"])  # Ya tiene prefix /api/v1/risk
-app.include_router(config_routes.router, tags=["Configuration Optimization"])  # Ya tiene prefix /api/v1/config
+app.include_router(config_routes.router, tags=["Configuration Management"])  # Ya tiene prefix /api/config
 app.include_router(prometheus.router, prefix="/api/prometheus", tags=["Prometheus"])
 app.include_router(optimized_routes.router)
 app.include_router(strategy_routes.router, tags=["Strategies"])
