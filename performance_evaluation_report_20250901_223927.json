@@ -1,0 +1,133 @@
+{
+  "timestamp": "2025-09-01T22:39:27.358634",
+  "phase": "7.3_performance_evaluation",
+  "status": "completed",
+  "performance_metrics": {
+    "initial_balance": 1000.0,
+    "current_balance": 916.0,
+    "balance_change": -84.0,
+    "balance_change_pct": -8.4,
+    "total_trades": 5,
+    "open_positions": 1,
+    "total_pnl": 1.0,
+    "total_pnl_pct": 0.1
+  },
+  "strategy_analysis": {
+    "success_rate": 40.0,
+    "avg_pnl_per_trade": 0.2,
+    "volatility": "ALTA",
+    "performance": "\ud83d\udd34 REQUIERE AJUSTE"
+  },
+  "recommended_adjustments": [
+    {
+      "type": "EXPOSURE_REDUCTION",
+      "description": "Reducir inversi\u00f3n por asset debido a p\u00e9rdidas significativas",
+      "current_value": "100.0",
+      "proposed_value": "50.0",
+      "reason": "Balance reducido en 8.4%"
+    },
+    {
+      "type": "GRID_ADJUSTMENT",
+      "description": "Reducir n\u00famero de grids para mayor estabilidad",
+      "current_value": "5",
+      "proposed_value": "3",
+      "reason": "Alta volatilidad detectada"
+    },
+    {
+      "type": "SAFETY_LIMITS",
+      "description": "Ajustar l\u00edmites de p\u00e9rdida m\u00e1s conservadores",
+      "current_value": "6.0%",
+      "proposed_value": "3.0%",
+      "reason": "P\u00e9rdidas significativas requieren l\u00edmites m\u00e1s estrictos"
+    }
+  ],
+  "applied_adjustments": [
+    {
+      "asset": "BTCUSDT",
+      "adjustment": "investment_reduction",
+      "old_value": 100.0,
+      "new_value": 50.0
+    },
+    {
+      "asset": "ETHUSDT",
+      "adjustment": "investment_reduction",
+      "old_value": 100.0,
+      "new_value": 50.0
+    },
+    {
+      "asset": "BNBUSDT",
+      "adjustment": "investment_reduction",
+      "old_value": 100.0,
+      "new_value": 50.0
+    },
+    {
+      "asset": "BTCUSDT",
+      "adjustment": "grid_reduction",
+      "old_value": 5,
+      "new_value": 3
+    },
+    {
+      "asset": "ETHUSDT",
+      "adjustment": "grid_reduction",
+      "old_value": 5,
+      "new_value": 3
+    },
+    {
+      "asset": "BNBUSDT",
+      "adjustment": "grid_reduction",
+      "old_value": 5,
+      "new_value": 3
+    },
+    {
+      "adjustment": "safety_limits",
+      "old_value": "6.0%",
+      "new_value": "3.0%"
+    }
+  ],
+  "current_config": {
+    "metadata": {
+      "last_updated": "2025-09-01T22:31:24.338951",
+      "version": "2.5_unified",
+      "total_assets": 10
+    },
+    "system_settings": {
+      "trading_enabled": false,
+      "paper_trading": true,
+      "max_concurrent_trades": 5,
+      "default_investment_percentage": 0.1,
+      "emergency_stop_enabled": true
+    },
+    "safety_limits": {
+      "max_daily_loss": 0.06,
+      "max_total_loss": 0.12,
+      "max_trade_loss": 0.025,
+      "max_consecutive_losses": 4,
+      "max_hourly_loss": 0.04,
+      "min_balance": 60.0,
+      "min_notional_value": 15.0
+    },
+    "monitoring_settings": {
+      "alerts_enabled": true,
+      "email_alerts": true,
+      "sms_alerts": false,
+      "dashboard_enabled": true,
+      "log_level": "WARNING"
+    },
+    "assets_summary": {
+      "total_assets": 10,
+      "active_assets": 3,
+      "inactive_assets": 7
+    },
+    "active_assets": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT"
+    ]
+  },
+  "next_steps": [
+    "Monitorear rendimiento con nuevos par\u00e1metros",
+    "Evaluar estabilidad durante 24-48 horas",
+    "Considerar activaci\u00f3n de m\u00e1s assets si rendimiento mejora",
+    "Preparar para Fase 7.4: Preparaci\u00f3n Trading Real"
+  ]
+}

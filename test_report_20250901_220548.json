@@ -1,0 +1,254 @@
+{
+  "results": {
+    "Circuit Breaker": {
+      "success": true,
+      "details": {
+        "initial_state": {
+          "allowed": true,
+          "message": "OK"
+        },
+        "after_small_loss": {
+          "allowed": true,
+          "message": "OK"
+        },
+        "status": {
+          "is_open": false,
+          "reason": null,
+          "opened_at": null,
+          "limits": {
+            "daily_loss_limit": 0.05,
+            "total_loss_limit": 0.1,
+            "trade_loss_limit": 0.02,
+            "consecutive_losses": 3,
+            "hourly_loss_limit": 0.03
+          },
+          "current_state": {
+            "daily_loss": 0.01,
+            "total_loss": 0.01,
+            "consecutive_losses": 1,
+            "hourly_loss": 0.01
+          }
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.291292"
+    },
+    "Precision Validator": {
+      "success": true,
+      "details": {
+        "valid_order": {
+          "valid": true,
+          "data": {
+            "symbol": "BTCUSDT",
+            "quantity": 0.001,
+            "price": 108000,
+            "notional_value": 108.0
+          },
+          "message": "OK"
+        },
+        "invalid_order": {
+          "valid": false,
+          "data": {},
+          "message": "Error en cantidad: Cantidad ajustada es 0 o negativa: 0.0"
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.291668"
+    },
+    "Monitoring System": {
+      "success": true,
+      "details": {
+        "status": {
+          "metrics": {
+            "total_trades": 1,
+            "successful_trades": 1,
+            "failed_trades": 0,
+            "total_profit": 0.0,
+            "total_loss": 0.0,
+            "current_balance": 1000.0,
+            "daily_pnl": 0.0,
+            "hourly_pnl": 0.0,
+            "last_update": "2025-09-01T22:05:48.145368"
+          },
+          "thresholds": {
+            "max_daily_loss": 0.05,
+            "max_hourly_loss": 0.03,
+            "max_consecutive_losses": 3,
+            "min_balance": 50.0,
+            "max_trade_loss": 0.02
+          },
+          "recent_alerts": [],
+          "total_alerts": 0,
+          "system_status": "HEALTHY"
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.291794"
+    },
+    "Safety Validator": {
+      "success": true,
+      "details": {
+        "safety_status": {
+          "circuit_breaker": {
+            "is_open": false,
+            "message": "OK"
+          },
+          "monitoring": {
+            "metrics": {
+              "total_trades": 1,
+              "successful_trades": 1,
+              "failed_trades": 0,
+              "total_profit": 0.0,
+              "total_loss": 0.0,
+              "current_balance": 1000.0,
+              "daily_pnl": 0.0,
+              "hourly_pnl": 0.0,
+              "last_update": "2025-09-01T22:05:48.145368"
+            },
+            "thresholds": {
+              "max_daily_loss": 0.05,
+              "max_hourly_loss": 0.03,
+              "max_consecutive_losses": 3,
+              "min_balance": 50.0,
+              "max_trade_loss": 0.02
+            },
+            "recent_alerts": [],
+            "total_alerts": 0,
+            "system_status": "HEALTHY"
+          },
+          "validation_history": [],
+          "system_safe": true
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.291905"
+    },
+    "Unified Config": {
+      "success": true,
+      "details": {
+        "summary": {
+          "metadata": {
+            "last_updated": "2025-09-01T21:05:03.237887",
+            "version": "2.5_unified",
+            "total_assets": 10
+          },
+          "system_settings": {
+            "trading_enabled": false,
+            "paper_trading": true,
+            "max_concurrent_trades": 5,
+            "default_investment_percentage": 0.1,
+            "emergency_stop_enabled": true
+          },
+          "safety_limits": {
+            "max_daily_loss": 0.06,
+            "max_total_loss": 0.12,
+            "max_trade_loss": 0.025,
+            "max_consecutive_losses": 4,
+            "max_hourly_loss": 0.04,
+            "min_balance": 60.0,
+            "min_notional_value": 15.0
+          },
+          "monitoring_settings": {
+            "alerts_enabled": true,
+            "email_alerts": true,
+            "sms_alerts": false,
+            "dashboard_enabled": true,
+            "log_level": "WARNING"
+          },
+          "assets_summary": {
+            "total_assets": 10,
+            "active_assets": 0,
+            "inactive_assets": 10
+          },
+          "active_assets": []
+        },
+        "validation": {
+          "valid": true,
+          "errors": []
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.292203"
+    },
+    "Paper Trading": {
+      "success": true,
+      "details": {
+        "current_state": {
+          "balance": 1000.0,
+          "positions_count": 0,
+          "history_count": 0
+        },
+        "buy_test": {
+          "success": true,
+          "order_id": "paper_buy_1",
+          "executed_quantity": 0.001,
+          "executed_price": 108000,
+          "total_cost": 108.0,
+          "balance_after": 892.0
+        },
+        "sell_test": {
+          "success": true,
+          "order_id": "paper_sell_2",
+          "executed_quantity": 0.001,
+          "executed_price": 108500,
+          "total_revenue": 108.5,
+          "realized_pnl": 0.5,
+          "balance_after": 1000.5
+        },
+        "portfolio": {
+          "initial_balance": 1000.0,
+          "current_balance": 1000.5,
+          "total_unrealized_pnl": 0.0,
+          "total_realized_pnl": 0.5,
+          "total_pnl": 0.5,
+          "total_pnl_pct": 0.05,
+          "positions": [],
+          "total_trades": 2,
+          "open_positions": 0
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.293137"
+    },
+    "Integration Tests": {
+      "success": true,
+      "details": {
+        "integration_test": {
+          "circuit_breaker_allowed": true,
+          "validation_passed": true,
+          "trade_executed": true
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.293925"
+    },
+    "Stress Tests": {
+      "success": true,
+      "details": {
+        "consecutive_losses": {
+          "allowed": false,
+          "message": "L\u00edmite de p\u00e9rdida diaria excedido: 11.00%",
+          "circuit_breaker_activated": true
+        },
+        "extreme_values": {
+          "valid": true,
+          "expected": false
+        },
+        "safety_limits": {
+          "max_daily_loss": 0.06,
+          "max_total_loss": 0.12,
+          "max_trade_loss": 0.025,
+          "max_consecutive_losses": 4,
+          "max_hourly_loss": 0.04,
+          "min_balance": 60.0,
+          "min_notional_value": 15.0
+        }
+      },
+      "timestamp": "2025-09-01T22:05:48.296160"
+    }
+  },
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 8,
+    "failed_tests": 0,
+    "success_rate": 100.0,
+    "overall_status": "PASSED",
+    "status_emoji": "\u2705",
+    "failed_test_names": [],
+    "timestamp": "2025-09-01T22:05:48.296979"
+  },
+  "timestamp": "2025-09-01T22:05:48.296987"
+}

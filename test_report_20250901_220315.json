@@ -1,0 +1,244 @@
+{
+  "results": {
+    "Circuit Breaker": {
+      "success": false,
+      "details": {
+        "initial_state": {
+          "allowed": false,
+          "message": "Circuit breaker abierto: L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%"
+        },
+        "after_small_loss": {
+          "allowed": false,
+          "message": "Circuit breaker abierto: L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%"
+        },
+        "status": {
+          "is_open": true,
+          "reason": "L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%",
+          "opened_at": "2025-09-01T18:50:30.053420",
+          "limits": {
+            "daily_loss_limit": 0.05,
+            "total_loss_limit": 0.1,
+            "trade_loss_limit": 0.02,
+            "consecutive_losses": 3,
+            "hourly_loss_limit": 0.03
+          },
+          "current_state": {
+            "daily_loss": 0.055,
+            "total_loss": 0.055,
+            "consecutive_losses": 3,
+            "hourly_loss": 0.055
+          }
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.461167"
+    },
+    "Precision Validator": {
+      "success": true,
+      "details": {
+        "valid_order": {
+          "valid": true,
+          "data": {
+            "symbol": "BTCUSDT",
+            "quantity": 0.001,
+            "price": 108000,
+            "notional_value": 108.0
+          },
+          "message": "OK"
+        },
+        "invalid_order": {
+          "valid": false,
+          "data": {},
+          "message": "Error en cantidad: Cantidad ajustada es 0 o negativa: 0.0"
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.461361"
+    },
+    "Monitoring System": {
+      "success": true,
+      "details": {
+        "status": {
+          "metrics": {
+            "total_trades": 2,
+            "successful_trades": 1,
+            "failed_trades": 1,
+            "total_profit": 5.0,
+            "total_loss": 0.0,
+            "current_balance": 310.0,
+            "daily_pnl": 0.0,
+            "hourly_pnl": 0.0,
+            "last_update": "2025-09-01T18:50:30.048400"
+          },
+          "thresholds": {
+            "max_daily_loss": 0.05,
+            "max_hourly_loss": 0.03,
+            "max_consecutive_losses": 3,
+            "min_balance": 50.0,
+            "max_trade_loss": 0.02
+          },
+          "recent_alerts": [
+            {
+              "level": "WARNING",
+              "message": "P\u00e9rdida por trade excedida: $2.00",
+              "timestamp": "2025-09-01T18:50:30.048845",
+              "category": "TRADING",
+              "data": {
+                "symbol": "ETHUSDT",
+                "side": "SELL",
+                "quantity": 0.01,
+                "price": 4400,
+                "profit_loss": -2.0
+              }
+            }
+          ],
+          "total_alerts": 1,
+          "system_status": "HEALTHY"
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.461475"
+    },
+    "Safety Validator": {
+      "success": true,
+      "details": {
+        "safety_status": {
+          "circuit_breaker": {
+            "is_open": true,
+            "message": "Circuit breaker abierto: L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%"
+          },
+          "monitoring": {
+            "metrics": {
+              "total_trades": 2,
+              "successful_trades": 1,
+              "failed_trades": 1,
+              "total_profit": 5.0,
+              "total_loss": 0.0,
+              "current_balance": 310.0,
+              "daily_pnl": 0.0,
+              "hourly_pnl": 0.0,
+              "last_update": "2025-09-01T18:50:30.048400"
+            },
+            "thresholds": {
+              "max_daily_loss": 0.05,
+              "max_hourly_loss": 0.03,
+              "max_consecutive_losses": 3,
+              "min_balance": 50.0,
+              "max_trade_loss": 0.02
+            },
+            "recent_alerts": [
+              {
+                "level": "WARNING",
+                "message": "P\u00e9rdida por trade excedida: $2.00",
+                "timestamp": "2025-09-01T18:50:30.048845",
+                "category": "TRADING",
+                "data": {
+                  "symbol": "ETHUSDT",
+                  "side": "SELL",
+                  "quantity": 0.01,
+                  "price": 4400,
+                  "profit_loss": -2.0
+                }
+              }
+            ],
+            "total_alerts": 1,
+            "system_status": "HEALTHY"
+          },
+          "validation_history": [],
+          "system_safe": false
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.461701"
+    },
+    "Unified Config": {
+      "success": false,
+      "details": {
+        "error": "object of type 'int' has no len()"
+      },
+      "timestamp": "2025-09-01T22:03:15.461957"
+    },
+    "Paper Trading": {
+      "success": true,
+      "details": {
+        "current_state": {
+          "balance": 1000.0,
+          "positions_count": 0,
+          "history_count": 0
+        },
+        "buy_test": {
+          "success": true,
+          "order_id": "paper_buy_1",
+          "executed_quantity": 0.001,
+          "executed_price": 108000,
+          "total_cost": 108.0,
+          "balance_after": 892.0
+        },
+        "sell_test": {
+          "success": true,
+          "order_id": "paper_sell_2",
+          "executed_quantity": 0.001,
+          "executed_price": 108500,
+          "total_revenue": 108.5,
+          "realized_pnl": 0.5,
+          "balance_after": 1000.5
+        },
+        "portfolio": {
+          "initial_balance": 1000.0,
+          "current_balance": 1000.5,
+          "total_unrealized_pnl": 0.0,
+          "total_realized_pnl": 0.5,
+          "total_pnl": 0.5,
+          "total_pnl_pct": 0.05,
+          "positions": [],
+          "total_trades": 2,
+          "open_positions": 0
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.462864"
+    },
+    "Integration Tests": {
+      "success": false,
+      "details": {
+        "error": "Circuit breaker bloqueando: Circuit breaker abierto: L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%"
+      },
+      "timestamp": "2025-09-01T22:03:15.462962"
+    },
+    "Stress Tests": {
+      "success": false,
+      "details": {
+        "consecutive_losses": {
+          "allowed": false,
+          "message": "Circuit breaker abierto: L\u00edmite de p\u00e9rdida por hora excedido: 4.50% > 3.00%",
+          "circuit_breaker_activated": true
+        },
+        "extreme_values": {
+          "valid": true,
+          "expected": false
+        },
+        "safety_limits": {
+          "max_daily_loss": 0.06,
+          "max_total_loss": 0.12,
+          "max_trade_loss": 0.025,
+          "max_consecutive_losses": 4,
+          "max_hourly_loss": 0.04,
+          "min_balance": 60.0,
+          "min_notional_value": 15.0
+        }
+      },
+      "timestamp": "2025-09-01T22:03:15.466082"
+    }
+  },
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 4,
+    "failed_tests": 4,
+    "success_rate": 50.0,
+    "overall_status": "FAILED",
+    "status_emoji": "\u274c",
+    "failed_test_names": [
+      "Circuit Breaker",
+      "Unified Config",
+      "Integration Tests",
+      "Stress Tests"
+    ],
+    "timestamp": "2025-09-01T22:03:15.467128"
+  },
+  "timestamp": "2025-09-01T22:03:15.467134"
+}

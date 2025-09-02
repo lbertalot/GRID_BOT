@@ -1,0 +1,94 @@
+{
+  "start_time": "2025-09-01T22:31:24.344515",
+  "last_check": "2025-09-01T22:31:24.345132",
+  "total_checks": 2,
+  "alerts_triggered": 0,
+  "circuit_breaker_activations": 0,
+  "paper_trading_trades": 5,
+  "real_trading_trades": 0,
+  "balance_changes": [],
+  "performance_metrics": [
+    {
+      "uptime_hours": 0.0,
+      "trades_per_hour": 0.0,
+      "total_checks": 1,
+      "system_status": "HEALTHY"
+    },
+    {
+      "uptime_hours": 0.0,
+      "trades_per_hour": 30354131.53,
+      "total_checks": 2,
+      "system_status": "HEALTHY"
+    }
+  ],
+  "status_history": [
+    {
+      "timestamp": "2025-09-01T22:20:49.011668",
+      "circuit_breaker": {
+        "is_open": false,
+        "reason": null,
+        "daily_loss": 0.0,
+        "total_loss": 0.0,
+        "consecutive_losses": 0
+      },
+      "system_status": {
+        "system_safe": true,
+        "overall_status": "UNKNOWN"
+      },
+      "paper_trading": {
+        "balance": 1000.0,
+        "total_trades": 0,
+        "open_positions": 0,
+        "total_pnl": 0.0,
+        "total_pnl_pct": 0.0
+      },
+      "configuration": {
+        "trading_enabled": false,
+        "paper_trading": true,
+        "emergency_stop": true,
+        "total_assets": 10,
+        "active_assets": 0
+      },
+      "performance": {
+        "uptime_hours": 0.0,
+        "trades_per_hour": 0.0,
+        "total_checks": 1,
+        "system_status": "HEALTHY"
+      }
+    },
+    {
+      "timestamp": "2025-09-01T22:31:24.344786",
+      "circuit_breaker": {
+        "is_open": false,
+        "reason": null,
+        "daily_loss": 0.0,
+        "total_loss": 0.0,
+        "consecutive_losses": 0
+      },
+      "system_status": {
+        "system_safe": true,
+        "overall_status": "UNKNOWN"
+      },
+      "paper_trading": {
+        "balance": 916.0,
+        "total_trades": 5,
+        "open_positions": 1,
+        "total_pnl": 1.0,
+        "total_pnl_pct": 0.1
+      },
+      "configuration": {
+        "trading_enabled": false,
+        "paper_trading": true,
+        "emergency_stop": true,
+        "total_assets": 10,
+        "active_assets": 3
+      },
+      "performance": {
+        "uptime_hours": 0.0,
+        "trades_per_hour": 30354131.53,
+        "total_checks": 2,
+        "system_status": "HEALTHY"
+      }
+    }
+  ]
+}

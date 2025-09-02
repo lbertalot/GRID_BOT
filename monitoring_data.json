@@ -1,0 +1,15 @@
+{
+  "metrics": {
+    "total_trades": 0,
+    "successful_trades": 0,
+    "failed_trades": 0,
+    "total_profit": 0.0,
+    "total_loss": 0.0,
+    "current_balance": 1000.0,
+    "daily_pnl": 0.0,
+    "hourly_pnl": 0.0,
+    "last_update": "2025-09-01T22:29:11.616054"
+  },
+  "alerts": [],
+  "last_save": "2025-09-01T22:29:11.616061"
+}

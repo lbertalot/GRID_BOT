@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GridBot V2.5 - Gestor de Configuración</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            padding: 25px;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #229954;
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+        
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-active {
+            background: #27ae60;
+        }
+        
+        .status-inactive {
+            background: #e74c3c;
+        }
+        
+        .status-warning {
+            background: #f39c12;
+        }
+        
+        .assets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .asset-card {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .asset-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .asset-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .asset-symbol {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e8ed;
+            margin-bottom: 30px;
+        }
+        
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            border-bottom-color: #3498db;
+            color: #3498db;
+            font-weight: 600;
+        }
+        
+        .tab:hover {
+            background: #f8f9fa;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #e1e8ed;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: 700;
+            color: #3498db;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ GridBot V2.5</h1>
+            <p>Gestor de Configuración Unificado</p>
+        </div>
+        
+        <div class="content">
+            <!-- Alertas -->
+            <div id="alerts"></div>
+            
+            <!-- Resumen de estadísticas -->
+            <div class="summary-stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-assets">0</div>
+                    <div class="stat-label">Assets Totales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="active-assets">0</div>
+                    <div class="stat-label">Assets Activos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="trading-status">❌</div>
+                    <div class="stat-label">Estado Trading</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="safety-status">🛡️</div>
+                    <div class="stat-label">Estado Seguridad</div>
+                </div>
+            </div>
+            
+            <!-- Pestañas -->
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('overview')">📊 Resumen</div>
+                <div class="tab" onclick="showTab('assets')">💰 Assets</div>
+                <div class="tab" onclick="showTab('safety')">🛡️ Seguridad</div>
+                <div class="tab" onclick="showTab('monitoring')">📈 Monitoreo</div>
+                <div class="tab" onclick="showTab('system')">⚙️ Sistema</div>
+            </div>
+            
+            <!-- Contenido de pestañas -->
+            <div id="overview" class="tab-content active">
+                <div class="section">
+                    <h2>📊 Resumen del Sistema</h2>
+                    <div id="overview-content">
+                        <p>Cargando información del sistema...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="assets" class="tab-content">
+                <div class="section">
+                    <h2>💰 Gestión de Assets</h2>
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="loadAssets()">🔄 Recargar Assets</button>
+                        <button class="btn btn-success" onclick="showAddAssetForm()">➕ Agregar Asset</button>
+                    </div>
+                    <div id="assets-grid" class="assets-grid">
+                        <p>Cargando assets...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="safety" class="tab-content">
+                <div class="section">
+                    <h2>🛡️ Configuración de Seguridad</h2>
+                    <form id="safety-form">
+                        <div class="form-group">
+                            <label>Pérdida Máxima Diaria (%)</label>
+                            <input type="number" id="max-daily-loss" step="0.01" min="0" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Pérdida Máxima Total (%)</label>
+                            <input type="number" id="max-total-loss" step="0.01" min="0" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Pérdida Máxima por Trade (%)</label>
+                            <input type="number" id="max-trade-loss" step="0.01" min="0" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Pérdidas Consecutivas Máximas</label>
+                            <input type="number" id="max-consecutive-losses" min="1" max="10">
+                        </div>
+                        <div class="form-group">
+                            <label>Balance Mínimo (USDT)</label>
+                            <input type="number" id="min-balance" step="0.01" min="0">
+                        </div>
+                        <button type="submit" class="btn btn-success">💾 Guardar Límites</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="monitoring" class="tab-content">
+                <div class="section">
+                    <h2>📈 Configuración de Monitoreo</h2>
+                    <form id="monitoring-form">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="alerts-enabled"> Habilitar Alertas
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="email-alerts"> Alertas por Email
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="sms-alerts"> Alertas por SMS
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="dashboard-enabled"> Habilitar Dashboard
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Nivel de Log</label>
+                            <select id="log-level">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="CRITICAL">CRITICAL</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success">💾 Guardar Configuración</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="system" class="tab-content">
+                <div class="section">
+                    <h2>⚙️ Configuración del Sistema</h2>
+                    <div class="form-group">
+                        <button class="btn btn-success" onclick="enableTrading()">✅ Habilitar Trading</button>
+                        <button class="btn btn-danger" onclick="disableTrading()">❌ Deshabilitar Trading</button>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-warning" onclick="enablePaperTrading()">📄 Habilitar Paper Trading</button>
+                        <button class="btn btn-danger" onclick="disablePaperTrading()">💰 Deshabilitar Paper Trading</button>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="validateConfig()">🔍 Validar Configuración</button>
+                        <button class="btn btn-warning" onclick="backupConfig()">💾 Crear Backup</button>
+                        <button class="btn btn-danger" onclick="resetConfig()">🔄 Resetear Configuración</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Funciones de navegación
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Mostrar pestaña seleccionada
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Cargar datos específicos de la pestaña
+            if (tabName === 'overview') {
+                loadOverview();
+            } else if (tabName === 'assets') {
+                loadAssets();
+            } else if (tabName === 'safety') {
+                loadSafetyConfig();
+            } else if (tabName === 'monitoring') {
+                loadMonitoringConfig();
+            } else if (tabName === 'system') {
+                loadSystemConfig();
+            }
+        }
+        
+        // Funciones de carga de datos
+        async function loadOverview() {
+            try {
+                const response = await fetch('/api/config/summary');
+                const data = await response.json();
+                
+                document.getElementById('total-assets').textContent = data.assets_summary.total_assets;
+                document.getElementById('active-assets').textContent = data.assets_summary.active_assets;
+                document.getElementById('trading-status').textContent = data.system_settings.trading_enabled ? '✅' : '❌';
+                document.getElementById('safety-status').textContent = '🛡️';
+                
+                const overviewContent = `
+                    <h3>Estado del Sistema</h3>
+                    <p><strong>Trading:</strong> ${data.system_settings.trading_enabled ? 'Habilitado' : 'Deshabilitado'}</p>
+                    <p><strong>Paper Trading:</strong> ${data.system_settings.paper_trading ? 'Habilitado' : 'Deshabilitado'}</p>
+                    <p><strong>Assets Activos:</strong> ${data.assets_summary.active_assets} de ${data.assets_summary.total_assets}</p>
+                    <p><strong>Última Actualización:</strong> ${new Date(data.metadata.last_updated).toLocaleString()}</p>
+                `;
+                
+                document.getElementById('overview-content').innerHTML = overviewContent;
+            } catch (error) {
+                showAlert('Error cargando resumen: ' + error.message, 'danger');
+            }
+        }
+        
+        async function loadAssets() {
+            try {
+                const response = await fetch('/api/config/assets');
+                const assets = await response.json();
+                
+                const assetsGrid = document.getElementById('assets-grid');
+                assetsGrid.innerHTML = '';
+                
+                assets.forEach(asset => {
+                    const assetCard = `
+                        <div class="asset-card">
+                            <div class="asset-header">
+                                <span class="asset-symbol">${asset.symbol}</span>
+                                <span class="status-indicator ${asset.is_active ? 'status-active' : 'status-inactive'}"></span>
+                            </div>
+                            <p><strong>Precio Mín:</strong> $${asset.min_price}</p>
+                            <p><strong>Precio Máx:</strong> $${asset.max_price}</p>
+                            <p><strong>Grids:</strong> ${asset.grids}</p>
+                            <p><strong>Inversión:</strong> $${asset.investment_amount}</p>
+                            <div class="form-group">
+                                <button class="btn btn-${asset.is_active ? 'danger' : 'success'}" 
+                                        onclick="toggleAsset('${asset.symbol}', ${!asset.is_active})">
+                                    ${asset.is_active ? '❌ Desactivar' : '✅ Activar'}
+                                </button>
+                                <button class="btn btn-primary" onclick="editAsset('${asset.symbol}')">
+                                    ✏️ Editar
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    assetsGrid.innerHTML += assetCard;
+                });
+            } catch (error) {
+                showAlert('Error cargando assets: ' + error.message, 'danger');
+            }
+        }
+        
+        async function loadSafetyConfig() {
+            try {
+                const response = await fetch('/api/config/safety');
+                const safety = await response.json();
+                
+                document.getElementById('max-daily-loss').value = safety.max_daily_loss * 100;
+                document.getElementById('max-total-loss').value = safety.max_total_loss * 100;
+                document.getElementById('max-trade-loss').value = safety.max_trade_loss * 100;
+                document.getElementById('max-consecutive-losses').value = safety.max_consecutive_losses;
+                document.getElementById('min-balance').value = safety.min_balance;
+            } catch (error) {
+                showAlert('Error cargando configuración de seguridad: ' + error.message, 'danger');
+            }
+        }
+        
+        async function loadMonitoringConfig() {
+            try {
+                const response = await fetch('/api/config/monitoring');
+                const monitoring = await response.json();
+                
+                document.getElementById('alerts-enabled').checked = monitoring.alerts_enabled;
+                document.getElementById('email-alerts').checked = monitoring.email_alerts;
+                document.getElementById('sms-alerts').checked = monitoring.sms_alerts;
+                document.getElementById('dashboard-enabled').checked = monitoring.dashboard_enabled;
+                document.getElementById('log-level').value = monitoring.log_level;
+            } catch (error) {
+                showAlert('Error cargando configuración de monitoreo: ' + error.message, 'danger');
+            }
+        }
+        
+        // Funciones de acción
+        async function enableTrading() {
+            try {
+                await fetch('/api/config/enable-trading', { method: 'POST' });
+                showAlert('Trading habilitado exitosamente', 'success');
+                loadOverview();
+            } catch (error) {
+                showAlert('Error habilitando trading: ' + error.message, 'danger');
+            }
+        }
+        
+        async function disableTrading() {
+            try {
+                await fetch('/api/config/disable-trading', { method: 'POST' });
+                showAlert('Trading deshabilitado exitosamente', 'success');
+                loadOverview();
+            } catch (error) {
+                showAlert('Error deshabilitando trading: ' + error.message, 'danger');
+            }
+        }
+        
+        async function enablePaperTrading() {
+            try {
+                await fetch('/api/config/enable-paper-trading', { method: 'POST' });
+                showAlert('Paper trading habilitado exitosamente', 'success');
+                loadOverview();
+            } catch (error) {
+                showAlert('Error habilitando paper trading: ' + error.message, 'danger');
+            }
+        }
+        
+        async function disablePaperTrading() {
+            try {
+                await fetch('/api/config/disable-paper-trading', { method: 'POST' });
+                showAlert('Paper trading deshabilitado exitosamente', 'success');
+                loadOverview();
+            } catch (error) {
+                showAlert('Error deshabilitando paper trading: ' + error.message, 'danger');
+            }
+        }
+        
+        async function toggleAsset(symbol, active) {
+            try {
+                const response = await fetch(`/api/config/assets/${symbol}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: active })
+                });
+                
+                if (response.ok) {
+                    showAlert(`Asset ${symbol} ${active ? 'activado' : 'desactivado'} exitosamente`, 'success');
+                    loadAssets();
+                } else {
+                    throw new Error('Error en la respuesta del servidor');
+                }
+            } catch (error) {
+                showAlert(`Error ${active ? 'activando' : 'desactivando'} asset: ` + error.message, 'danger');
+            }
+        }
+        
+        // Funciones de utilidad
+        function showAlert(message, type) {
+            const alertsDiv = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = message;
+            alertsDiv.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            loadOverview();
+            
+            // Configurar formularios
+            document.getElementById('safety-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                // Implementar guardado de configuración de seguridad
+            });
+            
+            document.getElementById('monitoring-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                // Implementar guardado de configuración de monitoreo
+            });
+        });
+    </script>
+</body>
+</html>
