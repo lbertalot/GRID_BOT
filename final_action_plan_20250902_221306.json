@@ -1,0 +1,29 @@
+{
+  "timestamp": "2025-09-02T22:13:06.835241",
+  "phase": "7.6_auto_re_evaluation_incomplete",
+  "status": "stabilization_required",
+  "final_stability_score": 75,
+  "target_stability_score": 80,
+  "stabilization_requirements": [
+    "Reducir volatilidad del balance",
+    "Aumentar n\u00famero de trades para an\u00e1lisis",
+    "Confirmar estabilidad de circuit breakers",
+    "Validar l\u00edmites de seguridad"
+  ],
+  "next_steps": [
+    {
+      "step": 1,
+      "action": "Estabilizaci\u00f3n Extendida",
+      "description": "Continuar paper trading hasta estabilizaci\u00f3n",
+      "duration": "72-96 horas",
+      "criteria": "Puntuaci\u00f3n de estabilidad \u2265 80"
+    },
+    {
+      "step": 2,
+      "action": "Re-evaluaci\u00f3n Final",
+      "description": "Re-evaluar readiness para trading real",
+      "duration": "96 horas",
+      "criteria": "Sistema completamente estable"
+    }
+  ]
+}
