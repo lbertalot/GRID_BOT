@@ -432,3 +432,32 @@ spec:
 GridBot V2.5 representa un salto significativo en la automatización de trading, combinando gestión de riesgos sofisticada con machine learning predictivo y selección automática de estrategias. El sistema está diseñado para ser robusto, escalable y fácil de mantener, proporcionando una base sólida para el trading automatizado de alta frecuencia.
 
 **¡Bienvenido al futuro del trading automatizado! 🚀**
+
+## 📁 Artefactos y Directorios de Salida
+
+A partir de v2.5, los artefactos JSON se consolidan y parametrizan vía variables de entorno:
+
+- MONITORING_DIR (por defecto: `monitoring_data/`)
+  - `monitoring_summary_*.json`
+  - `continuous_72h_monitoring_data_*.json`
+  - `intensive_monitoring_report_*.json`
+  - `extended_monitoring_report_*.json`
+
+- REPORTS_DIR (por defecto: `reports/`)
+  - `audits/`: `complete_system_audit_report.json`, `reporte_analisis_problemas.json`
+  - `incidents/`: `emergency_stop_report.json`
+  - `safety/`: `real_trading_safety_validation.json`
+  - `stabilization/`: `massive_stabilization_report.json`
+  - `performance/`: `performance_evaluation_report_*.json`
+  - `integrity/`: `integrity_system_test_report_*.json`, `integrity_components_test_report_*.json`
+  - `phase8/`: `phase8_2_ethusdt_report.json`, `phase8_3_bnbusdt_report.json`
+  - `plans/`: `phase8_activation_plan.json`, `monitoring_plan_*.json`, `final_action_plan_*.json`, `gradual_activation_plan_*.json`, `reactivation_plan_*.json`, `stabilization_plan_*.json`, `real_trading_activation_plan_*.json`
+
+En raíz solo permanecen JSON requeridos en runtime:
+- `grid_config_minimal.json`, `grid_config_optimized.json`, `grid_config_safe.json`
+- `circuit_breaker_state.json`, `precision_cache.json`, `monitoring_data.json`, `continuous_monitoring.json`, `paper_trading_state.json`
+
+Notas:
+- `.gitignore` ignora `monitoring_data/**` y `reports/**` (se mantienen con `.gitkeep`).
+- `docker-compose.yml` monta `./monitoring_data -> /app/monitoring_data` y `./reports -> /app/reports` y exporta `MONITORING_DIR`/`REPORTS_DIR`.
+- Configura en `.env` según necesidad, o usa los defaults del `env.example`.
