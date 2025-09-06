@@ -33,6 +33,11 @@ class Continuous72HMonitoring:
         self.monitoring_data = []
         self.check_interval = 3600  # 1 hora entre checks
         self.total_duration = 72  # 72 horas
+        self.monitoring_dir = os.getenv("MONITORING_DIR", "monitoring_data")
+        try:
+            os.makedirs(self.monitoring_dir, exist_ok=True)
+        except Exception:
+            pass
         
     def start_monitoring(self):
         """Iniciar monitoreo continuo"""
@@ -318,7 +323,7 @@ class Continuous72HMonitoring:
     def _save_monitoring_data(self):
         """Guardar datos de monitoreo"""
         try:
-            monitoring_file = f"continuous_72h_monitoring_data_{datetime.now().strftime('%Y%m%d')}.json"
+            monitoring_file = os.path.join(self.monitoring_dir, f"continuous_72h_monitoring_data_{datetime.now().strftime('%Y%m%d')}.json")
             with open(monitoring_file, 'w') as f:
                 json.dump({
                     'monitoring_session': {
@@ -332,7 +337,7 @@ class Continuous72HMonitoring:
                 }, f, indent=2)
             
             # También guardar resumen
-            summary_file = f"monitoring_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            summary_file = os.path.join(self.monitoring_dir, f"monitoring_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
             if self.monitoring_data:
                 latest_check = self.monitoring_data[-1]
                 summary = {

@@ -19,15 +19,21 @@
     "phase8_3_completed": true,
     "system_fully_operational": true,
     "emergency_activated_at": "2025-09-04T14:34:03.249574",
-    "real_balance_binance": 317.1,
-    "system_reported_balance": 408.78,
-    "discrepancy": -91.68
+    "real_balance_binance": 320.03279417,
+    "system_reported_balance": 320.03279417,
+    "discrepancy": -88.74720583,
+    "discrepancy_percentage": 27.73,
+    "last_validation": "2025-09-05T20:41:30Z",
+    "validation_status": "CRITICAL_DISCREPANCY",
+    "balance_corrected_at": "2025-09-05T21:55:19.400882",
+    "balance_correction_reason": "SYNC_WITH_BINANCE_REAL_BALANCE"
   },
   "system_config": {
     "system_ready": false,
     "phase": "EMERGENCY_STOP",
     "trading_mode": "EMERGENCY_STOP",
     "safety_measures": {
+      "safe_mode": true,
       "circuit_breakers_active": true,
       "max_daily_loss": 0.03,
       "max_total_loss": 0.05,

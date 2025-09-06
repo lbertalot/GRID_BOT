@@ -5,6 +5,7 @@ GridBot v2.5 - Monitoreo en Tiempo Real de Balances y Seguridad
 """
 
 import json
+import os
 import logging
 import time
 from datetime import datetime, timedelta
@@ -21,7 +22,10 @@ class RealTradingSafetyValidator:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
         self.paper_trading_file = "paper_trading_state.json"
-        self.safety_validation_file = "real_trading_safety_validation.json"
+        self.reports_dir = os.getenv("REPORTS_DIR", "reports")
+        self.safety_dir = os.path.join(self.reports_dir, "safety")
+        Path(self.safety_dir).mkdir(parents=True, exist_ok=True)
+        self.safety_validation_file = os.path.join(self.safety_dir, "real_trading_safety_validation.json")
         
         # Balances de referencia (antes del trading real)
         self.reference_balances = {

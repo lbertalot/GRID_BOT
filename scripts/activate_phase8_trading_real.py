@@ -5,6 +5,7 @@ GridBot v2.5 - Sistema validado y listo para trading real
 """
 
 import json
+import os
 import logging
 import time
 from datetime import datetime
@@ -21,7 +22,10 @@ class Phase8TradingRealActivator:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
         self.paper_trading_file = "paper_trading_state.json"
-        self.activation_plan_file = "phase8_activation_plan.json"
+        reports_dir = os.getenv("REPORTS_DIR", "reports")
+        plans_dir = os.path.join(reports_dir, "plans")
+        Path(plans_dir).mkdir(parents=True, exist_ok=True)
+        self.activation_plan_file = os.path.join(plans_dir, "phase8_activation_plan.json")
         
     def load_current_config(self):
         """Cargar configuración actual del sistema"""

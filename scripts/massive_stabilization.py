@@ -6,6 +6,7 @@ Ejecuta trades de estabilización masivos para romper el estancamiento en 75/100
 
 import asyncio
 import json
+import os
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -22,7 +23,10 @@ class MassiveStabilization:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
         self.paper_trading_file = "paper_trading_state.json"
-        self.stabilization_file = "massive_stabilization_report.json"
+        self.reports_dir = os.getenv("REPORTS_DIR", "reports")
+        self.stabilization_dir = os.path.join(self.reports_dir, "stabilization")
+        Path(self.stabilization_dir).mkdir(parents=True, exist_ok=True)
+        self.stabilization_file = os.path.join(self.stabilization_dir, "massive_stabilization_report.json")
         
     def load_config(self):
         """Cargar configuración del sistema"""

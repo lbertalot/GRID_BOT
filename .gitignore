@@ -32,3 +32,15 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/ 
+
+# Artefactos de monitoreo y reportes
+monitoring_data/**
+!monitoring_data/.gitkeep
+reports/**
+!reports/.gitkeep
+
+# Artefactos JSON en raíz generados por scripts (migrados a reports/)
+/*.json
+!/grid_config_minimal.json
+!/grid_config_optimized.json
+!/grid_config_safe.json

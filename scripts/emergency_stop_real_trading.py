@@ -5,6 +5,7 @@ GridBot v2.5 - Activación de Modo de Emergencia
 """
 
 import json
+import os
 import logging
 import time
 from datetime import datetime
@@ -20,7 +21,10 @@ logger = logging.getLogger(__name__)
 class EmergencyStopRealTrading:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
-        self.emergency_report_file = "emergency_stop_report.json"
+        self.reports_dir = os.getenv("REPORTS_DIR", "reports")
+        self.incidents_dir = os.path.join(self.reports_dir, "incidents")
+        Path(self.incidents_dir).mkdir(parents=True, exist_ok=True)
+        self.emergency_report_file = os.path.join(self.incidents_dir, "emergency_stop_report.json")
         
     def load_current_config(self):
         """Cargar configuración actual del sistema"""
