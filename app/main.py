@@ -19,6 +19,7 @@ from app.services.binance_client_singleton import get_binance_client_singleton
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes
+from app.core.circuit_breakers import CircuitBreakers
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 balance_validator = None
 operation_tracker = None
 integrity_monitor = None
+app_breakers = CircuitBreakers()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,8 +58,10 @@ async def lifespan(app: FastAPI):
             check = client_singleton.validate_credentials_and_connectivity()
             if not check.get("net_ok", False):
                 logger.error("❌ Conectividad con Binance fallida - activando modo protegido")
+                await app_breakers.activate_breaker('system_integrity', 'binance_net_fail')
             if not check.get("auth_ok", False):
                 logger.error("❌ Credenciales/permiso de Binance inválidos - deshabilitando endpoints privados")
+                await app_breakers.activate_breaker('system_integrity', 'binance_auth_fail')
         except Exception as e:
             logger.error(f"❌ Error validando Binance al arranque: {e}")
 
@@ -100,6 +104,14 @@ app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(alert_routes.router, prefix="/api/alerts", tags=["alerts"])
 
 # Endpoints de integridad integrados
+@app.get("/breakers/summary")
+async def breakers_summary():
+    try:
+        return app_breakers.get_all_breakers_status()
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo resumen de breakers: {e}")
+        raise HTTPException(status_code=500, detail="Error interno")
+
 @app.get("/integrity/status")
 async def get_integrity_status():
     """Obtener estado de integridad del sistema"""
