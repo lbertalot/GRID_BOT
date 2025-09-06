@@ -15,6 +15,7 @@ from app.services.telegram_alert import send_telegram_alert
 from app.services.alert_tasks import notify_consecutive_api_failures
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.binance_client_singleton import get_binance_client_singleton
+from app.core.circuit_breakers import CircuitBreakers
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,18 @@ def execute_trading_cycle():
             if not check.get("net_ok", False):
                 logger.error("❌ Conectividad con Binance fallida - abortando ciclo")
                 notify_consecutive_api_failures.delay("binance", 1)
+                try:
+                    asyncio.run(CircuitBreakers().activate_breaker('system_integrity', 'binance_net_fail'))
+                except Exception:
+                    pass
                 return {"status": "error", "message": "Binance net check failed"}
             if not check.get("auth_ok", False):
                 logger.error("❌ Credenciales/permiso de Binance inválidos - abortando ciclo")
                 notify_consecutive_api_failures.delay("binance_auth", 1)
+                try:
+                    asyncio.run(CircuitBreakers().activate_breaker('system_integrity', 'binance_auth_fail'))
+                except Exception:
+                    pass
                 return {"status": "error", "message": "Binance auth check failed"}
         except Exception as e:
             logger.error(f"❌ Error validando Binance pre-ciclo: {e}")
