@@ -461,3 +461,41 @@ Notas:
 - `.gitignore` ignora `monitoring_data/**` y `reports/**` (se mantienen con `.gitkeep`).
 - `docker-compose.yml` monta `./monitoring_data -> /app/monitoring_data` y `./reports -> /app/reports` y exporta `MONITORING_DIR`/`REPORTS_DIR`.
 - Configura en `.env` según necesidad, o usa los defaults del `env.example`.
+
+### 📂 Detalle de subcarpetas y formatos
+
+- MONITORING_DIR (`monitoring_data/`):
+  - `monitoring_summary_YYYYMMDD_HHMMSS.json`: snapshot horario con score, readiness y alertas.
+  - `continuous_72h_monitoring_data_YYYYMMDD.json`: sesión de 72h con lista de checks.
+  - `intensive_monitoring_report_YYYYMMDD_HHMMSS.json`: monitoreo intensivo por ventana.
+  - `extended_monitoring_report_YYYYMMDD_HHMMSS.json`: monitoreo extendido y estadísticas agregadas.
+
+- REPORTS_DIR (`reports/`):
+  - `audits/`: auditorías de integridad y forenses.
+  - `incidents/`: reportes de paradas de emergencia e incidentes.
+  - `safety/`: validaciones de seguridad previas a real trading.
+  - `stabilization/`: resultados de estabilizaciones masivas.
+  - `performance/`: evaluaciones de rendimiento y ajustes.
+  - `integrity/`: resultados de pruebas de integridad (sistema y componentes).
+  - `phase8/`: reportes de activación por fases.
+  - `plans/`: planes de activación, reactivación, estabilización y monitoreo.
+
+### 🗄️ Políticas de retención y rotación
+
+- MONITORING_DIR
+  - `monitoring_summary_*`: retener 90 días; comprimir >30 días a `.ndjson.gz` (batch semanal).
+  - `continuous_72h_monitoring_data_*`: retener 30 días.
+  - `intensive_monitoring_report_*` y `extended_monitoring_report_*`: retener 90 días.
+
+- REPORTS_DIR
+  - `audits/`, `incidents/`, `safety/`: retener 365 días (cumplimiento y trazabilidad).
+  - `stabilization/`, `performance/`, `integrity/`: retener 180 días.
+  - `phase8/`, `plans/`: retener 365 días (historial de decisiones).
+
+- Tests
+  - `tests/reports/`: retener 14 días (artefactos efímeros de pruebas).
+
+Sugerencia operativa: ejecutar un job semanal que
+1) comprima resúmenes de monitoreo >30 días a `.ndjson.gz`,
+2) elimine artefactos que excedan su retención,
+3) exporte métricas de limpieza (archivos purgados, espacio liberado).
