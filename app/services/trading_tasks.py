@@ -14,6 +14,7 @@ from app.services.fund_manager import fund_manager
 from app.services.telegram_alert import send_telegram_alert
 from app.services.alert_tasks import notify_consecutive_api_failures
 from app.services.binance_async import AsyncBinanceWrapper
+from app.services.binance_client_singleton import get_binance_client_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,20 @@ def execute_trading_cycle():
         
         # Verificar credenciales de Binance
         logger.info("🔍 Validando credenciales de Binance...")
+        try:
+            client_singleton = get_binance_client_singleton()
+            check = client_singleton.validate_credentials_and_connectivity()
+            if not check.get("net_ok", False):
+                logger.error("❌ Conectividad con Binance fallida - abortando ciclo")
+                notify_consecutive_api_failures.delay("binance", 1)
+                return {"status": "error", "message": "Binance net check failed"}
+            if not check.get("auth_ok", False):
+                logger.error("❌ Credenciales/permiso de Binance inválidos - abortando ciclo")
+                notify_consecutive_api_failures.delay("binance_auth", 1)
+                return {"status": "error", "message": "Binance auth check failed"}
+        except Exception as e:
+            logger.error(f"❌ Error validando Binance pre-ciclo: {e}")
+            return {"status": "error", "message": str(e)}
         
         # Crear manager de grid trading
         manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
