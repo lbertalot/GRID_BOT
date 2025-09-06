@@ -4,7 +4,8 @@ Cliente Binance con patrón Singleton para evitar reinicializaciones innecesaria
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, Dict
+import re
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from dotenv import load_dotenv
@@ -63,9 +64,19 @@ class BinanceClientSingleton:
             else:
                 raise ValueError("No se pudieron asignar las credenciales al cliente")
             
-            # Verificar conexión
-            account_info = self._client.get_account()
-            logger.info(f"✅ Conexión verificada - Balances disponibles: {len(account_info['balances'])}")
+            # Verificar conexión (privado) y fallback a ping público si falla
+            try:
+                account_info = self._client.get_account()
+                logger.info(f"✅ Conexión verificada - Balances disponibles: {len(account_info['balances'])}")
+            except Exception as auth_err:
+                # Intentar un ping público para aislar credenciales vs conectividad
+                try:
+                    _ = self._client.ping()
+                    logger.error(f"❌ Credenciales inválidas o permisos insuficientes: {auth_err}")
+                except Exception as net_err:
+                    logger.error(f"❌ Error de conectividad con Binance: {net_err}")
+                # Mantener cliente pero marcar como no listo para privados
+                raise
             
         except Exception as e:
             logger.error(f"❌ Error inicializando cliente Singleton: {e}")
@@ -82,10 +93,43 @@ class BinanceClientSingleton:
         except Exception as e:
             logger.error(f"❌ Error obteniendo cliente: {e}")
             return None
+
+    def is_ready(self) -> bool:
+        """Indica si el cliente está listo para endpoints privados."""
+        return self._client is not None
+
+    def validate_credentials_and_connectivity(self) -> Dict[str, object]:
+        """Valida credenciales (privado) y conectividad (público)."""
+        result: Dict[str, object] = {"ok": False, "auth_ok": False, "net_ok": False}
+        client = self.client
+        if client is None:
+            return result
+        # Check público
+        try:
+            client.ping()
+            result["net_ok"] = True
+        except Exception as _:
+            result["net_ok"] = False
+        # Check privado
+        try:
+            client.get_account()
+            result["auth_ok"] = True
+        except Exception:
+            result["auth_ok"] = False
+        result["ok"] = result["net_ok"] and result["auth_ok"]
+        return result
     
     def get_account_info(self):
-        """Obtiene información de la cuenta"""
-        return self.client.get_account()
+        """Obtiene información de la cuenta (retorna dict vacío si no listo)."""
+        client = self.client
+        if client is None:
+            logger.warning("Cliente Binance no inicializado - get_account_info() retorna {}")
+            return {"balances": []}
+        try:
+            return client.get_account()
+        except Exception as e:
+            logger.error(f"Error get_account_info: {e}")
+            return {"balances": []}
     
     def get_balances(self):
         """Obtiene balances de la cuenta"""
@@ -105,6 +149,14 @@ class BinanceClientSingleton:
     
     def get_symbol_price(self, symbol: str) -> float:
         """Obtiene el precio actual de un símbolo"""
+        if not symbol:
+            logger.error("Símbolo vacío")
+            return 0.0
+        # Normalización mínima y validación regex
+        symbol = symbol.upper()
+        if not re.match(r"^[A-Z0-9-_.]{1,20}$", symbol):
+            logger.error(f"Símbolo inválido por formato: {symbol}")
+            return 0.0
         def _fallback_symbol(sym: str) -> Optional[str]:
             base = sym[:-4] if sym.endswith("USDT") else sym
             # Reglas de normalización simples: tokens con prefijo 'LD' (ej. LDBNB) → base sin 'LD'
@@ -112,15 +164,19 @@ class BinanceClientSingleton:
                 return f"{base[2:]}USDT"
             return None
 
+        client = self.client
+        if client is None:
+            logger.warning("Cliente Binance no inicializado - get_symbol_price() retorna 0.0")
+            return 0.0
         try:
-            ticker = self.client.get_symbol_ticker(symbol=symbol)
+            ticker = client.get_symbol_ticker(symbol=symbol)
             return float(ticker['price'])
         except BinanceAPIException as e:
             if getattr(e, 'code', None) == -1121:  # Invalid symbol
                 fb = _fallback_symbol(symbol)
                 if fb and fb != symbol:
                     try:
-                        ticker = self.client.get_symbol_ticker(symbol=fb)
+                        ticker = client.get_symbol_ticker(symbol=fb)
                         logger.warning(f"Símbolo inválido {symbol}, usando fallback {fb}")
                         return float(ticker['price'])
                     except Exception as inner:
@@ -134,7 +190,7 @@ class BinanceClientSingleton:
                 fb = _fallback_symbol(symbol)
                 if fb and fb != symbol:
                     try:
-                        ticker = self.client.get_symbol_ticker(symbol=fb)
+                        ticker = client.get_symbol_ticker(symbol=fb)
                         logger.warning(f"Símbolo inválido {symbol}, usando fallback {fb}")
                         return float(ticker['price'])
                     except Exception as inner:

@@ -15,6 +15,7 @@ from datetime import datetime
 from app.core.balance_validator import BalanceValidator
 from app.core.operation_tracker import OperationTracker
 from app.core.integrity_monitor import IntegrityMonitor
+from app.services.binance_client_singleton import get_binance_client_singleton
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes
@@ -49,6 +50,17 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(operation_tracker.start_periodic_cleanup())
         asyncio.create_task(integrity_monitor.start_monitoring())
         
+        # Validar credenciales/conectividad de Binance al arranque
+        try:
+            client_singleton = get_binance_client_singleton()
+            check = client_singleton.validate_credentials_and_connectivity()
+            if not check.get("net_ok", False):
+                logger.error("❌ Conectividad con Binance fallida - activando modo protegido")
+            if not check.get("auth_ok", False):
+                logger.error("❌ Credenciales/permiso de Binance inválidos - deshabilitando endpoints privados")
+        except Exception as e:
+            logger.error(f"❌ Error validando Binance al arranque: {e}")
+
         logger.info("✅ Componentes de integridad iniciados correctamente")
         
         yield
