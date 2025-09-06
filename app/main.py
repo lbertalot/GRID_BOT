@@ -1,178 +1,311 @@
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
-from fastapi.templating import Jinja2Templates
-from contextlib import asynccontextmanager
+"""
+GridBot v2.5 - FastAPI Application
+Sistema de Trading Algorítmico con Integridad Integrada
+"""
+
+import asyncio
 import logging
-from fastapi.exceptions import RequestValidationError
-from fastapi import HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from datetime import datetime
 
-# Importaciones temporales comentadas para evitar errores de inicio
-from app.api import prometheus, test_routes, commission_routes, metrics, metrics_routes, strategies, trade, optimized_routes, risk_routes, config_routes, alert_routes, binance_sync_routes, strategy_routes
-from app.core.auth import get_api_key
-from app.core.error_handlers import validation_exception_handler, http_exception_handler, general_exception_handler
-# from app.db.init_db import init_db
-# from app.scheduler.optimized_scheduler import start_optimized_scheduler, stop_optimized_scheduler
-# from app.services.balance_updater import update_balances_in_db
-# from app.services.asset_limit_updater import update_asset_limits_in_db
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+# Importar componentes de integridad
+from app.core.balance_validator import BalanceValidator
+from app.core.operation_tracker import OperationTracker
+from app.core.integrity_monitor import IntegrityMonitor
 
+# Importar routers existentes
+from app.api import trade, strategies, metrics, alert_routes
+
+# Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Variables globales para componentes de integridad
+balance_validator = None
+operation_tracker = None
+integrity_monitor = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Gestiona el ciclo de vida de la aplicación.
-    """
-    logger.info("🚀 La aplicación está iniciando...")
+    """Manejar ciclo de vida de la aplicación"""
+    global balance_validator, operation_tracker, integrity_monitor
     
-    # Temporariamente comentado para evitar errores de inicio
-    # init_db()
-    # await update_balances_in_db()
-    # await update_asset_limits_in_db()
-    # await start_optimized_scheduler()
+    logger.info("🚀 Iniciando GridBot v2.5 con componentes de integridad")
     
-    yield
-    
-    # await stop_optimized_scheduler()
-    logger.info("✅ La aplicación se ha detenido correctamente.")
+    try:
+        # Inicializar componentes de integridad
+        balance_validator = BalanceValidator()
+        operation_tracker = OperationTracker()
+        integrity_monitor = IntegrityMonitor()
+        
+        # Conectar componentes entre sí
+        integrity_monitor.set_components(balance_validator, operation_tracker)
+        
+        # Iniciar monitoreo de integridad en background
+        asyncio.create_task(balance_validator.start_validation_loop())
+        asyncio.create_task(operation_tracker.start_periodic_cleanup())
+        asyncio.create_task(integrity_monitor.start_monitoring())
+        
+        logger.info("✅ Componentes de integridad iniciados correctamente")
+        
+        yield
+        
+    except Exception as e:
+        logger.error(f"❌ Error iniciando componentes de integridad: {e}")
+        raise
+    finally:
+        logger.info("🛑 Cerrando GridBot v2.5")
 
+# Crear aplicación FastAPI
 app = FastAPI(
-    title="Grid Trading Bot",
-    description="Un bot de trading automatizado para estrategias de grid en Binance.",
-    version="2.0.0",
+    title="GridBot v2.5 - Sistema de Trading con Integridad",
+    description="Sistema de trading algorítmico con verificación cruzada de balances y tracking completo de operaciones",
+    version="2.5.0",
     lifespan=lifespan
 )
 
-# Configuración de CORS
-origins = ["*"]
+# Configurar middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Registrar manejadores de errores
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(Exception, general_exception_handler)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"]
+)
 
-# Incluir routers - habilitando gradualmente
-app.include_router(trade.router, prefix="/api/trade", tags=["Trading"])
-app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
-app.include_router(strategies.router)  # expone /strategy/* sin prefijo
-app.include_router(metrics.router, prefix="/api", tags=["Metrics"])
-app.include_router(metrics_routes.router)  # Ya tiene prefix /api/v1/metrics
-app.include_router(risk_routes.router, tags=["Risk Management"])  # Ya tiene prefix /api/v1/risk
-app.include_router(config_routes.router, tags=["Configuration Management"])  # Ya tiene prefix /api/config
-app.include_router(prometheus.router, prefix="/api/prometheus", tags=["Prometheus"])
-app.include_router(optimized_routes.router)
-app.include_router(strategy_routes.router, tags=["Strategies"])
-app.include_router(alert_routes.router)
-app.include_router(binance_sync_routes.router)
-app.include_router(test_routes.router)
-app.include_router(commission_routes.router)
+# Incluir routers existentes
+app.include_router(trade.router, prefix="/api/trade", tags=["trading"])
+app.include_router(strategies.router, prefix="/api/strategies", tags=["strategies"])
+app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+app.include_router(alert_routes.router, prefix="/api/alerts", tags=["alerts"])
 
-# Configuración de plantillas
-templates = Jinja2Templates(directory="app/templates")
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    """
-    Endpoint raíz que sirve la página principal de la aplicación.
-    """
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    """
-    Endpoint del dashboard avanzado de métricas.
-    """
-    return templates.TemplateResponse("dashboard.html", {"request": request})
-
-@app.get("/config-optimizer", response_class=HTMLResponse)
-async def config_optimizer(request: Request):
-    """
-    Endpoint del optimizador de configuración.
-    """
-    return templates.TemplateResponse("config_optimizer.html", {"request": request})
-
-@app.get("/optimizer", response_class=HTMLResponse)
-async def optimizer_alt(request: Request):
-    """
-    Endpoint alternativo del optimizador de configuración.
-    """
-    return templates.TemplateResponse("config_optimizer.html", {"request": request})
-
-@app.get("/health", response_class=JSONResponse)
-async def health_check():
-    """
-    Endpoint de health check para verificar que la aplicación está funcionando.
-    """
-    return {"status": "ok", "message": "GridBot V2.5 funcionando correctamente"}
-
-@app.get("/test-simple")
-async def test_simple():
-    """
-    Endpoint simple de prueba.
-    """
-    return {"message": "Test simple funcionando"}
-
-@app.get("/test-metrics", response_class=JSONResponse)
-async def test_metrics():
-    """
-    Endpoint de prueba para verificar que las métricas funcionan.
-    """
+# Endpoints de integridad integrados
+@app.get("/integrity/status")
+async def get_integrity_status():
+    """Obtener estado de integridad del sistema"""
     try:
-        from app.core.metrics import trading_metrics
-        return {"status": "ok", "message": "Métricas importadas correctamente"}
+        if not balance_validator or not operation_tracker:
+            raise HTTPException(status_code=503, detail="Componentes de integridad no inicializados")
+        
+        # Obtener resumen de validación de balances
+        balance_summary = await balance_validator.get_validation_summary()
+        
+        # Obtener resumen de operaciones
+        operation_summary = await operation_tracker.get_operation_summary()
+        
+        # Calcular score de integridad general
+        balance_integrity = balance_summary.get('integrity_score', 0)
+        operation_integrity = operation_summary.get('success_rate', 0) * 100
+        
+        overall_integrity = (balance_integrity + operation_integrity) / 2
+        
+        return {
+            "status": "healthy" if overall_integrity > 90 else "degraded" if overall_integrity > 70 else "critical",
+            "overall_integrity_score": overall_integrity,
+            "balance_validation": balance_summary,
+            "operation_tracking": operation_summary,
+            "timestamp": balance_validator.last_validation.isoformat() if balance_validator.last_validation else None
+        }
+        
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"❌ Error obteniendo estado de integridad: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
- 
-
-@app.get("/simple-metrics")
-async def simple_metrics():
-    """
-    Endpoint simple para probar métricas.
-    """
-    return {"message": "Métricas funcionando"}
-
-@app.get("/test-endpoint")
-async def test_endpoint():
-    """
-    Endpoint de prueba.
-    """
-    return {"message": "Endpoint funcionando"} 
-
-# Endpoint Prometheus estándar para compatibilidad con scrape de Prometheus
-@app.get("/metrics")
-async def prometheus_root_metrics():
+@app.post("/integrity/validate-balances")
+async def force_balance_validation():
+    """Forzar validación inmediata de balances"""
     try:
-        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+        if not balance_validator:
+            raise HTTPException(status_code=503, detail="BalanceValidator no inicializado")
+        
+        await balance_validator.force_validation()
+        
+        return {
+            "message": "Validación de balances forzada exitosamente",
+            "timestamp": datetime.now().isoformat()
+        }
+        
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Error generando métricas: {str(e)}"})
+        logger.error(f"❌ Error forzando validación de balances: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-# --- Aliases públicos sin auth para compatibilidad con tests ---
-# Temporariamente comentado
-# from app.api.trade import place_order as protected_place_order, run_grid as protected_run_grid
-# from app.schemas.validation import OrderRequest, GridParams
-# from app.db.session import SessionLocal
+@app.post("/integrity/check-operations")
+async def force_operation_check():
+    """Forzar verificación de operaciones activas"""
+    try:
+        if not operation_tracker:
+            raise HTTPException(status_code=503, detail="OperationTracker no inicializado")
+        
+        await operation_tracker.force_operation_check()
+        
+        return {
+            "message": "Verificación de operaciones forzada exitosamente",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error forzando verificación de operaciones: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-# @app.post("/order")
-# def place_order_public(order: OrderRequest):
-#     db = SessionLocal()
-#     try:
-#         # Delegar a la lógica existente, evitando la dependencia de auth
-#         return protected_place_order(order=order, db=db, api_key="public")
-#     finally:
-#         db.close()
+@app.get("/integrity/operations/failed")
+async def get_failed_operations():
+    """Obtener resumen de operaciones fallidas"""
+    try:
+        if not operation_tracker:
+            raise HTTPException(status_code=503, detail="OperationTracker no inicializado")
+        
+        failed_ops = await operation_tracker.get_failed_operations_summary()
+        
+        return {
+            "failed_operations": failed_ops,
+            "total_failed": len(failed_ops),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo operaciones fallidas: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-# @app.post("/run_grid")
-# def run_grid_public(params: GridParams):
-#     # Delegar a la lógica existente, evitando la dependencia de auth
-#     return protected_run_grid(params=params, api_key="public")
+@app.get("/integrity/operations/partial-fills")
+async def get_partial_fills():
+    """Obtener resumen de operaciones parcialmente ejecutadas"""
+    try:
+        if not operation_tracker:
+            raise HTTPException(status_code=503, detail="OperationTracker no inicializado")
+        
+        partial_fills = await operation_tracker.get_partial_fills_summary()
+        
+        return {
+            "partial_fills": partial_fills,
+            "total_partial": len(partial_fills),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo partial fills: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@app.get("/integrity/balances/discrepancies")
+async def get_balance_discrepancies():
+    """Obtener discrepancias de balances actuales"""
+    try:
+        if not balance_validator:
+            raise HTTPException(status_code=503, detail="BalanceValidator no inicializado")
+        
+        # Forzar validación y obtener discrepancias
+        await balance_validator.validate_balances()
+        
+        # Obtener resumen de validación
+        validation_summary = await balance_validator.get_validation_summary()
+        
+        return {
+            "validation_summary": validation_summary,
+            "integrity_score": balance_validator.integrity_score,
+            "last_validation": balance_validator.last_validation.isoformat() if balance_validator.last_validation else None,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo discrepancias de balances: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@app.post("/integrity/update-binance-balance")
+async def update_binance_balance(
+    balance: float,
+    pnl: float = None,
+    pnl_pct: float = None
+):
+    """Actualizar balance real de Binance proporcionado por el usuario"""
+    try:
+        if not balance_validator:
+            raise HTTPException(status_code=503, detail="BalanceValidator no inicializado")
+        
+        from decimal import Decimal
+        
+        # Actualizar balance real de Binance
+        success = await balance_validator.update_real_binance_balance(
+            Decimal(str(balance)),
+            Decimal(str(pnl)) if pnl is not None else None,
+            Decimal(str(pnl_pct)) if pnl_pct is not None else None
+        )
+        
+        if success:
+            # Forzar validación inmediata con el nuevo balance
+            validation_result = await balance_validator.force_balance_validation()
+            
+            return {
+                "status": "success",
+                "message": f"Balance de Binance actualizado: {balance} USDT",
+                "validation_result": validation_result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Error actualizando balance de Binance")
+            
+    except Exception as e:
+        logger.error(f"❌ Error actualizando balance de Binance: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@app.post("/integrity/auto-correct-balance")
+async def auto_correct_balance():
+    """Corrección automática de discrepancia de balance del sistema"""
+    try:
+        if not balance_validator:
+            raise HTTPException(status_code=503, detail="BalanceValidator no inicializado")
+        
+        # Ejecutar corrección automática
+        correction_result = await balance_validator.auto_correct_balance_discrepancy()
+        
+        if correction_result['status'] == 'success':
+            return {
+                "status": "success",
+                "message": "Balance del sistema corregido automáticamente",
+                "correction_details": correction_result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error en corrección automática: {correction_result.get('message', 'Error desconocido')}"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Error en corrección automática de balance: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+# Endpoint raíz
+@app.get("/")
+async def root():
+    """Endpoint raíz con información del sistema"""
+    return {
+        "message": "GridBot v2.5 - Sistema de Trading con Integridad Integrada",
+        "version": "2.5.0",
+        "status": "running",
+        "features": [
+            "Verificación cruzada de balances con Binance",
+            "Tracking completo de operaciones y pérdidas",
+            "Monitoreo continuo de integridad",
+            "Alertas automáticas por Telegram",
+            "Métricas en tiempo real en Grafana",
+            "Circuit breakers inteligentes"
+        ],
+        "endpoints": {
+            "health": "/health",
+            "trading": "/trading",
+            "monitoring": "/monitoring",
+            "alerts": "/alerts",
+            "integrity": "/integrity"
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

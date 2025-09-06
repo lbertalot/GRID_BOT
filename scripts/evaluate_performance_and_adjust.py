@@ -330,7 +330,13 @@ def evaluate_performance_and_adjust():
         }
         
         # Guardar reporte
-        report_file = f"performance_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        reports_dir = os.getenv("REPORTS_DIR", "reports")
+        performance_dir = os.path.join(reports_dir, "performance")
+        try:
+            os.makedirs(performance_dir, exist_ok=True)
+        except Exception:
+            pass
+        report_file = os.path.join(performance_dir, f"performance_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
         with open(report_file, 'w') as f:
             json.dump(evaluation_report, f, indent=2)
         

@@ -5,6 +5,7 @@ Monitoreo que usa la estructura de datos actualizada y muestra el estado real
 """
 
 import asyncio
+import os
 import json
 import logging
 import time
@@ -23,7 +24,7 @@ class SynchronizedMonitoring:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
         self.paper_trading_file = "paper_trading_state.json"
-        self.monitoring_dir = "monitoring_data"
+        self.monitoring_dir = os.getenv("MONITORING_DIR", "monitoring_data")
         self.monitoring_active = False
         self.check_interval = 3600  # 1 hora
         self.total_duration = 72  # 72 horas

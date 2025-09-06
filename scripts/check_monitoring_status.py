@@ -45,10 +45,15 @@ def check_monitoring_status():
         # 2. Verificar archivos de monitoreo generados
         print("\n📁 2. VERIFICANDO ARCHIVOS DE MONITOREO...")
         
+        monitoring_dir = os.getenv('MONITORING_DIR', 'monitoring_data')
         monitoring_files = []
-        for file in os.listdir('.'):
-            if file.startswith('continuous_72h_monitoring_data_') or file.startswith('monitoring_summary_'):
-                monitoring_files.append(file)
+        try:
+            for file in os.listdir(monitoring_dir):
+                if file.startswith('continuous_72h_monitoring_data_') or file.startswith('monitoring_summary_'):
+                    monitoring_files.append(os.path.join(monitoring_dir, file))
+        except FileNotFoundError:
+            print("⚠️ Directorio monitoring_data no encontrado")
+            monitoring_files = []
         
         if monitoring_files:
             print(f"✅ Archivos de monitoreo encontrados: {len(monitoring_files)}")

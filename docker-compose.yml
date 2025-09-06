@@ -83,12 +83,16 @@ services:
       - NUMBA_DISABLE_CUDA=1
       - NUMBA_DISABLE_NVVM=1
       - NUMBA_DISABLE_CACHE=1
+      - MONITORING_DIR=/app/monitoring_data
+      - REPORTS_DIR=/app/reports
     volumes:
       - ./app:/app/app
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
+      - ./monitoring_data:/app/monitoring_data
+      - ./reports:/app/reports
       - ./.venv:/app/.venv
       - numba_cache:/tmp/numba_cache
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --workers 2
@@ -125,11 +129,15 @@ services:
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
       - BINANCE_TESTNET=false
+      - MONITORING_DIR=/app/monitoring_data
+      - REPORTS_DIR=/app/reports
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
+      - ./monitoring_data:/app/monitoring_data
+      - ./reports:/app/reports
       - ./.venv:/app/.venv
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
     healthcheck:
@@ -162,9 +170,13 @@ services:
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
       - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
+      - MONITORING_DIR=/app/monitoring_data
+      - REPORTS_DIR=/app/reports
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+      - ./monitoring_data:/app/monitoring_data
+      - ./reports:/app/reports
       - ./.venv:/app/.venv
     command: celery -A app.core.celery_app beat --loglevel=info
     networks:

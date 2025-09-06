@@ -5,6 +5,7 @@ GridBot v2.5 - Sistema Multi-Asset Completo para Trading Real
 """
 
 import json
+import os
 import logging
 import time
 from datetime import datetime
@@ -21,7 +22,10 @@ class Phase8_3_BNBUSDTActivator:
     def __init__(self):
         self.config_file = "grid_config_optimized.json"
         self.paper_trading_file = "paper_trading_state.json"
-        self.phase8_3_report_file = "phase8_3_bnbusdt_report.json"
+        self.reports_dir = os.getenv("REPORTS_DIR", "reports")
+        self.phase8_dir = os.path.join(self.reports_dir, "phase8")
+        Path(self.phase8_dir).mkdir(parents=True, exist_ok=True)
+        self.phase8_3_report_file = os.path.join(self.phase8_dir, "phase8_3_bnbusdt_report.json")
         
     def load_current_config(self):
         """Cargar configuración actual del sistema"""
