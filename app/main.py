@@ -61,6 +61,13 @@ async def lifespan(app: FastAPI):
                 while True:
                     try:
                         await metrics_service.calculate_portfolio_metrics()
+                        # Publicar breakers activos
+                        try:
+                            from app.core.metrics import active_breakers_total
+                            summary = app_breakers.get_all_breakers_status()
+                            active_breakers_total.set(float(summary.get("total_active", 0)))
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                     await asyncio.sleep(60)
