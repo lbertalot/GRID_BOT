@@ -35,7 +35,7 @@ COPY requirements*.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Verificar instalación de dependencias críticas
-RUN python -c "import sys; packages = ['fastapi', 'uvicorn', 'sqlalchemy', 'asyncpg', 'pydantic', 'binance', 'ccxt', 'celery', 'redis', 'numpy', 'pandas', 'sklearn', 'scipy', 'jose', 'passlib', 'dotenv', 'apscheduler', 'jinja2', 'aiofiles', 'telegram', 'requests', 'websockets', 'cryptography', 'bcrypt']; missing = []; [missing.append(p) if __import__(p.replace('-', '_'), globals(), locals(), [], 0) is None else print(f'✅ {p} instalado') for p in packages]; sys.exit(1) if missing else print('🎉 Todas las dependencias instaladas')"
+RUN python -c "import sys; packages = ['fastapi', 'uvicorn', 'sqlalchemy', 'asyncpg', 'pydantic', 'binance', 'ccxt', 'celery', 'redis', 'numpy', 'pandas', 'sklearn', 'scipy', 'passlib', 'dotenv', 'apscheduler', 'jinja2', 'aiofiles', 'telegram', 'requests', 'websockets', 'cryptography', 'bcrypt']; missing = []; [missing.append(p) if __import__(p.replace('-', '_'), globals(), locals(), [], 0) is None else print(f'✅ {p} instalado') for p in packages]; sys.exit(1) if missing else print('🎉 Todas las dependencias instaladas')"
 
 # Copiar código de la aplicación
 COPY . .
