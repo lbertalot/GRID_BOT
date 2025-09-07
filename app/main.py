@@ -54,6 +54,19 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(balance_validator.start_validation_loop())
         asyncio.create_task(operation_tracker.start_periodic_cleanup())
         asyncio.create_task(integrity_monitor.start_monitoring())
+        # Job periódico de actualización de métricas para Grafana
+        try:
+            from app.services.metrics_service import metrics_service
+            async def _periodic_metrics():
+                while True:
+                    try:
+                        await metrics_service.calculate_portfolio_metrics()
+                    except Exception:
+                        pass
+                    await asyncio.sleep(60)
+            asyncio.create_task(_periodic_metrics())
+        except Exception:
+            pass
         
         # Validar credenciales/conectividad de Binance al arranque
         try:
