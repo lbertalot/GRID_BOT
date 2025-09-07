@@ -78,7 +78,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_total_usdt",
+          "expr": "profit_total_usdt{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -149,7 +149,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "roi_daily_percent",
+          "expr": "roi_daily_percent{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -212,7 +212,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_daily_usdt",
+          "expr": "profit_daily_usdt{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -295,7 +295,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "portfolio_total_value_usdt",
+          "expr": "portfolio_total_value_usdt{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -362,7 +362,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "trades_executed_total",
+          "expr": "sum(trades_executed_total{strategy=\"grid\"})",
           "refId": "A"
         }
       ],
@@ -429,7 +429,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "time() - bot_last_execution_timestamp",
+          "expr": "time() - bot_last_execution_timestamp{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -491,7 +491,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "bot_errors_total",
+          "expr": "sum(bot_errors_total{strategy=\"grid\"})",
           "refId": "A"
         }
       ],
@@ -558,7 +558,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "trades_success_rate",
+          "expr": "trades_success_rate{strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -618,7 +618,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_by_asset_usdt{asset=\"BTCUSDT\"}",
+          "expr": "profit_by_asset_usdt{asset=\"BTCUSDT\",strategy=\"grid\"}",
           "legendFormat": "BTC",
           "refId": "A"
         },
@@ -627,7 +627,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_by_asset_usdt{asset=\"ETHUSDT\"}",
+          "expr": "profit_by_asset_usdt{asset=\"ETHUSDT\",strategy=\"grid\"}",
           "legendFormat": "ETH",
           "refId": "B"
         },
@@ -636,7 +636,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_by_asset_usdt{asset=\"BNBUSDT\"}",
+          "expr": "profit_by_asset_usdt{asset=\"BNBUSDT\",strategy=\"grid\"}",
           "legendFormat": "BNB",
           "refId": "C"
         }
@@ -701,7 +701,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "roi_by_asset_percent{asset=\"BTCUSDT\"}",
+          "expr": "roi_by_asset_percent{asset=\"BTCUSDT\",strategy=\"grid\"}",
           "legendFormat": "BTC ROI %",
           "refId": "A"
         },
@@ -710,7 +710,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "roi_by_asset_percent{asset=\"ETHUSDT\"}",
+          "expr": "roi_by_asset_percent{asset=\"ETHUSDT\",strategy=\"grid\"}",
           "legendFormat": "ETH ROI %",
           "refId": "B"
         },
@@ -719,7 +719,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "roi_by_asset_percent{asset=\"BNBUSDT\"}",
+          "expr": "roi_by_asset_percent{asset=\"BNBUSDT\",strategy=\"grid\"}",
           "legendFormat": "BNB ROI %",
           "refId": "C"
         }
