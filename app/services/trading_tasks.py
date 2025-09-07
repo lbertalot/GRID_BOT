@@ -77,13 +77,15 @@ def execute_trading_cycle():
         trades_executed = len([r for r in results if r and r.status == "success"])
         total_trades = len(results)
         
-        # Generar resumen
+        # Generar resumen con modo según flag PAPER_TRADING
+        import os
+        mode = "PAPER" if os.getenv("PAPER_TRADING", "false").lower() == "true" else "REAL"
         summary = {
             "timestamp": datetime.now().isoformat(),
             "total_trades": total_trades,
             "trades_executed": trades_executed,
             "success_rate": (trades_executed / total_trades * 100) if total_trades > 0 else 0,
-            "mode": "REAL"
+            "mode": mode
         }
         
         # Logging detallado

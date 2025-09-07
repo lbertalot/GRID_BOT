@@ -169,3 +169,22 @@ Estado 2025-09-04: circuit breakers, métricas, y alertas han sido implementados
 - Reportes fuente: `complete_system_audit_report.json`, `emergency_stop_report.json`, `real_trading_safety_validation.json`, `integrity_*`, `monitoring_*`, `intensive_monitoring_*`, `massive_stabilization_report.json`, `reporte_analisis_problemas.json`.
 
 
+## Actualizaciones al 2025-09-07
+
+- Binance validado en producción (whitelist IP aplicada): lectura de balances y cuenta OK.
+- Cliente Binance Singleton endurecido con `validate_credentials_and_connectivity()`; breakers expuestos en `/breakers/summary`.
+- Correcciones aplicadas:
+  - Filtrado de metadatos en `grid_config_optimized.json` (en `optimized_grid_manager` y `auto_rebalancer`).
+  - Normalización/regex de símbolos y manejo de `APIError -1100`.
+  - Guard clause de readiness del cliente para evitar `NoneType` en trading.
+  - Bugfix `AutoRebalancer.get_usdt_balance` y ajuste del label `mode` en resúmenes.
+- Nuevas herramientas operativas:
+  - Endpoint `POST /api/simulations/dry-run` (siempre PAPER) para preflight validado.
+  - Objetivo `make dry-run` que ejecuta simulación dentro del contenedor.
+- Validación E2E (modo protegido): ciclo PAPER sin órdenes reales cuando fondos < min_notional, con validación de filtros activa.
+
+### Pendientes no críticos
+- Provisioning/renderer de Grafana y dashboards.
+- Debounce de logs y métricas adicionales de fallos externos/rechazos.
+- Runbooks: credenciales Binance y provisioning Grafana.
+

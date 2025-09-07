@@ -18,7 +18,7 @@ from app.core.integrity_monitor import IntegrityMonitor
 from app.services.binance_client_singleton import get_binance_client_singleton
 
 # Importar routers existentes
-from app.api import trade, strategies, metrics, alert_routes
+from app.api import trade, strategies, metrics, alert_routes, simulations
 from app.core.circuit_breakers import CircuitBreakers
 
 # Configuración de logging
@@ -102,6 +102,7 @@ app.include_router(trade.router, prefix="/api/trade", tags=["trading"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(alert_routes.router, prefix="/api/alerts", tags=["alerts"])
+app.include_router(simulations.router)
 
 # Endpoints de integridad integrados
 @app.get("/breakers/summary")
