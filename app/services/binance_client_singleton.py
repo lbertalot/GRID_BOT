@@ -8,6 +8,7 @@ from typing import Optional, Dict
 import re
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+import ccxt  # Fallback para validación privada
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -72,11 +73,10 @@ class BinanceClientSingleton:
                 # Intentar un ping público para aislar credenciales vs conectividad
                 try:
                     _ = self._client.ping()
-                    logger.error(f"❌ Credenciales inválidas o permisos insuficientes: {auth_err}")
+                    logger.error(f"❌ get_account() falló: {auth_err}. Intentando fallback ccxt para validar credenciales…")
                 except Exception as net_err:
                     logger.error(f"❌ Error de conectividad con Binance: {net_err}")
-                # Mantener cliente pero marcar como no listo para privados
-                raise
+                # No derribar cliente aquí; la validación privada usará ccxt como fallback
             
         except Exception as e:
             logger.error(f"❌ Error inicializando cliente Singleton: {e}")
@@ -115,7 +115,15 @@ class BinanceClientSingleton:
             client.get_account()
             result["auth_ok"] = True
         except Exception:
-            result["auth_ok"] = False
+            # Fallback ccxt
+            try:
+                api_key = os.getenv("BINANCE_API_KEY")
+                api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
+                ex = ccxt.binance({"apiKey": api_key, "secret": api_secret, "enableRateLimit": True})
+                _bal = ex.fetch_balance()
+                result["auth_ok"] = True
+            except Exception:
+                result["auth_ok"] = False
         result["ok"] = result["net_ok"] and result["auth_ok"]
         return result
     

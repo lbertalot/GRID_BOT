@@ -69,9 +69,6 @@ services:
       - DEBUG=true
       - ENVIRONMENT=development
       - DOCKER_ENV=true
-      - BINANCE_API_KEY=${BINANCE_API_KEY}
-      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
-      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - WEBSOCKET_ADVANCED=true
@@ -83,6 +80,7 @@ services:
       - NUMBA_DISABLE_CUDA=1
       - NUMBA_DISABLE_NVVM=1
       - NUMBA_DISABLE_CACHE=1
+      - MPLCONFIGDIR=/tmp/matplotlib
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
     volumes:
@@ -123,9 +121,6 @@ services:
       - REDIS_URL=redis://redis:6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - BINANCE_API_KEY=${BINANCE_API_KEY}
-      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
-      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
@@ -178,7 +173,12 @@ services:
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
       - ./.venv:/app/.venv
-    command: celery -A app.core.celery_app beat --loglevel=info
+    command: celery -A app.core.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - gridbot_network
 
@@ -201,7 +201,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./.venv:/app/.venv
-    command: celery -A app.core.celery_app flower --port=5555
+    command: celery -A app.core.celery_app flower --port=5555 --loglevel=warning
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5555"]
       interval: 30s
