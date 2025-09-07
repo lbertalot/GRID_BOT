@@ -535,3 +535,12 @@ make dry-run SYMBOL=BTCUSDT QTY=0.0002 [SIDE=BUY] [TYPE=MARKET]
 Notas:
 - Fuerza `PAPER_TRADING=true` y ejecuta validación+simulación dentro del contenedor `api`.
 - Útil para gates post-deploy y chequeos periódicos.
+
+## ✅ Fase 1: Validación y Precisión
+
+- Nuevo módulo: `app/core/precision.py` con `PrecisionNormalizer` (cache de `exchange_info` y helpers `round_price`, `round_quantity`, `validate_notional`).
+- `app/api/trade.py`: validación E2E previa al envío (ajuste de precisión, verificación de `minNotional` y balance suficiente). Rechazos retornan 400.
+- Métricas Prometheus añadidas:
+  - `order_validation_rejects_total{reason,symbol}`
+  - `external_auth_failures_total{provider,reason}`, `commission_update_failures_total{provider,reason}` (para seguimiento de fallos externos)
+

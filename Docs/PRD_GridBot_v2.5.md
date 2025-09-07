@@ -183,6 +183,12 @@ Estado 2025-09-04: circuit breakers, métricas, y alertas han sido implementados
   - Objetivo `make dry-run` que ejecuta simulación dentro del contenedor.
 - Validación E2E (modo protegido): ciclo PAPER sin órdenes reales cuando fondos < min_notional, con validación de filtros activa.
 
+### Avances al 2025-09-07 (Fase 1 completada)
+- Módulo `core/precision.py` creado con caché de `exchange_info` y funciones puras `round_price`, `round_quantity`, `validate_notional`.
+- Validación E2E integrada en `api/trade.py`: ajuste de precio/cantidad según filtros; verificación de `minNotional` y balance disponible antes de enviar; retornos 400 estructurados ante rechazo.
+- Métrica Prometheus `order_validation_rejects_total{reason,symbol}` añadida para observabilidad de rechazos.
+- Beneficio: eliminación de errores `PRICE_FILTER`/`LOT_SIZE`/`MIN_NOTIONAL` y reducción de fallos por fondos insuficientes en ruta de orden.
+
 ### Pendientes no críticos
 - Provisioning/renderer de Grafana y dashboards.
 - Debounce de logs y métricas adicionales de fallos externos/rechazos.
