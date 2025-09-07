@@ -190,8 +190,15 @@ Estado 2025-09-04: circuit breakers, métricas, y alertas han sido implementados
 - Métrica Prometheus `order_validation_rejects_total{reason,symbol}` añadida para observabilidad de rechazos.
 - Beneficio: eliminación de errores `PRICE_FILTER`/`LOT_SIZE`/`MIN_NOTIONAL` y reducción de fallos por fondos insuficientes en ruta de orden.
 
-### Pendientes no críticos
-- Provisioning/renderer de Grafana y dashboards.
-- Debounce de logs y métricas adicionales de fallos externos/rechazos.
-- Runbooks: credenciales Binance y provisioning Grafana.
+### Actualizaciones técnicas recientes (2025-09-07)
+- Calibración de tamaños a filtros del exchange (FundManager/OptimizedGridManager): `stepSize`, `minQty` y `minNotional` efectivos por símbolo; ajuste de cantidades y notional mínimo (`max(env, exchange)`).
+- Observabilidad financiera: métricas `portfolio_total_value_usdt`, `cash_balance_usdt`; breakers activos con `active_breakers_total`. Endpoint `/api/reconciliation/summary` con `cash_usdt` y `portfolio_total_usdt` alineado con Binance.
+- Alertas Prometheus/Alertmanager: discrepancia > 1% o > 5 USDT (5m) y disponibilidad API (warning 5m / critical 15m).
+- Grafana: tablero de Rentabilidad corregido (queries con labels, tarjetas de Portfolio/Cash/Breakers, fix “No Data”).
+- Despliegue Heroku: `runtime.txt` (python-3.11.10), `.python-version` (3.11) y toolchain (`setuptools`, `wheel`) en `requirements.txt`.
+
+### Próxima iteración del PRD
+- Añadir SLOs explícitos (reconciliación, disponibilidad API/worker) y umbrales de breakers por activo.
+- KPIs por símbolo (éxito, slippage, fees) y metas operativas.
+- Detallar plan de activación gradual de real trading con límites de tamaño/orden y gates automáticos post-deploy.
 
