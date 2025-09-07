@@ -20,6 +20,7 @@ from app.core.auth import require_auth
 from app.schemas.validation import OrderRequest, GridParams
 from app.core.precision import PrecisionNormalizer
 from app.core.metrics import order_validation_rejects_total
+from app.core.circuit_breakers import CircuitBreakers
 
 router = APIRouter()
 
@@ -141,6 +142,17 @@ def place_order(
     db: Session = Depends(get_db),
     api_key: str = Depends(require_auth)
 ):
+    # Bloqueo por breakers (si está en modo crítico/protegido, rechazar)
+    try:
+        breakers = CircuitBreakers()
+        summary = breakers.get_all_breakers_status()
+        if summary.get('critical_mode') or summary.get('total_active', 0) > 0:
+            order_validation_rejects_total.labels(reason="breaker_active", symbol=order.symbol.upper()).inc()
+            raise HTTPException(status_code=503, detail="Trading bloqueado por circuit breaker activo")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
     client = Client(api_key_binance, api_secret)
