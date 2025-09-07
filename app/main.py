@@ -361,10 +361,36 @@ async def reconciliation_summary():
     try:
         client_singleton = get_binance_client_singleton()
         acct = client_singleton.client.get_account()
-        ext_balances = {b['asset']: float(b['free']) for b in acct.get('balances', [])}
+        # Usar total (free + locked) para alinear con balance estimado de Binance
+        balances = {}
+        for b in acct.get('balances', []):
+            asset = b.get('asset')
+            free = float(b.get('free', 0) or 0)
+            locked = float(b.get('locked', 0) or 0)
+            total = free + locked
+            if total > 0:
+                balances[asset] = total
+
+        cash_usdt = float(balances.get('USDT', 0.0))
+        portfolio_total = cash_usdt
+        valued = 0
+        unvalued = 0
+        for asset, qty in balances.items():
+            if asset == 'USDT':
+                continue
+            price = client_singleton.get_symbol_price(f"{asset}USDT")
+            if price and price > 0:
+                portfolio_total += qty * price
+                valued += 1
+            else:
+                unvalued += 1
+
         return {
             'status': 'ok',
-            'usdt': ext_balances.get('USDT', 0.0),
+            'cash_usdt': round(cash_usdt, 8),
+            'portfolio_total_usdt': round(portfolio_total, 2),
+            'valued_count': valued,
+            'unvalued_count': unvalued,
             'timestamp': datetime.now().isoformat(),
         }
     except Exception as e:
