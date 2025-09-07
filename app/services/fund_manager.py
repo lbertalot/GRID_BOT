@@ -8,6 +8,7 @@ from typing import Dict, Optional, Tuple
 from decimal import Decimal, ROUND_DOWN
 from dotenv import load_dotenv
 from app.services.commission_manager import commission_manager
+from app.services.binance_service import BinanceService
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +53,61 @@ class FundManager:
             
             # Calcular valor nocional
             notional_value = quantity * price
+
+            # Obtener filtros del símbolo (LOT_SIZE, MIN_NOTIONAL)
+            effective_min_notional = self.min_notional
+            min_qty_filter = None
+            step_size = None
+            try:
+                symbol_info = BinanceService().get_symbol_info(symbol)
+                if symbol_info:
+                    step_size = float(symbol_info.get('stepSize', 0.0) or 0.0)
+                    min_qty_filter = float(symbol_info.get('minQty', 0.0) or 0.0)
+                    symbol_min_notional = float(symbol_info.get('minNotional', 0.0) or 0.0)
+                    effective_min_notional = max(self.min_notional, symbol_min_notional)
+            except Exception:
+                pass
+
+            # Ajustar cantidad a LOT_SIZE (step/minQty)
+            def _round_down_to_step(q: float, step: float) -> float:
+                if not step or step <= 0:
+                    return q
+                from math import floor, log10
+                precision = int(max(0, round(-log10(step))))
+                return float(f"{(floor(q / step) * step):.{precision}f}")
+
+            adjusted_quantity = quantity
+            if step_size:
+                adjusted_quantity = _round_down_to_step(adjusted_quantity, step_size)
+            if min_qty_filter and adjusted_quantity < min_qty_filter:
+                adjusted_quantity = min_qty_filter
+            notional_value = adjusted_quantity * price
             
             # Calcular comisión
             commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
             
             # Validar valor mínimo
-            if notional_value < self.min_notional:
-                return False, f"Valor nocional insuficiente: ${notional_value:.2f} < ${self.min_notional}", {
+            if notional_value < effective_min_notional:
+                # Calcular cantidad mínima requerida para cumplir min_notional del exchange
+                min_quantity_required = effective_min_notional / price
+                if step_size:
+                    # elevar a múltiplo de step_size
+                    from math import ceil
+                    k = ceil(min_quantity_required / step_size)
+                    min_quantity_required = k * step_size
+                if min_qty_filter and min_quantity_required < min_qty_filter:
+                    min_quantity_required = min_qty_filter
+
+                required_notional = min_quantity_required * price
+                required_commission = commission_manager.calculate_commission(required_notional, order_type, symbol)
+                required_total_usdt = required_notional + required_commission
+                return False, f"Valor nocional insuficiente: ${notional_value:.2f} < ${effective_min_notional}", {
                     "notional_value": notional_value,
-                    "min_notional": self.min_notional,
-                    "required_increase": self.min_notional - notional_value
+                    "min_notional": effective_min_notional,
+                    "required_increase": max(0.0, effective_min_notional - notional_value),
+                    "min_quantity_required": min_quantity_required,
+                    "required_total_usdt": required_total_usdt,
+                    "quantity": min_quantity_required
                 }
             
             # Validar tamaño máximo de posición
@@ -111,7 +157,7 @@ class FundManager:
                 "base_asset": base_asset,
                 "quote_asset": quote_asset,
                 "side": side,
-                "quantity": quantity,
+                "quantity": adjusted_quantity,
                 "price": price,
                 "order_type": order_type
             }

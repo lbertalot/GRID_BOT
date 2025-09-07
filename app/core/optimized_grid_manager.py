@@ -268,8 +268,14 @@ class OptimizedGridManager:
             # Usar la cantidad configurada en el archivo
             quantity_to_use = asset_config.quantity
             
-            # Verificar que cumple con min_notional del sistema
+            # Verificar que cumple con min_notional del sistema y del exchange
             min_notional = self.config.min_notional_threshold
+            try:
+                limits = self.asset_limits.get(symbol)
+                if limits and getattr(limits, 'min_notional', None):
+                    min_notional = max(min_notional, float(limits.min_notional))
+            except Exception:
+                pass
             notional_value = quantity_to_use * current_price
             
             if notional_value < min_notional:
@@ -281,7 +287,7 @@ class OptimizedGridManager:
             
             # Ajustar a step_size si corresponde
             limits = self.asset_limits.get(symbol)
-            if limits and limits.step_size:
+            if limits and getattr(limits, 'step_size', None):
                 step_size = limits.step_size
                 precision = int(round(-math.log(step_size, 10), 0))
                 quantity_to_use = float(f"{math.floor(quantity_to_use / step_size) * step_size:.{precision}f}")
