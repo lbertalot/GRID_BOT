@@ -704,6 +704,16 @@ class OptimizedGridManager:
                     return f"{q_adj:.{precision}f}"
 
                 qty_str = _format_quantity(symbol, quantity)
+                # Asegurar formato fijo (sin notación científica)
+                try:
+                    limits = self.asset_limits.get(symbol)
+                    precision = 8
+                    if limits and getattr(limits, 'step_size', None):
+                        step = Decimal(str(limits.step_size))
+                        precision = max(0, -step.as_tuple().exponent)
+                    qty_str = f"{Decimal(qty_str):.{precision}f}"
+                except Exception:
+                    qty_str = f"{Decimal(str(quantity)):.8f}"
                 logger.info(f"💰 Creando orden real en Binance: {action} {qty_str} {symbol}")
                 
                 # Ejecutar llamada bloqueante en hilo para no bloquear el loop
