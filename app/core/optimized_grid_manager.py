@@ -6,6 +6,7 @@ Following FastAPI best practices and .cursorrules
 import asyncio
 import logging
 from typing import Dict, List, Optional, Tuple
+from decimal import Decimal, ROUND_DOWN, getcontext
 from dataclasses import dataclass
 from datetime import datetime
 import json
@@ -683,7 +684,27 @@ class OptimizedGridManager:
                     logger.error("❌ Cliente de Binance sin credenciales para orden real")
                     return None
                 
-                logger.info(f"💰 Creando orden real en Binance: {action} {quantity} {symbol}")
+                # Formatear cantidad evitando notación científica y respetando stepSize
+                def _format_quantity(sym: str, qty: float) -> str:
+                    limits = self.asset_limits.get(sym)
+                    # Precisión por defecto si no hay límites
+                    default_step = Decimal('0.00000001')
+                    step = default_step
+                    if limits and getattr(limits, 'step_size', None):
+                        try:
+                            step = Decimal(str(limits.step_size))
+                        except Exception:
+                            step = default_step
+                    getcontext().prec = 28
+                    q = Decimal(str(qty))
+                    # Floor a múltiplos de step
+                    units = (q / step).to_integral_value(rounding=ROUND_DOWN)
+                    q_adj = units * step
+                    precision = max(0, -step.as_tuple().exponent)
+                    return f"{q_adj:.{precision}f}"
+
+                qty_str = _format_quantity(symbol, quantity)
+                logger.info(f"💰 Creando orden real en Binance: {action} {qty_str} {symbol}")
                 
                 # Ejecutar llamada bloqueante en hilo para no bloquear el loop
                 def _create_order():
@@ -691,7 +712,7 @@ class OptimizedGridManager:
                         symbol=symbol,
                         side=action,
                         type='MARKET',
-                        quantity=quantity
+                        quantity=qty_str
                     )
                 order = await asyncio.to_thread(_create_order)
                 
