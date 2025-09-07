@@ -17,6 +17,7 @@ from app.core.operation_tracker import OperationTracker
 from app.core.integrity_monitor import IntegrityMonitor
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.services.reconciliation_service import ReconciliationService
+from app.core.middleware.integrity_guard import IntegrityGuardMiddleware
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
@@ -105,6 +106,12 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["*"]
 )
+
+# Middleware Integrity Guard
+app.add_middleware(IntegrityGuardMiddleware)
+
+# Exponer breakers en app.state para middleware
+app.state.breakers = app_breakers
 
 # Incluir routers existentes
 app.include_router(trade.router, prefix="/api/trade", tags=["trading"])
@@ -346,6 +353,7 @@ async def root():
             "alerts": "/alerts",
             "integrity": "/integrity"
         }
+    }
 
 @app.get("/api/reconciliation/summary")
 async def reconciliation_summary():
@@ -361,7 +369,7 @@ async def reconciliation_summary():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo resumen: {e}")
-    }
+    
 
 if __name__ == "__main__":
     import uvicorn
