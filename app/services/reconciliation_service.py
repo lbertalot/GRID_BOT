@@ -7,6 +7,8 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Dict, Any
+from app.services.binance_client_singleton import get_binance_client_singleton
+from app.core.metrics import portfolio_total_value_usdt
 
 from binance.client import Client
 from app.core.metrics import (
@@ -27,10 +29,32 @@ class ReconciliationService:
     async def run_reconciliation_cycle(self) -> Dict[str, Any]:
         start = time.time()
         try:
-            # Datos de Binance (simplificado: solo balances libres)
+            # Datos de Binance (usar total: free+locked) y valorizar portafolio
             acct = self._client.get_account()
-            ext_balances = {b['asset']: float(b['free']) for b in acct.get('balances', [])}
+            ext_balances = {}
+            for b in acct.get('balances', []):
+                asset = b.get('asset')
+                free = float(b.get('free', 0) or 0)
+                locked = float(b.get('locked', 0) or 0)
+                total = free + locked
+                if total > 0:
+                    ext_balances[asset] = total
             ext_usdt = ext_balances.get('USDT', 0.0)
+
+            # Valorización total del portafolio en USDT
+            total_value = float(ext_usdt)
+            client_singleton = get_binance_client_singleton()
+            for asset, qty in ext_balances.items():
+                if asset == 'USDT':
+                    continue
+                price = client_singleton.get_symbol_price(f"{asset}USDT")
+                if price and price > 0:
+                    total_value += qty * price
+            # Exportar métrica
+            try:
+                portfolio_total_value_usdt.labels(strategy="grid").set(total_value)
+            except Exception:
+                pass
 
             # Datos internos (placeholder: usar 0 hasta integrar DB)
             int_usdt = 0.0
@@ -49,6 +73,7 @@ class ReconciliationService:
             return {
                 'status': 'ok',
                 'ext_usdt': ext_usdt,
+                'portfolio_total_usdt': round(total_value, 2),
                 'int_usdt': int_usdt,
                 'discrepancy_usd': discrepancy,
                 'latency_seconds': elapsed,
