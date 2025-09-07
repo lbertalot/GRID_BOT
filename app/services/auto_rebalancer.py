@@ -131,18 +131,23 @@ class AutoRebalancer:
                 config_data = json.load(f)
             
             grid_configs = {}
-            for symbol, config in config_data.items():
-                if symbol != "_optimization_metadata":
-                    # Crear un objeto simple con los datos de configuración
-                    grid_configs[symbol] = type('GridConfig', (), {
-                        'symbol': config.get('symbol'),
-                        'min_price': config.get('min_price'),
-                        'max_price': config.get('max_price'),
-                        'grids': config.get('grids'),
-                        'quantity': config.get('quantity'),
-                        'last_action': config.get('last_action'),
-                        'is_active': config.get('is_active', True)
-                    })()
+            required = {"symbol","min_price","max_price","grids","quantity"}
+            for key, cfg in config_data.items():
+                if not isinstance(cfg, dict):
+                    continue
+                if key.startswith("_") or key in {"system_config"}:
+                    continue
+                if not required.issubset(cfg.keys()):
+                    continue
+                grid_configs[key] = type('GridConfig', (), {
+                    'symbol': cfg.get('symbol'),
+                    'min_price': cfg.get('min_price'),
+                    'max_price': cfg.get('max_price'),
+                    'grids': cfg.get('grids'),
+                    'quantity': cfg.get('quantity'),
+                    'last_action': cfg.get('last_action'),
+                    'is_active': cfg.get('is_active', True)
+                })()
             
             return grid_configs
             
@@ -279,18 +284,7 @@ class AutoRebalancer:
             Balance de USDT
         """
         try:
-            if self.paper_trading:
-                # Simular orden en modo paper para evitar ejecución real
-                order_id = f"paper_{int(datetime.utcnow().timestamp())}"
-                logger.info(f"📄 PAPER_TRADING: Simulación de compra {symbol} por {quantity}")
-                return {
-                    "order_id": order_id,
-                    "symbol": symbol,
-                    "quantity": quantity,
-                    "usdt_amount": 0.0,
-                    "price": 0.0,
-                    "status": "FILLED"
-                }
+            # En modo PAPER_TRADING no ejecutamos acciones, solo devolvemos el balance actual
             balances = await self.get_current_balances()
             return balances.get('USDT', 0.0)
         except Exception as e:

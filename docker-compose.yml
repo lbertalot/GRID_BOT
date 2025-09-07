@@ -76,7 +76,7 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
-      - BINANCE_TESTNET=false
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
       # Configuración de Numba para evitar problemas de cache en Docker
       - NUMBA_CACHE_DIR=/dev/null
       - NUMBA_DISABLE_JIT=0
@@ -128,7 +128,7 @@ services:
       - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
-      - BINANCE_TESTNET=false
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
     volumes:

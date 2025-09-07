@@ -2,7 +2,7 @@
 
 Fecha: 2025-09-04
 Autor: Equipo Plataforma / Trading
-Estado: Propuesto
+Estado: En progreso
 Impacto: Alto (bloqueante para reactivar trading real)
 
 ### Motivación
@@ -88,3 +88,16 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 - Revertir a papel; activar `emergency_stop`; deshacer despliegue; restaurar configs previas.
 
 
+
+## Implementaciones realizadas (2025-09-07)
+- Validación robusta de credenciales/conectividad Binance en Singleton y en startup; breakers activados ante fallo y endpoint `/breakers/summary` expuesto.
+- Filtrado de metadatos en carga de grids (`optimized_grid_manager`, `auto_rebalancer`) evitando errores de validación/símbolo.
+- Normalización/regex de símbolos y manejo `APIError -1100` en cliente.
+- Guard clauses en ciclo de trading para evitar `NoneType` y abortar con cliente no listo.
+- Bugfix `AutoRebalancer.get_usdt_balance` (variables no definidas) y corrección del label `mode` en resúmenes de ciclo.
+- Mecanismo de preflight: `POST /api/simulations/dry-run` (PAPER) y `make dry-run` para validación/Simulación sin enviar órdenes.
+
+## Próximos pasos
+- Provisioning/renderer Grafana y dashboards de Integridad/Ejecución.
+- Debounce de logs y métricas de rechazo/fallos externas.
+- Playbooks de operación (credenciales, Grafana) y gates automáticos post-deploy usando dry-run.

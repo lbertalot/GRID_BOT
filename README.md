@@ -499,3 +499,39 @@ Sugerencia operativa: ejecutar un job semanal que
 1) comprima resúmenes de monitoreo >30 días a `.ndjson.gz`,
 2) elimine artefactos que excedan su retención,
 3) exporte métricas de limpieza (archivos purgados, espacio liberado).
+
+## 📌 Estado actual (2025-09-07)
+
+- Binance: credenciales whitelisted y validadas; lectura de cuenta OK (USDT ~11.867). Cliente Singleton con validación de conectividad/privados al arranque.
+- Circuit breakers: expuestos en `/breakers/summary`; sistema en guardia (protegido) hasta validar condiciones de trading.
+- Dry-run: ciclo ejecutado en PAPER (`PAPER_TRADING=true`), sin órdenes reales; validaciones de filtros y notional activas. 0/0 operaciones por USDT insuficiente.
+- Correcciones: bug en `AutoRebalancer.get_usdt_balance` resuelto; label `mode` del resumen refleja PAPER/REAL correctamente.
+- Nuevas capacidades: endpoint de simulación y objetivo Make para dry-run.
+- Pendientes no críticos: provisión de dashboards Grafana/renderer, debounce de logs (ruido), runbooks operativos.
+
+## 🔁 Simulaciones (dry-run)
+
+### Endpoint HTTP
+```bash
+POST /api/simulations/dry-run
+Authorization: Bearer <API_KEY>
+Body: {"symbol":"BTCUSDT","side":"BUY","order_type":"MARKET","quantity":0.0002}
+```
+Respuesta (ejemplo): 200 OK con validación, comisiones simuladas y orden simulada en modo PAPER.
+
+Ejemplo cURL:
+```bash
+curl -s -X POST "http://localhost:8000/api/simulations/dry-run" \
+  -H "Authorization: Bearer ${API_KEY:-gridbot_api_key_2024_secure_12345}" \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"BTCUSDT","side":"BUY","order_type":"MARKET","quantity":0.0002}'
+```
+
+### Comandos Make (dentro de Docker)
+
+```bash
+make dry-run SYMBOL=BTCUSDT QTY=0.0002 [SIDE=BUY] [TYPE=MARKET]
+```
+Notas:
+- Fuerza `PAPER_TRADING=true` y ejecuta validación+simulación dentro del contenedor `api`.
+- Útil para gates post-deploy y chequeos periódicos.

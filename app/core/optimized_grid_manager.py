@@ -958,9 +958,18 @@ async def create_optimized_grid_manager(config_file: str) -> Optional[OptimizedG
             config_data = json.load(f)
         
         assets = {}
-        for symbol, data in config_data.items():
-            if symbol not in ["_optimization_metadata", "_emergency_metadata", "_consolidated_metadata"]:
-                assets[symbol] = AssetConfig(**data)
+        required_fields = {"symbol", "min_price", "max_price", "grids", "quantity"}
+        for key, data in config_data.items():
+            # Omitir metadatos y secciones no-asset
+            if not isinstance(data, dict):
+                continue
+            if key.startswith("_") or key in {"system_config"}:
+                continue
+            # Incluir sólo configuraciones con campos requeridos
+            if required_fields.issubset(data.keys()):
+                assets[key] = AssetConfig(**data)
+            else:
+                logger.debug(f"Saltando clave no-asset '{key}' por campos faltantes: {set(data.keys())}")
         
         grid_config = GridManagerConfig(
             assets=assets,
