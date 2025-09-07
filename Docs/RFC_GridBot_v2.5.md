@@ -12,7 +12,7 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 - Eliminar discrepancias de balance/PnL con reconciliación determinística.
 - Garantizar validación E2E previa al envío de órdenes (precisión, filtros, balance, notional, límites de riesgo).
 - Asegurar tracking idempotente y registro completo de fallos y fills parciales.
-- Endurecer circuit breakers y modo de emergencia con verificación previa de integridad.
+- Endurecer circuit breakers y modo de emergencia con verificación previa de integridad. Middleware `IntegrityGuardMiddleware` en FastAPI bloquea rutas críticas si hay breakers activos; endpoint `/breakers/summary` publica estado.
 
 ### Alcance
 - Núcleo de ejecución, tracking, reconciliación y observabilidad. No cubre nuevos exchanges/estrategias.
@@ -27,6 +27,7 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 2) Validación E2E de órdenes (guard clauses)
 - Dependencia FastAPI `get_order_validator()` inyectando validadores: precisión, LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL, balance suficiente, límites de riesgo.
 - Reglas: early return con error estructurado; logging y métrica de motivo de rechazo.
+- Sourcing de límites desde exchange: `stepSize`, `minQty`, `minNotional` para cada símbolo; ajuste de cantidades (step) y notional efectivo `max(env, exchange)`.
 - Bloqueo duro si `IntegrityMonitor` indica estado no sano.
 
 3) Reconciliación determinística con Binance
@@ -34,6 +35,7 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
   - Obtener balances, posiciones, órdenes recientes; comparar con ledger interno.
   - Detectar faltantes (fallos no registrados, fills parciales) y ajustar libro interno con asientos de corrección.
   - Registrar diferencias en `integrity_monitor` y emitir métricas (`balance_discrepancy`, `unaccounted_pnl`).
+  - Exponer `cash_usdt`/`portfolio_total_usdt` y publicar métricas `portfolio_total_value_usdt`/`cash_balance_usdt`.
 - Alarma crítica y `breakers.protect()` si discrepancia > umbral.
 
 4) Tracking idempotente y completo
@@ -48,6 +50,7 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 
 6) Observabilidad y métricas
 - Prometheus: latencia por etapa (validación, envío, confirmación, reconciliación), slippage, fees, discrepancia, ratio de fallos, fills parciales.
+- Finanzas: `portfolio_total_value_usdt`, `cash_balance_usdt`, breakers activos (`active_breakers_total`).
 - Logs estructurados con `order_id`, `client_order_id`, `symbol`, `state`.
 - Dashboards Grafana: Integridad, Ejecución, Riesgo.
 
@@ -96,6 +99,7 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 - Guard clauses en ciclo de trading para evitar `NoneType` y abortar con cliente no listo.
 - Bugfix `AutoRebalancer.get_usdt_balance` (variables no definidas) y corrección del label `mode` en resúmenes de ciclo.
 - Mecanismo de preflight: `POST /api/simulations/dry-run` (PAPER) y `make dry-run` para validación/Simulación sin enviar órdenes.
+- Endpoint `GET /api/reconciliation/summary` publica `cash_usdt` y `portfolio_total_usdt`. Reglas de alertas Prometheus: discrepancia > 1%/5 USDT y API Down 5m/15m.
 
 ### Fase 1 — Capa de normalización y validación E2E
 - Implementado `core/precision.py` con caché de `exchange_info` y funciones puras (`round_price`, `round_quantity`, `validate_notional`).

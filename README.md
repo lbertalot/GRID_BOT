@@ -212,6 +212,25 @@ Body: {
 GET /api/v2/strategies/ml/status?symbol=BTCUSDT
 ```
 
+### Integridad y Reconciliación
+```bash
+# Estado de breakers (resumen)
+GET /breakers/summary
+
+# Resumen de reconciliación directo contra Binance
+GET /api/reconciliation/summary
+
+# Respuesta ejemplo
+{
+  "status": "ok",
+  "cash_usdt": 11.86747559,
+  "portfolio_total_usdt": 325.5,
+  "valued_count": 41,
+  "unvalued_count": 0,
+  "timestamp": "2025-09-07T21:35:11.606976"
+}
+```
+
 ## 🔧 Configuración Avanzada
 
 ### RiskManager
@@ -274,13 +293,23 @@ model_accuracy{model_type="deep", symbol="BTCUSDT"}
 orders_rejected_total{reason="price_below_min", symbol="BTCUSDT"}
 api_rate_limit_hits_total{endpoint="order"}
 ws_lag_ms{symbol="BTCUSDT", type="bookTicker"}
+
+# Reconciliación y estado financiero
+portfolio_total_value_usdt{strategy="grid"}
+cash_balance_usdt{strategy="grid"}
+active_breakers_total
 ```
 
 ### Dashboards Grafana
 - **Risk & Guardrails**: Exposición, drawdown, breaker state
 - **Execution Health**: Latencia WebSocket, rechazos, rate limits
+- **Financial Overview**: Portfolio Total (USDT), Cash (USDT), Portfolio vs Cash, Errores del bot
 - **ML Performance**: Precisión de modelos, predicciones de régimen
 - **Strategy Performance**: Rendimiento por estrategia y símbolo
+
+Alertas Prometheus/Alertmanager provisionadas:
+- Discrepancia financiera > 1% (5m) o > 5 USDT (5m)
+- API Down warning (5m) / critical (15m)
 
 ## 🔒 Seguridad y Mejores Prácticas
 
@@ -374,6 +403,22 @@ spec:
             secretKeyRef:
               name: binance-secrets
               key: api-key
+```
+
+### Heroku (FastAPI)
+Requisitos añadidos:
+- Archivo `.python-version` (3.11) y `runtime.txt` con `python-3.11.10`.
+- `setuptools` y `wheel` en `requirements.txt`.
+
+Pasos (ejemplo):
+```bash
+heroku create gridbot-api --region us
+heroku buildpacks:set heroku/python
+heroku config:set BINANCE_API_KEY=... BINANCE_API_SECRET=... DATABASE_URL=... REDIS_URL=...
+# Procfile (recomendado en repo):
+# web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+git push heroku main
+heroku open
 ```
 
 ## 📚 Documentación Adicional
@@ -502,12 +547,12 @@ Sugerencia operativa: ejecutar un job semanal que
 
 ## 📌 Estado actual (2025-09-07)
 
-- Binance: credenciales whitelisted y validadas; lectura de cuenta OK (USDT ~11.867). Cliente Singleton con validación de conectividad/privados al arranque.
-- Circuit breakers: expuestos en `/breakers/summary`; sistema en guardia (protegido) hasta validar condiciones de trading.
-- Dry-run: ciclo ejecutado en PAPER (`PAPER_TRADING=true`), sin órdenes reales; validaciones de filtros y notional activas. 0/0 operaciones por USDT insuficiente.
-- Correcciones: bug en `AutoRebalancer.get_usdt_balance` resuelto; label `mode` del resumen refleja PAPER/REAL correctamente.
-- Nuevas capacidades: endpoint de simulación y objetivo Make para dry-run.
-- Pendientes no críticos: provisión de dashboards Grafana/renderer, debounce de logs (ruido), runbooks operativos.
+- Binance: credenciales validadas; lectura de cuenta OK (USDT ~11.867). Singleton con validación de conectividad/privados en arranque.
+- Circuit breakers: expuestos en `/breakers/summary` y métrica `active_breakers_total`.
+- Reconciliación: endpoint `/api/reconciliation/summary` con `cash_usdt` y `portfolio_total_usdt` alineado con Binance; métricas `portfolio_total_value_usdt`/`cash_balance_usdt` exportadas.
+- Trading: modo REAL habilitado, sin fills por señales fuera de rango y/o fondos insuficientes (BTC/BNB). Sizing calibrado a `MIN_NOTIONAL`/`LOT_SIZE` del exchange.
+- Observabilidad: dashboards Grafana corregidos; alertas Prometheus/Alertmanager activas (discrepancia y disponibilidad API).
+- Herramientas: endpoint de simulación y objetivo Make para dry-run.
 
 ## 🔁 Simulaciones (dry-run)
 

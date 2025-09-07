@@ -54,7 +54,7 @@ GridBot v2.5 es un sistema de trading algorítmico (FastAPI + Celery) orientado 
 - **Flujo de reconciliación**: obtener balances/posiciones reales -> comparar con ledger interno -> ajustar PnL y estado -> registrar diferencias.
 
 ### Estados operativos
-- `PAPER`, `REAL`, `PROTECTED`, `CRITICAL`, `EMERGENCY_STOP`. Transiciones gobernadas por IntegrityMonitor y circuit breakers.
+`PAPER`, `REAL`, `PROTECTED`, `CRITICAL`, `EMERGENCY_STOP`. Transiciones gobernadas por IntegrityMonitor y circuit breakers. Además, el middleware `IntegrityGuardMiddleware` bloquea rutas de trading cuando hay breakers activos.
 
 ### Configuración
 - Perfiles en `grid_config_minimal.json`, `grid_config_optimized.json`, `grid_config_safe.json`.
@@ -62,6 +62,7 @@ GridBot v2.5 es un sistema de trading algorítmico (FastAPI + Celery) orientado 
 
 ### Métricas/KPIs mínimos
 - PnL diario y acumulado, slippage medio, ratio de éxito, latencia de ejecución, exposición por activo, drawdown, discrepancia de balances, número de órdenes fallidas/no registradas, alarmas.
+- Finanzas en tiempo real: `portfolio_total_value_usdt`, `cash_balance_usdt`; breakers activos `active_breakers_total`.
 
 ---
 
@@ -139,7 +140,7 @@ Estado 2025-09-04: circuit breakers, métricas, y alertas han sido implementados
 - Trazabilidad: cada orden con timeline de eventos y métricas.
 
 ### KPIs de aceptación
-- Discrepancia de balance ≤ 0.1% sostenida 24h.
+- Discrepancia de balance ≤ 0.1% sostenida 24h (delta entre `portfolio_total_usdt` y Binance UI).
 - Slippage medio ≤ 0.05% en mercados líquidos; fees contabilizadas 100%.
 - 0 órdenes con "Illegal characters" y 0 rejects por precision/LOT_SIZE en 72h.
 - 0 operaciones fallidas sin registro en 72h.
