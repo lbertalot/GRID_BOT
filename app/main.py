@@ -19,6 +19,7 @@ from app.services.binance_client_singleton import get_binance_client_singleton
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
+from app.api import prometheus as prometheus_routes
 from app.core.circuit_breakers import CircuitBreakers
 
 # Configuración de logging
@@ -101,7 +102,10 @@ app.add_middleware(
 app.include_router(trade.router, prefix="/api/trade", tags=["trading"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
-app.include_router(alert_routes.router, prefix="/api/alerts", tags=["alerts"])
+# Incluir rutas de alertas con su propio prefijo (evita doble prefijo y 404)
+app.include_router(alert_routes.router)
+# Exponer /metrics raíz para Prometheus y compatibilidad
+app.include_router(prometheus_routes.router)
 app.include_router(simulations.router)
 
 # Endpoints de integridad integrados
@@ -217,6 +221,11 @@ async def get_partial_fills():
     except Exception as e:
         logger.error(f"❌ Error obteniendo partial fills: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+# Endpoint de salud simple para healthcheck de Docker y sondas
+@app.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 @app.get("/integrity/balances/discrepancies")
 async def get_balance_discrepancies():

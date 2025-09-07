@@ -1,7 +1,6 @@
 {
-  "dashboard": {
-    "id": null,
-    "title": "GridBot Simple Dashboard",
+  "id": null,
+  "title": "GridBot Simple Dashboard",
     "tags": ["gridbot", "trading", "simple"],
     "style": "dark",
     "timezone": "browser",
