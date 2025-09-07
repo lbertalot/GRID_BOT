@@ -8,7 +8,7 @@ import asyncio
 import time
 from typing import Dict, Any
 from app.services.binance_client_singleton import get_binance_client_singleton
-from app.core.metrics import portfolio_total_value_usdt
+from app.core.metrics import portfolio_total_value_usdt, cash_balance_usdt
 
 from binance.client import Client
 from app.core.metrics import (
@@ -53,6 +53,7 @@ class ReconciliationService:
             # Exportar métrica
             try:
                 portfolio_total_value_usdt.labels(strategy="grid").set(total_value)
+                cash_balance_usdt.labels(strategy="grid").set(ext_usdt)
             except Exception:
                 pass
 

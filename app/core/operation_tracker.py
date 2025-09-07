@@ -17,6 +17,7 @@ from app.core.telegram_bot import TelegramBot
 from app.core.grafana_metrics import GrafanaMetrics
 from app.core.circuit_breakers import CircuitBreakers
 from app.core.config import settings
+from app.core.metrics import partial_fills_total
 
 logger = logging.getLogger(__name__)
 

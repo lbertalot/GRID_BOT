@@ -1,0 +1,24 @@
+groups:
+  - name: gridbot-availability
+    rules:
+      - alert: GridBotAPIDownWarning
+        expr: |
+          (absent(up{job="gridbot-api"}) OR (up{job="gridbot-api"} == 0))
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API de GridBot no responde (warning)"
+          description: "up{job='gridbot-api'} ausente o 0 por >5m."
+
+      - alert: GridBotAPIDown
+        expr: |
+          (absent(up{job="gridbot-api"}) OR (up{job="gridbot-api"} == 0))
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API de GridBot caída (critical)"
+          description: "up{job='gridbot-api'} ausente o 0 por >15m."
+
+
