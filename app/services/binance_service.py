@@ -3,6 +3,7 @@ import time
 import logging
 from typing import Dict, Any, Optional, List
 import math
+from decimal import Decimal, ROUND_DOWN, getcontext
 
 from binance import Client
 from binance.exceptions import BinanceAPIException
@@ -277,16 +278,29 @@ class BinanceService:
             
             logger.info(f"💰 Comisión calculada para {side} {quantity} {symbol}: ${commission:.6f} USDT")
             
+            # Preparar cantidad formateada evitando notación científica y respetando stepSize
+            def _format_quantity(sym: str, qty: float) -> str:
+                info = self.get_symbol_info(sym) or {}
+                step = Decimal(str(info.get('stepSize', '0.00000001')))
+                getcontext().prec = 28
+                q = Decimal(str(qty))
+                units = (q / step).to_integral_value(rounding=ROUND_DOWN)
+                q_adj = units * step
+                precision = max(0, -step.as_tuple().exponent)
+                return f"{q_adj:.{precision}f}"
+
+            qty_str = _format_quantity(symbol, quantity)
+
             if order_type == "MARKET":
                 if side == "BUY":
-                    order = self.client.order_market_buy(symbol=symbol, quantity=quantity)
+                    order = self.client.order_market_buy(symbol=symbol, quantity=qty_str)
                 else:
-                    order = self.client.order_market_sell(symbol=symbol, quantity=quantity)
+                    order = self.client.order_market_sell(symbol=symbol, quantity=qty_str)
             else:  # LIMIT
                 if side == "BUY":
-                    order = self.client.order_limit_buy(symbol=symbol, quantity=quantity, price=str(price))
+                    order = self.client.order_limit_buy(symbol=symbol, quantity=qty_str, price=str(price))
                 else:
-                    order = self.client.order_limit_sell(symbol=symbol, quantity=quantity, price=str(price))
+                    order = self.client.order_limit_sell(symbol=symbol, quantity=qty_str, price=str(price))
             
             duration = time.time() - start_time
             # record_binance_api_call("execute_trading_order", "success", duration)
