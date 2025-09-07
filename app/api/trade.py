@@ -18,6 +18,8 @@ from fastapi import Query
 from app.services.telegram_alert import send_telegram_alert
 from app.core.auth import require_auth
 from app.schemas.validation import OrderRequest, GridParams
+from app.core.precision import PrecisionNormalizer
+from app.core.metrics import order_validation_rejects_total
 
 router = APIRouter()
 
@@ -142,6 +144,45 @@ def place_order(
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_API_SECRET", "")
     client = Client(api_key_binance, api_secret)
+
+    # Validación previa (precisión, notional, fondos)
+    try:
+        normalizer = PrecisionNormalizer(client)
+        symbol = order.symbol.upper()
+        # Precio actual para MARKET; si LIMIT usar order.price
+        ticker = client.get_symbol_ticker(symbol=symbol)
+        current_price = float(ticker["price"])
+        price_for_validation = current_price if order.type == 'MARKET' else float(order.price)
+        rounded_price = normalizer.round_price(symbol, price_for_validation)
+        rounded_qty = normalizer.round_quantity(symbol, float(order.quantity))
+        if not normalizer.validate_notional(symbol, rounded_price, rounded_qty):
+            order_validation_rejects_total.labels(reason="min_notional", symbol=symbol).inc()
+            raise HTTPException(status_code=400, detail=f"Valor notional insuficiente: {rounded_price*rounded_qty:.6f} < minNotional")
+        # Balance suficiente (BUY: USDT; SELL: base)
+        account = client.get_account()
+        balances = {b['asset']: float(b['free']) for b in account.get('balances', [])}
+        if order.side.upper() == 'BUY':
+            need_usdt = rounded_price * rounded_qty
+            have_usdt = balances.get('USDT', 0.0)
+            if have_usdt + 1e-9 < need_usdt:
+                order_validation_rejects_total.labels(reason="insufficient_usdt", symbol=symbol).inc()
+                raise HTTPException(status_code=400, detail=f"USDT insuficiente: requiere {need_usdt:.6f}, disponible {have_usdt:.6f}")
+        else:
+            base_asset = symbol.replace('USDT', '')
+            have_base = balances.get(base_asset, 0.0)
+            if have_base + 1e-12 < rounded_qty:
+                order_validation_rejects_total.labels(reason="insufficient_asset", symbol=symbol).inc()
+                raise HTTPException(status_code=400, detail=f"{base_asset} insuficiente: requiere {rounded_qty:.8f}, disponible {have_base:.8f}")
+        # Sobrescribir cantidad/precio redondeados si aplica
+        order.quantity = rounded_qty
+        if order.type == 'LIMIT':
+            order.price = rounded_price
+    except HTTPException:
+        raise
+    except Exception as e:
+        order_validation_rejects_total.labels(reason="validation_error", symbol=order.symbol.upper()).inc()
+        raise HTTPException(status_code=400, detail=f"Error de validación previa: {e}")
+
     try:
         if order.type == 'MARKET':
             if order.side == 'BUY':

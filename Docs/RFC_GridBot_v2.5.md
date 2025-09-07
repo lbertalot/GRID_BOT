@@ -97,6 +97,12 @@ Las auditorías detectaron discrepancias severas entre el balance/PnL reportado 
 - Bugfix `AutoRebalancer.get_usdt_balance` (variables no definidas) y corrección del label `mode` en resúmenes de ciclo.
 - Mecanismo de preflight: `POST /api/simulations/dry-run` (PAPER) y `make dry-run` para validación/Simulación sin enviar órdenes.
 
+### Fase 1 — Capa de normalización y validación E2E
+- Implementado `core/precision.py` con caché de `exchange_info` y funciones puras (`round_price`, `round_quantity`, `validate_notional`).
+- Integrada validación previa en `api/trade.py`: ajuste de precisión, chequeo de `minNotional` y balance suficiente; early return 400 con motivo.
+- Métrica `order_validation_rejects_total{reason,symbol}` para seguimiento de rechazos.
+- Próximo: incorporar bloqueo por breaker en la dependencia de validación (cuando `system_state` no sea HEALTHY/PROTECTED).
+
 ## Próximos pasos
 - Provisioning/renderer Grafana y dashboards de Integridad/Ejecución.
 - Debounce de logs y métricas de rechazo/fallos externas.

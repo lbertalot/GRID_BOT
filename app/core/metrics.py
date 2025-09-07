@@ -110,6 +110,19 @@ bot_errors_total = Counter(
     ['error_type', 'strategy']
 )
 
+# Errores externos (e.g., Binance auth/network)
+external_auth_failures = Counter(
+    'external_auth_failures_total',
+    'Total de fallos de autenticación/permiso con proveedores externos',
+    ['provider', 'reason']
+)
+
+commission_update_failures = Counter(
+    'commission_update_failures_total',
+    'Total de fallos al actualizar comisiones externas',
+    ['provider', 'reason']
+)
+
 # ============================================================================
 # MÉTRICAS DE SALDOS Y POSICIONES
 # ============================================================================
@@ -163,6 +176,41 @@ api_requests_total = Counter(
     'api_requests_total',
     'Total de requests de API',
     ['method', 'endpoint', 'status_code']
+)
+
+# Rechazos de validación de órdenes
+order_validation_rejects_total = Counter(
+    'order_validation_rejects_total',
+    'Total de rechazos de validación de órdenes',
+    ['reason', 'symbol']
+)
+
+# Reconciliación e integridad
+reconciliation_latency_seconds = Histogram(
+    'reconciliation_latency_seconds',
+    'Tiempo de ejecución del ciclo de reconciliación',
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
+)
+
+balance_discrepancy_usd = Gauge(
+    'balance_discrepancy_usd',
+    'Discrepancia absoluta de balance entre sistema y Binance en USD'
+)
+
+unaccounted_pnl_usd = Gauge(
+    'unaccounted_pnl_usd',
+    'PnL no contabilizado detectado en reconciliación en USD'
+)
+
+partial_fills_total = Counter(
+    'partial_fills_total',
+    'Total de órdenes parcialmente llenadas'
+)
+
+order_api_failures_total = Counter(
+    'order_api_failures_total',
+    'Fallos de API al enviar/consultar órdenes',
+    ['reason']
 )
 
 # Duración de requests de API
