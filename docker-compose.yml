@@ -122,7 +122,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - WEBSOCKET_ADVANCED=true
-      - PAPER_TRADING=true
+      - PAPER_TRADING=false
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
