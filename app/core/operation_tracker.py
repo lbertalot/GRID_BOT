@@ -21,10 +21,13 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 class OperationStatus(Enum):
-    PENDING = "PENDING"
+    INTENDED = "INTENDED"          # Propuesta
+    SUBMITTED = "SUBMITTED"        # Enviada a exchange
+    ACCEPTED = "ACCEPTED"          # Aceptada por exchange (ack)
     EXECUTING = "EXECUTING"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
-    COMPLETED = "COMPLETED"
+    FILLED = "FILLED"
+    COMPLETED = "COMPLETED"        # Alias legacy para FILLED
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
@@ -72,10 +75,16 @@ class OperationTracker:
         self.total_fees = Decimal('0')
         
     async def track_operation(self, operation_data: Dict[str, Any]) -> str:
-        """Registrar operación antes de ejecutar"""
+        """Registrar operación INTENDED (idempotente por client_order_id)."""
         try:
-            # Generar ID único de operación
-            operation_id = self.generate_operation_id()
+            # Generar client_order_id determinístico basado en intent
+            operation_id = self.generate_client_order_id(
+                asset=str(operation_data['asset']),
+                side=str(operation_data['side']),
+                quantity=str(operation_data['quantity']),
+                price=str(operation_data['price']),
+                metadata=json.dumps(operation_data.get('metadata', {}), sort_keys=True)
+            )
             
             # Preparar datos de operación
             operation_record = {
@@ -86,7 +95,7 @@ class OperationTracker:
                 'side': operation_data['side'],
                 'quantity': Decimal(str(operation_data['quantity'])),
                 'intended_price': Decimal(str(operation_data['price'])),
-                'status': OperationStatus.PENDING.value,
+                'status': OperationStatus.INTENDED.value,
                 'intended_value': Decimal(str(operation_data['quantity'])) * Decimal(str(operation_data['price'])),
                 'user_id': operation_data.get('user_id'),
                 'strategy_id': operation_data.get('strategy_id'),
@@ -126,7 +135,7 @@ class OperationTracker:
             operation['status_updated_at'] = datetime.now().isoformat()
             
             # Procesar resultado si está disponible
-            if result_data and status == OperationStatus.COMPLETED:
+            if result_data and status in (OperationStatus.FILLED, OperationStatus.COMPLETED):
                 await self.process_completed_operation(operation_id, result_data)
             elif status == OperationStatus.FAILED:
                 await self.process_failed_operation(operation_id, result_data)

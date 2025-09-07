@@ -16,6 +16,7 @@ from app.core.balance_validator import BalanceValidator
 from app.core.operation_tracker import OperationTracker
 from app.core.integrity_monitor import IntegrityMonitor
 from app.services.binance_client_singleton import get_binance_client_singleton
+from app.services.reconciliation_service import ReconciliationService
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
@@ -63,6 +64,13 @@ async def lifespan(app: FastAPI):
             if not check.get("auth_ok", False):
                 logger.error("❌ Credenciales/permiso de Binance inválidos - deshabilitando endpoints privados")
                 await app_breakers.activate_breaker('system_integrity', 'binance_auth_fail')
+            # Reconciliación periódica
+            try:
+                recon = ReconciliationService(client_singleton.client, app_breakers)
+                asyncio.create_task(recon.start(interval_seconds=60))
+            except Exception:
+                pass
+
         except Exception as e:
             logger.error(f"❌ Error validando Binance al arranque: {e}")
 
@@ -338,6 +346,21 @@ async def root():
             "alerts": "/alerts",
             "integrity": "/integrity"
         }
+
+@app.get("/api/reconciliation/summary")
+async def reconciliation_summary():
+    """Resumen simple de última reconciliación (consulta directa a Binance)."""
+    try:
+        client_singleton = get_binance_client_singleton()
+        acct = client_singleton.client.get_account()
+        ext_balances = {b['asset']: float(b['free']) for b in acct.get('balances', [])}
+        return {
+            'status': 'ok',
+            'usdt': ext_balances.get('USDT', 0.0),
+            'timestamp': datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo resumen: {e}")
     }
 
 if __name__ == "__main__":
