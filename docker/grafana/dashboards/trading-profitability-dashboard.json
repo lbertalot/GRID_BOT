@@ -491,13 +491,25 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(bot_errors_total{strategy=\"grid\"})",
+          "expr": "sum(bot_errors_total{strategy=\"grid\"}) or vector(0)",
           "refId": "A"
         }
       ],
       "title": "⚠️ Errores del Bot",
       "type": "stat"
     },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 24},
+      "id": 12,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [
+        {"expr": "active_breakers_total", "refId": "A"}
+      ],
+      "title": "⛔ Breakers activos",
+      "type": "stat"
+    }
     {
       "datasource": {
         "type": "prometheus",

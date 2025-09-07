@@ -40,6 +40,19 @@ portfolio_total_value_usdt = Gauge(
     ['strategy']
 )
 
+# Saldo efectivo USDT
+cash_balance_usdt = Gauge(
+    'cash_balance_usdt',
+    'Saldo efectivo en USDT (caja)',
+    ['strategy']
+)
+
+# Breakers activos (cantidad)
+active_breakers_total = Gauge(
+    'active_breakers_total',
+    'Cantidad de circuit breakers activos'
+)
+
 # Ganancia por activo específico
 profit_by_asset_usdt = Gauge(
     'profit_by_asset_usdt',
