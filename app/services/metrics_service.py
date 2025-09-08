@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from app.core.metrics import trading_metrics
+from app.core.metrics import roi_daily_percent, profit_daily_usdt
 from binance.client import Client
 import os
 from dotenv import load_dotenv
@@ -412,6 +413,12 @@ class MetricsService:
                 portfolio_value=portfolio_value,
                 strategy="grid"
             )
+            # Forzar publicación de ROI diario y ganancia diaria (evitar "No data")
+            try:
+                profit_daily_usdt.labels(strategy="grid").set(float(daily_profit))
+                roi_daily_percent.labels(strategy="grid").set(float(roi_daily))
+            except Exception:
+                pass
             
             # Métricas por activo
             for asset, metrics in asset_metrics.items():
