@@ -60,13 +60,19 @@ class ReconciliationService:
             # Datos internos (placeholder: usar 0 hasta integrar DB)
             int_usdt = 0.0
 
-            discrepancy = abs(ext_usdt - int_usdt)
+            has_internal_accounting = int_usdt > 0.0
+            if has_internal_accounting:
+                discrepancy = abs(ext_usdt - int_usdt)
+            else:
+                discrepancy = 0.0
             balance_discrepancy_usd.set(discrepancy)
             unaccounted_pnl_usd.set(0.0)
 
             # Activar breaker si supera umbral relativo (contra max(1.0, ext_usdt))
+            # Evitar activar cuando int_usdt es placeholder (0.0) y no existe contabilidad interna
             denom = max(1.0, ext_usdt)
-            if (discrepancy / denom) > self._threshold_pct:
+            relative_gap = (discrepancy / denom) if denom > 0 else 0.0
+            if has_internal_accounting and relative_gap > self._threshold_pct:
                 await self._breakers.activate_breaker('system_integrity', 'balance_discrepancy')
 
             elapsed = time.time() - start
