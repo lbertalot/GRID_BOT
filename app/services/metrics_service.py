@@ -4,7 +4,7 @@ Servicio para integrar métricas de rentabilidad en el bot de trading
 
 import time
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from app.core.metrics import trading_metrics
@@ -18,6 +18,7 @@ from app.db.session import SessionLocal
 from app.models.trade import Trade
 from sqlalchemy import func
 # from app.models.balance import Balance  # Modelo no implementado aún
+from app.services.cache import get_async_cache
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ class MetricsService:
         self.last_calculation = None
         # Mantener conteo previo de trades por (symbol, side) para incrementar Counters
         self._last_trades_count_by_symbol_side: Dict[tuple, int] = {}
+        # Cache async para snapshots diarios (ROI base)
+        self._cache = get_async_cache()
+        self._allowed_symbols = {"BTCUSDT", "ETHUSDT", "BNBUSDT"}
         
     async def calculate_portfolio_metrics(self) -> Dict:
         """
@@ -98,32 +102,53 @@ class MetricsService:
         """
         try:
             total_value = 0.0
-            
+
+            stablecoins_approx_1_1 = {"USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"}
+
+            from app.services.binance_client_singleton import get_binance_client_singleton
+            client_singleton = get_binance_client_singleton()
+
+            def price_usdt_for(asset_symbol: str) -> float:
+                if asset_symbol in stablecoins_approx_1_1:
+                    return 1.0
+                # Intentar par directo a USDT
+                direct = client_singleton.get_symbol_price(f"{asset_symbol}USDT")
+                if direct and direct > 0:
+                    return direct
+                # Intentar BUSD (≈ USDT)
+                busd = client_singleton.get_symbol_price(f"{asset_symbol}BUSD")
+                if busd and busd > 0:
+                    return busd  # Tratar BUSD≈USDT
+                # Intentar vía BTC
+                via_btc = client_singleton.get_symbol_price(f"{asset_symbol}BTC")
+                if via_btc and via_btc > 0:
+                    btc_usdt = client_singleton.get_symbol_price("BTCUSDT")
+                    return via_btc * btc_usdt if btc_usdt else 0.0
+                # Intentar vía ETH
+                via_eth = client_singleton.get_symbol_price(f"{asset_symbol}ETH")
+                if via_eth and via_eth > 0:
+                    eth_usdt = client_singleton.get_symbol_price("ETHUSDT")
+                    return via_eth * eth_usdt if eth_usdt else 0.0
+                # Intentar vía BNB
+                via_bnb = client_singleton.get_symbol_price(f"{asset_symbol}BNB")
+                if via_bnb and via_bnb > 0:
+                    bnb_usdt = client_singleton.get_symbol_price("BNBUSDT")
+                    return via_bnb * bnb_usdt if bnb_usdt else 0.0
+                return 0.0
+
             for asset, amount in balances.items():
-                if asset == 'USDT':
-                    total_value += amount
-                elif amount > 0:
-                    # Obtener precio actual del activo
-                    try:
-                        if asset in ['BTC', 'ETH', 'BNB']:
-                            symbol = f"{asset}USDT"
-                            try:
-                                from app.services.binance_client_singleton import get_binance_client_singleton
-                                price = get_binance_client_singleton().get_symbol_price(symbol)
-                                asset_value = amount * price
-                                total_value += asset_value
-                            except Exception as e:
-                                logger.warning(f"No se pudo obtener precio para {asset}: {e}")
-                                # Usar precio estimado
-                                if asset == 'BTC':
-                                    total_value += amount * 114000
-                                elif asset == 'ETH':
-                                    total_value += amount * 3500
-                                elif asset == 'BNB':
-                                    total_value += amount * 500
-                    except Exception as e:
-                        logger.warning(f"No se pudo obtener precio para {asset}: {e}")
-            
+                if amount <= 0:
+                    continue
+                if asset in stablecoins_approx_1_1:
+                    total_value += amount  # 1:1 USDT
+                    continue
+                price = price_usdt_for(asset)
+                if price and price > 0:
+                    total_value += amount * price
+                else:
+                    # Si no hay precio, omitir para no sesgar; opcional: log de depuración
+                    logger.debug(f"Sin precio para {asset}, omitido en valoración")
+
             return total_value
             
         except Exception as e:
@@ -132,32 +157,52 @@ class MetricsService:
     
     async def _calculate_total_profit(self) -> float:
         """
-        Calcula la ganancia total desde el inicio usando consulta optimizada
+        Calcula la ganancia total desde el inicio en USDT
         """
         try:
             db = SessionLocal()
             try:
-                # Consulta optimizada: sumar solo profit_loss no nulos
-                from sqlalchemy import func
-                result = db.query(func.sum(Trade.profit_loss)).filter(
-                    Trade.profit_loss.isnot(None)
-                ).scalar()
-                
-                total_profit = result or 0.0
-                
-                # Si no hay profit_loss calculados, calcular con trades completos
-                if total_profit == 0.0:
-                    completed_trades = db.query(Trade).filter(
-                        Trade.side == 'SELL',
-                        Trade.exit_price.isnot(None),
-                        Trade.entry_price.isnot(None)
-                    ).all()
-                    
-                    for trade in completed_trades:
-                        profit = (trade.exit_price - trade.entry_price) * trade.quantity
-                        total_profit += profit
-                
-                return total_profit
+                from sqlalchemy import or_
+                rows = db.query(
+                    Trade.symbol, Trade.profit_loss, Trade.entry_price, Trade.exit_price, Trade.quantity
+                ).filter(Trade.symbol.in_(self._allowed_symbols)).all()
+
+                from app.services.binance_client_singleton import get_binance_client_singleton
+                client_singleton = get_binance_client_singleton()
+
+                def detect_quote(symbol: Optional[str]) -> Optional[str]:
+                    if not symbol:
+                        return None
+                    quotes = ["USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB"]
+                    for q in quotes:
+                        if symbol.upper().endswith(q):
+                            return q
+                    return None
+
+                def to_usdt(amount_in_quote: float, quote: Optional[str]) -> float:
+                    if amount_in_quote == 0.0 or not quote:
+                        return amount_in_quote
+                    if quote in {"USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"}:
+                        return amount_in_quote  # 1:1 aproximado
+                    if quote == "BTC":
+                        px = client_singleton.get_symbol_price("BTCUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    if quote == "ETH":
+                        px = client_singleton.get_symbol_price("ETHUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    if quote == "BNB":
+                        px = client_singleton.get_symbol_price("BNBUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    return 0.0
+
+                total_profit_usdt = 0.0
+                for symbol, profit_loss, entry_price, exit_price, qty in rows:
+                    # Usar sólo PnL realizado provisto por la DB; evitar reconstrucciones ruidosas
+                    if profit_loss is None:
+                        continue
+                    quote = detect_quote(symbol)
+                    total_profit_usdt += to_usdt(float(profit_loss), quote)
+                return total_profit_usdt
             finally:
                 db.close()
             
@@ -167,37 +212,55 @@ class MetricsService:
     
     async def _calculate_daily_profit(self) -> float:
         """
-        Calcula la ganancia del día actual usando consulta optimizada
+        Calcula la ganancia del día actual en USDT
         """
         try:
             db = SessionLocal()
             try:
-                # Obtener trades del día actual
                 today = datetime.now().date()
-                
-                # Consulta optimizada: sumar profit_loss del día
-                from sqlalchemy import func
-                result = db.query(func.sum(Trade.profit_loss)).filter(
+
+                rows = db.query(
+                    Trade.symbol, Trade.profit_loss, Trade.entry_price, Trade.exit_price, Trade.quantity, Trade.timestamp
+                ).filter(
                     Trade.timestamp >= today,
-                    Trade.profit_loss.isnot(None)
-                ).scalar()
-                
-                daily_profit = result or 0.0
-                
-                # Si no hay profit_loss calculados, calcular con trades completos del día
-                if daily_profit == 0.0:
-                    completed_today_trades = db.query(Trade).filter(
-                        Trade.timestamp >= today,
-                        Trade.side == 'SELL',
-                        Trade.exit_price.isnot(None),
-                        Trade.entry_price.isnot(None)
-                    ).all()
-                    
-                    for trade in completed_today_trades:
-                        profit = (trade.exit_price - trade.entry_price) * trade.quantity
-                        daily_profit += profit
-                
-                return daily_profit
+                    Trade.symbol.in_(self._allowed_symbols)
+                ).all()
+
+                from app.services.binance_client_singleton import get_binance_client_singleton
+                client_singleton = get_binance_client_singleton()
+
+                def detect_quote(symbol: Optional[str]) -> Optional[str]:
+                    if not symbol:
+                        return None
+                    quotes = ["USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB"]
+                    for q in quotes:
+                        if symbol.upper().endswith(q):
+                            return q
+                    return None
+
+                def to_usdt(amount_in_quote: float, quote: Optional[str]) -> float:
+                    if amount_in_quote == 0.0 or not quote:
+                        return amount_in_quote
+                    if quote in {"USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"}:
+                        return amount_in_quote
+                    if quote == "BTC":
+                        px = client_singleton.get_symbol_price("BTCUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    if quote == "ETH":
+                        px = client_singleton.get_symbol_price("ETHUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    if quote == "BNB":
+                        px = client_singleton.get_symbol_price("BNBUSDT")
+                        return amount_in_quote * (px or 0.0)
+                    return 0.0
+
+                daily_profit_usdt = 0.0
+                for symbol, profit_loss, entry_price, exit_price, qty, _ in rows:
+                    if profit_loss is None:
+                        continue
+                    quote = detect_quote(symbol)
+                    daily_profit_usdt += to_usdt(float(profit_loss), quote)
+                return daily_profit_usdt
             finally:
                 db.close()
             
@@ -210,20 +273,32 @@ class MetricsService:
         Calcula el ROI diario en porcentaje
         """
         try:
-            if portfolio_value > 0:
-                # Establecer valor inicial del portafolio si no está definido
+            if portfolio_value <= 0:
+                return 0.0
+            # ROI base: snapshot al inicio de día (UTC), persistido en cache
+            date_key = datetime.utcnow().date().isoformat()
+            cache_key = f"roi:base:{date_key}"
+            try:
+                base_raw = await self._cache.get(cache_key)
+                if not base_raw:
+                    await self._cache.set(cache_key, str(portfolio_value), ttl_seconds=60*60*30)  # 30h
+                    base_value = portfolio_value
+                    trading_metrics.set_initial_portfolio_value(portfolio_value)
+                else:
+                    try:
+                        base_value = float(base_raw)
+                    except Exception:
+                        base_value = portfolio_value
+            except Exception:
+                # Fallback si cache falla
                 if self.initial_portfolio_value is None:
                     self.initial_portfolio_value = portfolio_value
-                    trading_metrics.set_initial_portfolio_value(portfolio_value)
-                
-                # Usar el valor inicial o el actual si es mayor
-                base_value = max(self.initial_portfolio_value, portfolio_value)
-                roi = (daily_profit / base_value) * 100
-                
-                # Limitar el ROI a un rango razonable (-100% a +100%)
-                roi = max(-100.0, min(100.0, roi))
-                return roi
-            return 0.0
+                base_value = self.initial_portfolio_value
+            if base_value <= 0:
+                return 0.0
+            roi = (daily_profit / base_value) * 100.0
+            roi = max(-100.0, min(100.0, roi))
+            return roi
             
         except Exception as e:
             logger.error(f"Error calculando ROI diario: {e}")
