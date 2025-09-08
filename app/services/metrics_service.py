@@ -35,6 +35,7 @@ class MetricsService:
         # Cache async para snapshots diarios (ROI base)
         self._cache = get_async_cache()
         self._allowed_symbols = {"BTCUSDT", "ETHUSDT", "BNBUSDT"}
+        self._profit_baseline_key = "profit:baseline_iso"
         
     async def calculate_portfolio_metrics(self) -> Dict:
         """
@@ -163,9 +164,22 @@ class MetricsService:
             db = SessionLocal()
             try:
                 from sqlalchemy import or_
-                rows = db.query(
+                # Determinar baseline temporal para limpiar legacy
+                baseline = None
+                try:
+                    b = await self._cache.get(self._profit_baseline_key)
+                    if b:
+                        from datetime import datetime
+                        baseline = datetime.fromisoformat(b)
+                except Exception:
+                    baseline = None
+
+                q = db.query(
                     Trade.symbol, Trade.profit_loss, Trade.entry_price, Trade.exit_price, Trade.quantity
-                ).filter(Trade.symbol.in_(self._allowed_symbols)).all()
+                ).filter(Trade.symbol.in_(self._allowed_symbols))
+                if baseline is not None:
+                    q = q.filter(Trade.timestamp >= baseline)
+                rows = q.all()
 
                 from app.services.binance_client_singleton import get_binance_client_singleton
                 client_singleton = get_binance_client_singleton()
