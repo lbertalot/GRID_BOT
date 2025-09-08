@@ -31,6 +31,12 @@ _CACHE = get_async_cache()
 _CYCLE_KEY = "cycle:state"
 _CYCLE_TTL = 600  # 10 minutos por seguridad
 
+# Parámetros de decisión/ejecución
+MIN_DECISION_CONFIDENCE = 0.55
+MIN_NOTIONAL_USDT = 10.5
+BALANCES_CACHE_KEY = "balances:last"
+BALANCES_TTL = 300
+
 async def _get_cycle_state() -> Dict:
     raw = await _CACHE.get(_CYCLE_KEY)
     if not raw:
@@ -46,6 +52,40 @@ async def _set_cycle_state(state: Dict) -> None:
 
 def _now_ts() -> float:
     return datetime.utcnow().timestamp()
+
+async def _get_cached_balances() -> Optional[Dict]:
+    raw = await _CACHE.get(BALANCES_CACHE_KEY)
+    if not raw:
+        return None
+    import json
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+async def _set_cached_balances(balances: Dict) -> None:
+    await _CACHE.set(BALANCES_CACHE_KEY, balances, ttl_seconds=BALANCES_TTL)
+
+async def _fetch_balances_with_retry(manager, retries: int = 3, delay_seconds: float = 1.0) -> Dict:
+    last_err: Optional[Exception] = None
+    for i in range(retries):
+        try:
+            b = await manager.get_asset_balances()
+            if isinstance(b, dict) and len(b) > 0:
+                await _set_cached_balances(b)
+                return b
+        except Exception as e:
+            last_err = e
+            logger.warning(f"[Cycle] Fallo obteniendo balances (intento {i+1}/{retries}): {e}")
+        await asyncio.sleep(delay_seconds)
+    # Fallback a caché
+    cached = await _get_cached_balances()
+    if cached:
+        logger.warning("[Cycle] Usando balances en caché por fallos consecutivos")
+        return cached
+    if last_err:
+        raise last_err
+    return {}
 
 @celery_app.task
 def trading_cycle_tick():
@@ -84,7 +124,7 @@ def trading_cycle_tick():
                 total_exposure = 0.0
                 try:
                     mgr = await create_optimized_grid_manager('grid_config_optimized.json')
-                    balances = await mgr.get_asset_balances()
+                    balances = await _fetch_balances_with_retry(mgr, retries=3, delay_seconds=1.5)
                     summary = await fund_manager.get_trading_summary(balances)
                     total_equity = float(summary.get("total_value_usdt", 0.0) or 0.0)
                     available_balance = float(summary.get("usdt_balance", 0.0) or 0.0)
@@ -115,10 +155,13 @@ def trading_cycle_tick():
                         rp = RegimePrediction(long_regime=MarketRegime.RANGE, short_regime=MarketRegime.RANGE,
                                               long_conf=0.6, short_conf=0.6)
                         spec = selector.select_strategy(rp, sym, account)
+                        conf = float(getattr(spec, 'confidence', 0.6))
+                        ready = (conf >= MIN_DECISION_CONFIDENCE) and (available_balance >= MIN_NOTIONAL_USDT)
                         decisions[sym] = {
                             "strategy": getattr(spec.strategy_name, 'value', str(spec.strategy_name)),
-                            "confidence": float(getattr(spec, 'confidence', 0.6)),
-                            "price": float(price)
+                            "confidence": conf,
+                            "price": float(price),
+                            "ready": ready
                         }
                     except Exception as e:
                         logger.warning(f"[Cycle] Eval fallo {sym}: {e}")
@@ -129,21 +172,23 @@ def trading_cycle_tick():
                 # Si estamos cerca de 4 minutos, marcar decision_ready
                 if 210 <= elapsed < 240 and decisions:
                     for sym, d in decisions.items():
-                        cycle_decision_ready.labels(symbol=sym, strategy=d.get("strategy","grid")).set(_now_ts())
+                        if d.get("ready"):
+                            cycle_decision_ready.labels(symbol=sym, strategy=d.get("strategy","grid")).set(_now_ts())
                 return
 
             # 240–300s: ejecución
             if elapsed < 300:
                 cycle_phase.labels(phase="execution").set(_now_ts())
                 decisions = state.get("decision") or {}
-                if not decisions:
-                    logger.info("[Cycle] Sin decisión lista; se omite ejecución")
+                ready_symbols = [s for s, d in (decisions or {}).items() if d and d.get("ready")]
+                if not ready_symbols:
+                    logger.info("[Cycle] Sin decisión lista (ready=false); se omite ejecución en minuto 5")
                     return
                 # Breakers
                 try:
                     ck = CircuitBreakers()
-                    breakers = asyncio.get_event_loop().run_until_complete(ck.get_breakers_state())
-                    if breakers.get('critical_mode') or breakers.get('system_integrity'):
+                    breakers = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
+                    if breakers.get('critical_mode') or ('system_integrity' in breakers.get('active_breakers', [])):
                         logger.warning("[Cycle] Ciclo protegido por breakers activos; sin ejecución")
                         return
                 except Exception:
@@ -151,9 +196,9 @@ def trading_cycle_tick():
                 # Ejecutar una orden por símbolo según decisión (enviar tarea Celery fuera del event loop)
                 try:
                     execute_trading_cycle.delay()
-                    for sym in decisions.keys():
+                    for sym in ready_symbols:
                         cycle_order_executed.labels(symbol=sym, status="sent").set(_now_ts())
-                    logger.info("[Cycle] ✅ Ejecución enviada (fase ejecución)")
+                    logger.info(f"[Cycle] ✅ Ejecución enviada (fase ejecución) symbols={ready_symbols}")
                 except Exception as e:
                     logger.error(f"[Cycle] Error en ejecución: {e}")
                 return
