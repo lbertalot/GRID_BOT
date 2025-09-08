@@ -4,7 +4,7 @@ Tareas de trading mejoradas con logging detallado y validaciones robustas
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from celery import shared_task
 
@@ -16,8 +16,140 @@ from app.services.alert_tasks import notify_consecutive_api_failures
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.core.circuit_breakers import CircuitBreakers
+from app.core.metrics import cycle_phase, cycle_decision_ready, cycle_order_executed
+from app.services.market_data_collector import MarketDataCollector
+from app.services.ml_engine import MLEngine
+from app.services.strategy_selector import StrategySelector, AccountState
+from app.core.risk_manager import RiskManager, PositionSizeParams
+from app.services.cache import get_async_cache
 
 logger = logging.getLogger(__name__)
+
+# Estado de ciclo (cache en Redis/memoria)
+_CACHE = get_async_cache()
+_CYCLE_KEY = "cycle:state"
+_CYCLE_TTL = 600  # 10 minutos por seguridad
+
+async def _get_cycle_state() -> Dict:
+    raw = await _CACHE.get(_CYCLE_KEY)
+    if not raw:
+        return {"started_at": None, "decision": None}
+    import json
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {"started_at": None, "decision": None}
+
+async def _set_cycle_state(state: Dict) -> None:
+    await _CACHE.set(_CYCLE_KEY, state, ttl_seconds=_CYCLE_TTL)
+
+def _now_ts() -> float:
+    return datetime.utcnow().timestamp()
+
+@shared_task
+def trading_cycle_tick():
+    """Tick cada 60s que orquesta un ciclo de 5 minutos (4m evaluación, 1m ejecución)."""
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _run():
+            state = await _get_cycle_state()
+            now = datetime.utcnow()
+            start = state.get("started_at")
+
+            # Iniciar ciclo si no hay o si pasaron >=5m
+            if not start:
+                state = {"started_at": now.isoformat(), "decision": None}
+                await _set_cycle_state(state)
+                cycle_phase.labels(phase="evaluation").set(_now_ts())
+                logger.info("[Cycle] ▶️ Nueva fase: evaluation (t=0m)")
+                return
+
+            started_at = datetime.fromisoformat(start)
+            elapsed = (now - started_at).total_seconds()
+
+            # 0–240s: evaluación
+            if elapsed < 240:
+                cycle_phase.labels(phase="evaluation").set(_now_ts())
+                # Recolectar datos y actualizar ML/selector
+                mdc = MarketDataCollector(ttl_seconds=5)
+                ml = MLEngine()
+                symbols = ["BTCUSDT","ETHUSDT","BNBUSDT"]
+                decisions = state.get("decision") or {}
+                for sym in symbols:
+                    try:
+                        price = await mdc.get_price(sym)
+                        kl = await mdc.get_klines(sym, interval="1m", limit=60)
+                        features = {"price": float(price), "vol": float(kl[-1][5]) if kl else 0.0}
+                        # Predicción corta (mock con ml_engine si disponible)
+                        # Aquí podríamos usar ml.predict_regime real; mantenemos compatibilidad
+                        regime = await ml.compute_features_from_klines(kl) if hasattr(ml, 'compute_features_from_klines') else {"rsi": 50.0}
+                        # Selección de estrategia (solo registrar)
+                        risk = RiskManager()
+                        selector = StrategySelector(risk)
+                        account = AccountState(total_equity=300.0, usdt_balance=70.0, 
+                                               daily_pnl=0.0, max_drawdown=0.0, risk_score=0.1)
+                        # Usamos un wrapper simple si ml_engine real no da RegimePrediction
+                        from app.core.risk_manager import RegimePrediction, MarketRegime
+                        rp = RegimePrediction(long_regime=MarketRegime.RANGE, short_regime=MarketRegime.RANGE,
+                                              long_conf=0.6, short_conf=0.6)
+                        spec = selector.select_strategy(rp, sym, account)
+                        decisions[sym] = {
+                            "strategy": getattr(spec.strategy_name, 'value', str(spec.strategy_name)),
+                            "confidence": float(getattr(spec, 'confidence', 0.6)),
+                            "price": float(price)
+                        }
+                    except Exception as e:
+                        logger.warning(f"[Cycle] Eval fallo {sym}: {e}")
+                        continue
+                state["decision"] = decisions
+                await _set_cycle_state(state)
+                logger.info("[Cycle] 📝 Decisión parcial registrada (fase evaluación)")
+                # Si estamos cerca de 4 minutos, marcar decision_ready
+                if 210 <= elapsed < 240 and decisions:
+                    for sym, d in decisions.items():
+                        cycle_decision_ready.labels(symbol=sym, strategy=d.get("strategy","grid")).set(_now_ts())
+                return
+
+            # 240–300s: ejecución
+            if elapsed < 300:
+                cycle_phase.labels(phase="execution").set(_now_ts())
+                decisions = state.get("decision") or {}
+                if not decisions:
+                    logger.info("[Cycle] Sin decisión lista; se omite ejecución")
+                    return
+                # Breakers
+                try:
+                    ck = CircuitBreakers()
+                    breakers = asyncio.get_event_loop().run_until_complete(ck.get_breakers_state())
+                    if breakers.get('critical_mode') or breakers.get('system_integrity'):
+                        logger.warning("[Cycle] Ciclo protegido por breakers activos; sin ejecución")
+                        return
+                except Exception:
+                    pass
+                # Ejecutar una orden por símbolo según decisión (simplificado -> reutiliza execute_trading_cycle)
+                try:
+                    _ = execute_trading_cycle()
+                    for sym in decisions.keys():
+                        cycle_order_executed.labels(symbol=sym, status="sent").set(_now_ts())
+                    logger.info("[Cycle] ✅ Ejecución enviada (fase ejecución)")
+                except Exception as e:
+                    logger.error(f"[Cycle] Error en ejecución: {e}")
+                return
+
+            # >=300s: cerrar ciclo y reiniciar
+            logger.info("[Cycle] 🔁 Reiniciando ciclo 5m")
+            state = {"started_at": now.isoformat(), "decision": None}
+            await _set_cycle_state(state)
+            cycle_phase.labels(phase="evaluation").set(_now_ts())
+
+        loop.run_until_complete(_run())
+        loop.close()
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"❌ trading_cycle_tick error: {e}")
+        return {"status": "error", "message": str(e)}
 
 @shared_task
 def execute_trading_cycle():

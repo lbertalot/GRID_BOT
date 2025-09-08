@@ -32,9 +32,9 @@ celery_app.conf.update(
 
 # Tareas programadas
 celery_app.conf.beat_schedule = {
-    "trading-cycle": {
-        "task": "app.services.trading_tasks.execute_trading_cycle",
-        "schedule": 60.0,  # Cada minuto
+    "trading-cycle-tick": {
+        "task": "app.services.trading_tasks.trading_cycle_tick",
+        "schedule": 60.0,  # Tick cada minuto (orquesta 5m)
     },
     "rebalance-check": {
         "task": "app.services.rebalancing_tasks.check_and_rebalance",
