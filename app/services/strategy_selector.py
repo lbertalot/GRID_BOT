@@ -10,9 +10,9 @@ from enum import Enum
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter, Gauge, REGISTRY
 
-from app.core.risk_manager import MarketRegime, RegimePrediction, RiskManager
+from app.core.risk_manager import MarketRegime, RegimePrediction, RiskManager, PositionSizeParams
 
 
 class StrategyType(Enum):
@@ -127,24 +127,30 @@ class StrategySelector:
             }
         }
         
-        # Métricas - usar try/except para evitar duplicación
+        # Métricas: crear o reutilizar colectores ya registrados
+        existing_collectors = getattr(REGISTRY, '_names_to_collectors', {})
         try:
-            self.strategy_selections = Counter(
-                'strategy_selections_total',
-                'Total strategy selections',
-                ['strategy', 'regime', 'volatility']
-            )
-            
-            self.strategy_confidence = Gauge(
-                'strategy_confidence',
-                'Strategy selection confidence',
-                ['strategy', 'regime']
-            )
+            self.strategy_selections = existing_collectors.get('strategy_selections_total')
+            if self.strategy_selections is None:
+                self.strategy_selections = Counter(
+                    'strategy_selections_total',
+                    'Total strategy selections',
+                    ['strategy', 'regime', 'volatility']
+                )
         except ValueError:
-            # Si las métricas ya están registradas, usar las existentes
-            from prometheus_client import REGISTRY
-            self.strategy_selections = REGISTRY.get_sample_value('strategy_selections_total')
-            self.strategy_confidence = REGISTRY.get_sample_value('strategy_confidence')
+            # Duplicado: reutilizar colector existente
+            self.strategy_selections = getattr(REGISTRY, '_names_to_collectors', {}).get('strategy_selections_total')
+
+        try:
+            self.strategy_confidence = existing_collectors.get('strategy_confidence')
+            if self.strategy_confidence is None:
+                self.strategy_confidence = Gauge(
+                    'strategy_confidence',
+                    'Strategy selection confidence',
+                    ['strategy', 'regime']
+                )
+        except ValueError:
+            self.strategy_confidence = getattr(REGISTRY, '_names_to_collectors', {}).get('strategy_confidence')
         
         self.logger = logging.getLogger(__name__)
     
@@ -191,7 +197,7 @@ class StrategySelector:
         # Calcular tamaño de orden basado en Kelly
         if account_state.total_equity > 0:
             # Usar RiskManager para calcular tamaño dinámico
-            position_params = self.risk_manager.PositionSizeParams(
+            position_params = PositionSizeParams(
                 symbol="GENERIC",
                 account_equity=account_state.total_equity,
                 atr=0.02,  # ATR estimado
@@ -334,17 +340,25 @@ class StrategySelector:
                 regime_prediction=regime_prediction
             )
             
-            # Actualizar métricas
-            self.strategy_selections.labels(
-                strategy=strategy_type.value,
-                regime=regime_prediction.short_regime.value,
-                volatility=volatility.value
-            ).inc()
+            # Actualizar métricas (tolerante a entornos donde no se registren)
+            try:
+                if hasattr(self.strategy_selections, 'labels'):
+                    self.strategy_selections.labels(
+                        strategy=strategy_type.value,
+                        regime=regime_prediction.short_regime.value,
+                        volatility=volatility.value
+                    ).inc()
+            except Exception:
+                pass
             
-            self.strategy_confidence.labels(
-                strategy=strategy_type.value,
-                regime=regime_prediction.short_regime.value
-            ).set(confidence)
+            try:
+                if hasattr(self.strategy_confidence, 'labels'):
+                    self.strategy_confidence.labels(
+                        strategy=strategy_type.value,
+                        regime=regime_prediction.short_regime.value
+                    ).set(confidence)
+            except Exception:
+                pass
             
             self.logger.info(f"Strategy selected for {symbol}: {strategy_type.value} "
                            f"(confidence: {confidence:.2f}, reasoning: {reasoning})")

@@ -148,9 +148,9 @@ def trading_cycle_tick():
                         return
                 except Exception:
                     pass
-                # Ejecutar una orden por símbolo según decisión (simplificado -> reutiliza execute_trading_cycle)
+                # Ejecutar una orden por símbolo según decisión (enviar tarea Celery fuera del event loop)
                 try:
-                    _ = execute_trading_cycle()
+                    execute_trading_cycle.delay()
                     for sym in decisions.keys():
                         cycle_order_executed.labels(symbol=sym, status="sent").set(_now_ts())
                     logger.info("[Cycle] ✅ Ejecución enviada (fase ejecución)")
@@ -205,25 +205,37 @@ def execute_trading_cycle():
             logger.error(f"❌ Error validando Binance pre-ciclo: {e}")
             return {"status": "error", "message": str(e)}
         
-        # Crear manager de grid trading
-        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        # Crear manager de grid trading (usar loop local para evitar nested run)
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         if not manager:
             logger.error("❌ No se pudo crear el manager de grid trading")
             return {"status": "error", "message": "Manager no disponible"}
         
         # Ejecutar ciclo de trading
         logger.info("🔄 Ejecutando ciclo de grid trading...")
-        # Comprobación rápida de conectividad y rate limit centralizado
+        # Comprobación rápida de conectividad y ejecución
+        loop = asyncio.new_event_loop()
         try:
-            price = asyncio.run(AsyncBinanceWrapper().get_price("BTCUSDT"))
-            logger.info(f"🔎 BTC precio pre-ciclo: {price}")
-        except Exception as e:
-            logger.warning(f"Fallo conectividad Binance pre-ciclo: {e}")
+            asyncio.set_event_loop(loop)
             try:
-                notify_consecutive_api_failures.delay("binance", 3)
-            except Exception:
-                pass
-        results = asyncio.run(manager.execute_grid_trading_cycle())
+                price = loop.run_until_complete(AsyncBinanceWrapper().get_price("BTCUSDT"))
+                logger.info(f"🔎 BTC precio pre-ciclo: {price}")
+            except Exception as e:
+                logger.warning(f"Fallo conectividad Binance pre-ciclo: {e}")
+                try:
+                    notify_consecutive_api_failures.delay("binance", 3)
+                except Exception:
+                    pass
+            results = loop.run_until_complete(manager.execute_grid_trading_cycle())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         
         # Analizar resultados
         trades_executed = len([r for r in results if r and r.status == "success"])
@@ -256,15 +268,21 @@ def execute_trading_cycle():
                      f"💰 Modo: {summary['mode']}"
             
             try:
-                asyncio.run(send_telegram_alert(message))
-                logger.info("✅ Notificación enviada a Telegram")
+                send_telegram_alert.delay(message)
+                logger.info("✅ Notificación a Telegram encolada")
             except Exception as e:
-                logger.error(f"❌ Error enviando notificación: {e}")
+                logger.error(f"❌ Error encolando notificación: {e}")
         
         # Actualizar métricas
         try:
             metrics_service = MetricsService()
-            asyncio.run(metrics_service.calculate_portfolio_metrics())
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(metrics_service.calculate_portfolio_metrics())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
             logger.info("✅ Métricas actualizadas")
         except Exception as e:
             logger.error(f"❌ Error actualizando métricas: {e}")
@@ -281,8 +299,8 @@ def execute_trading_cycle():
         # Enviar alerta de error
         error_message = f"🚨 Error en ciclo de trading:\n{str(e)}"
         try:
-            asyncio.run(send_telegram_alert(error_message))
-        except:
+            send_telegram_alert.delay(error_message)
+        except Exception:
             pass
         
         return {"status": "error", "message": str(e)}
@@ -296,15 +314,33 @@ def assess_risk():
         logger.info("🔍 Evaluando riesgo del portafolio")
         
         # Crear manager para obtener balances
-        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         if not manager:
             return {"risk_level": "unknown", "error": "Manager no disponible"}
         
         # Obtener balances
-        balances = asyncio.run(manager.get_asset_balances())
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            balances = loop.run_until_complete(manager.get_asset_balances())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         
         # Obtener resumen de trading
-        trading_summary = asyncio.run(fund_manager.get_trading_summary(balances))
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            trading_summary = loop.run_until_complete(fund_manager.get_trading_summary(balances))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         
         # Calcular métricas de riesgo
         total_value = trading_summary.get("total_value_usdt", 0)
@@ -347,7 +383,13 @@ def update_metrics():
         logger.info("📊 Actualizando métricas del sistema")
         
         metrics_service = MetricsService()
-        asyncio.run(metrics_service.calculate_portfolio_metrics())
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(metrics_service.calculate_portfolio_metrics())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         
         logger.info("✅ Métricas actualizadas correctamente")
         return {"status": "success", "message": "Métricas actualizadas"}
@@ -365,12 +407,24 @@ def health_check():
         logger.info("🏥 Ejecutando verificación de salud del sistema")
         
         # Verificar conexión con Binance
-        manager = asyncio.run(create_optimized_grid_manager('grid_config_optimized.json'))
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         if not manager:
             return {"status": "unhealthy", "error": "Manager no disponible"}
         
         # Verificar balances
-        balances = asyncio.run(manager.get_asset_balances())
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            balances = loop.run_until_complete(manager.get_asset_balances())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
         if not balances:
             return {"status": "unhealthy", "error": "No se pueden obtener balances"}
         
