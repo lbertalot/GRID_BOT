@@ -3,21 +3,20 @@ groups:
     rules:
       - alert: GridBotPortfolioDiscrepancyHighPercent
         expr: |
-          (abs(portfolio_total_value_usdt{strategy="grid"} - cash_balance_usdt{strategy="grid"})
-            / clamp_min(portfolio_total_value_usdt{strategy="grid"}, 1)) > 0.01
-        for: 5m
+          (balance_discrepancy_usd / clamp_min(portfolio_total_value_usdt{strategy="grid"}, 1)) > 0.01
+        for: 6m
         labels:
           severity: warning
         annotations:
           summary: "Discrepancia de portafolio >1%"
-          description: "La diferencia entre valor total y caja supera 1% por 5m."
+          description: "La diferencia entre sistema y Binance supera 1% por al menos 6m."
 
       - alert: GridBotPortfolioDiscrepancyHighAbsolute
         expr: |
-          abs(portfolio_total_value_usdt{strategy="grid"} - cash_balance_usdt{strategy="grid"}) > 5
-        for: 5m
+          balance_discrepancy_usd > 5
+        for: 6m
         labels:
           severity: warning
         annotations:
           summary: "Discrepancia de portafolio >5 USDT"
-          description: "La diferencia entre valor total y caja supera 5 USDT por 5m."
+          description: "La diferencia entre sistema y Binance supera 5 USDT por al menos 6m."
