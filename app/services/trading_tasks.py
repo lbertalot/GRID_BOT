@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from celery import shared_task
+from app.core.celery_app import celery_app
 
 from app.core.optimized_grid_manager import create_optimized_grid_manager
 from app.services.metrics_service import MetricsService
@@ -46,7 +47,7 @@ async def _set_cycle_state(state: Dict) -> None:
 def _now_ts() -> float:
     return datetime.utcnow().timestamp()
 
-@shared_task
+@celery_app.task
 def trading_cycle_tick():
     """Tick cada 60s que orquesta un ciclo de 5 minutos (4m evaluación, 1m ejecución)."""
     try:
@@ -77,6 +78,19 @@ def trading_cycle_tick():
                 ml = MLEngine()
                 symbols = ["BTCUSDT","ETHUSDT","BNBUSDT"]
                 decisions = state.get("decision") or {}
+                # Estado de cuenta (equity, balance, exposición)
+                total_equity = 0.0
+                available_balance = 0.0
+                total_exposure = 0.0
+                try:
+                    mgr = await create_optimized_grid_manager('grid_config_optimized.json')
+                    balances = await mgr.get_asset_balances()
+                    summary = await fund_manager.get_trading_summary(balances)
+                    total_equity = float(summary.get("total_value_usdt", 0.0) or 0.0)
+                    available_balance = float(summary.get("usdt_balance", 0.0) or 0.0)
+                    total_exposure = max(0.0, total_equity - available_balance)
+                except Exception as e:
+                    logger.warning(f"[Cycle] No se pudo obtener estado de cuenta: {e}")
                 for sym in symbols:
                     try:
                         price = await mdc.get_price(sym)
@@ -88,8 +102,14 @@ def trading_cycle_tick():
                         # Selección de estrategia (solo registrar)
                         risk = RiskManager()
                         selector = StrategySelector(risk)
-                        account = AccountState(total_equity=300.0, usdt_balance=70.0, 
-                                               daily_pnl=0.0, max_drawdown=0.0, risk_score=0.1)
+                        account = AccountState(
+                            total_equity=total_equity or 300.0,
+                            available_balance=available_balance or 50.0,
+                            total_exposure=total_exposure if total_equity > 0 else 250.0,
+                            daily_pnl=0.0,
+                            max_drawdown=0.0,
+                            risk_score=0.1
+                        )
                         # Usamos un wrapper simple si ml_engine real no da RegimePrediction
                         from app.core.risk_manager import RegimePrediction, MarketRegime
                         rp = RegimePrediction(long_regime=MarketRegime.RANGE, short_regime=MarketRegime.RANGE,
