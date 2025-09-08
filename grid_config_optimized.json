@@ -48,7 +48,7 @@
     "min_price": 108116,
     "max_price": 114803,
     "grids": 7,
-    "quantity": 0.00009,
+    "quantity": 0.0001,
     "investment_amount": 50.0,
     "safe_mode": true,
     "trading_mode": "EMERGENCY_STOP",
