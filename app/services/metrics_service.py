@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 from app.db.session import SessionLocal
+from app.models.system_setting import SystemSetting
 from app.models.trade import Trade
 from sqlalchemy import func
 # from app.models.balance import Balance  # Modelo no implementado aún
@@ -164,15 +165,23 @@ class MetricsService:
             db = SessionLocal()
             try:
                 from sqlalchemy import or_
-                # Determinar baseline temporal para limpiar legacy
+                # Determinar baseline temporal (BD > caché)
                 baseline = None
                 try:
-                    b = await self._cache.get(self._profit_baseline_key)
-                    if b:
+                    s = db.query(SystemSetting).filter(SystemSetting.key == self._profit_baseline_key).first()
+                    if s and s.value:
                         from datetime import datetime
-                        baseline = datetime.fromisoformat(b)
+                        baseline = datetime.fromisoformat(s.value)
                 except Exception:
                     baseline = None
+                if baseline is None:
+                    try:
+                        b = await self._cache.get(self._profit_baseline_key)
+                        if b:
+                            from datetime import datetime
+                            baseline = datetime.fromisoformat(b)
+                    except Exception:
+                        baseline = None
 
                 q = db.query(
                     Trade.symbol, Trade.profit_loss, Trade.entry_price, Trade.exit_price, Trade.quantity
