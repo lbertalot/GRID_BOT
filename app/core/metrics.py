@@ -181,6 +181,31 @@ grid_cycle_duration_seconds = Histogram(
 )
 
 # ============================================================================
+# MÉTRICAS DE CICLOS (Evaluación/Ejecución 5m)
+# ============================================================================
+
+# Fase actual del ciclo (valor = timestamp unix)
+cycle_phase = Gauge(
+    'cycle_phase_timestamp',
+    'Timestamp de la fase actual del ciclo (evaluation/execution)',
+    ['phase']
+)
+
+# Decisión lista al minuto 4 (valor = timestamp unix)
+cycle_decision_ready = Gauge(
+    'cycle_decision_ready',
+    'Decisión de ciclo lista (minuto 4)',
+    ['symbol', 'strategy']
+)
+
+# Orden ejecutada al minuto 5 (valor = timestamp unix)
+cycle_order_executed = Gauge(
+    'cycle_order_executed',
+    'Orden ejecutada en el ciclo (minuto 5)',
+    ['symbol', 'status']
+)
+
+# ============================================================================
 # MÉTRICAS DE API
 # ============================================================================
 
