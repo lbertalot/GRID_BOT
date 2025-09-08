@@ -718,6 +718,19 @@ class OptimizedGridManager:
                 
                 # Ejecutar llamada bloqueante en hilo para no bloquear el loop
                 def _create_order():
+                    # Fallback para BUY con quoteOrderQty (evita problemas de cantidad en BTC)
+                    if action.upper() == 'BUY':
+                        try:
+                            price_now = float(current_price) if current_price else float(asyncio.run(self.async_binance.get_price(symbol)))
+                        except Exception:
+                            price_now = float(current_price) if current_price else 0.0
+                        usdt_amount = max(round(price_now * float(quantity), 2), 10.02)
+                        return self.client.create_order(
+                            symbol=symbol,
+                            side=action,
+                            type='MARKET',
+                            quoteOrderQty=usdt_amount
+                        )
                     return self.client.create_order(
                         symbol=symbol,
                         side=action,
