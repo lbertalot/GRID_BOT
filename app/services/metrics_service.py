@@ -90,9 +90,25 @@ class MetricsService:
         """
         try:
             from app.services.binance_client_singleton import get_binance_client_singleton
-            
-            balances = get_binance_client_singleton().get_balances()
-            return balances
+            client = get_binance_client_singleton()
+            # Reintentos simples + fallback caché
+            for i in range(3):
+                try:
+                    balances = client.get_balances()
+                    if balances:
+                        await self._cache.set('balances:last', str(balances), ttl_seconds=180)
+                        return balances
+                except Exception as e:
+                    logger.warning(f"Retry balances ({i+1}/3) failed: {e}")
+                    time.sleep(0.5)
+            cached = await self._cache.get('balances:last')
+            if cached:
+                import ast
+                try:
+                    return ast.literal_eval(cached)
+                except Exception:
+                    pass
+            return {}
             
         except Exception as e:
             logger.error(f"Error obteniendo balances: {e}")
