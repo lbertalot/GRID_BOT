@@ -12,6 +12,7 @@ from app.services.metrics_service import metrics_service
 from app.core.auth import get_api_key_user
 from app.db.session import SessionLocal
 from app.models.system_setting import SystemSetting
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +50,60 @@ async def reset_baseline(user = Depends(get_api_key_user)):
             else:
                 s = SystemSetting(key='portfolio:baseline_value_usdt', value=str(current_value))
                 db.add(s)
+            # Baseline de PnL acumulado (fecha desde la cual computar total_profit)
+            from datetime import datetime
+            now_iso = datetime.utcnow().isoformat()
+            p = db.query(SystemSetting).filter(SystemSetting.key == 'profit:baseline_iso').first()
+            if p:
+                p.value = now_iso
+            else:
+                p = SystemSetting(key='profit:baseline_iso', value=now_iso)
+                db.add(p)
             db.commit()
         finally:
             db.close()
 
-        return {"status": "ok", "baseline_portfolio_usdt": current_value}
+        return {"status": "ok", "baseline_portfolio_usdt": current_value, "profit_baseline_iso": now_iso}
     except Exception as e:
         logger.error(f"Error reseteando baseline: {e}")
+        raise HTTPException(status_code=500, detail="Error reseteando baseline")
+
+
+@router.get("/baseline/reset")
+async def reset_baseline_get(token: str | None = None):
+    """Versión GET para usar desde Grafana (opcional token DASH_RESET_TOKEN)."""
+    try:
+        required = os.getenv('DASH_RESET_TOKEN')
+        if required and token != required:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        out = await metrics_service.calculate_portfolio_metrics()
+        current_value = float(out.get("portfolio_value", 0.0) or 0.0)
+
+        db = SessionLocal()
+        from datetime import datetime
+        now_iso = datetime.utcnow().isoformat()
+        try:
+            s = db.query(SystemSetting).filter(SystemSetting.key == 'portfolio:baseline_value_usdt').first()
+            if s:
+                s.value = str(current_value)
+            else:
+                s = SystemSetting(key='portfolio:baseline_value_usdt', value=str(current_value))
+                db.add(s)
+            p = db.query(SystemSetting).filter(SystemSetting.key == 'profit:baseline_iso').first()
+            if p:
+                p.value = now_iso
+            else:
+                p = SystemSetting(key='profit:baseline_iso', value=now_iso)
+                db.add(p)
+            db.commit()
+        finally:
+            db.close()
+        return {"status": "ok", "baseline_portfolio_usdt": current_value, "profit_baseline_iso": now_iso}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reseteando baseline (GET): {e}")
         raise HTTPException(status_code=500, detail="Error reseteando baseline")
 
 @router.get("/profitability")

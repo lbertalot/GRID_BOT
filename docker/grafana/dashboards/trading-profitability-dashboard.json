@@ -20,6 +20,15 @@
   "graphTooltip": 0,
   "id": null,
   "links": [],
+  "navigation": [
+    {
+      "type": "external_link",
+      "title": "Resetear Baseline",
+      "url": "http://api:8000/api/v1/metrics/baseline/reset",
+      "targetBlank": false,
+      "icon": "external-link"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
