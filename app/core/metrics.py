@@ -40,6 +40,13 @@ portfolio_total_value_usdt = Gauge(
     ['strategy']
 )
 
+# Cambio del portafolio vs baseline en USDT
+portfolio_change_usdt = Gauge(
+    'portfolio_change_usdt',
+    'Cambio del portafolio vs baseline en USDT',
+    ['strategy']
+)
+
 # Saldo efectivo USDT
 cash_balance_usdt = Gauge(
     'cash_balance_usdt',

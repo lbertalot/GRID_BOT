@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 
 from app.core.metrics import trading_metrics
+from app.core.metrics import portfolio_change_usdt
 from app.core.metrics import roi_daily_percent, profit_daily_usdt
 from binance.client import Client
 import os
@@ -70,6 +71,25 @@ class MetricsService:
                 roi_daily=roi_daily,
                 asset_metrics=asset_metrics
             )
+
+            # Delta vs baseline de portafolio (persistente en BD si existe)
+            try:
+                db = SessionLocal()
+                base_val = None
+                try:
+                    s = db.query(SystemSetting).filter(SystemSetting.key == 'portfolio:baseline_value_usdt').first()
+                    if s and s.value:
+                        base_val = float(s.value)
+                except Exception:
+                    base_val = None
+                finally:
+                    db.close()
+                if base_val is None:
+                    base_val = portfolio_value
+                delta = float(portfolio_value) - float(base_val)
+                portfolio_change_usdt.labels(strategy="grid").set(delta)
+            except Exception:
+                pass
             
             return {
                 "portfolio_value": portfolio_value,

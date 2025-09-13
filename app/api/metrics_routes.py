@@ -10,6 +10,8 @@ import logging
 
 from app.services.metrics_service import metrics_service
 from app.core.auth import get_api_key_user
+from app.db.session import SessionLocal
+from app.models.system_setting import SystemSetting
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,33 @@ async def get_prometheus_metrics():
     except Exception as e:
         logger.error(f"Error generando métricas de Prometheus: {e}")
         raise HTTPException(status_code=500, detail="Error generando métricas")
+
+
+@router.post("/baseline/reset")
+async def reset_baseline(user = Depends(get_api_key_user)):
+    """Fija la baseline actual para total_profit y portfolio_change (persistente en BD)."""
+    try:
+        # Capturar valor actual de portafolio desde el servicio de métricas
+        out = await metrics_service.calculate_portfolio_metrics()
+        current_value = float(out.get("portfolio_value", 0.0) or 0.0)
+
+        db = SessionLocal()
+        try:
+            # total_profit baseline ya existe en MetricsService; fijamos la de portafolio
+            s = db.query(SystemSetting).filter(SystemSetting.key == 'portfolio:baseline_value_usdt').first()
+            if s:
+                s.value = str(current_value)
+            else:
+                s = SystemSetting(key='portfolio:baseline_value_usdt', value=str(current_value))
+                db.add(s)
+            db.commit()
+        finally:
+            db.close()
+
+        return {"status": "ok", "baseline_portfolio_usdt": current_value}
+    except Exception as e:
+        logger.error(f"Error reseteando baseline: {e}")
+        raise HTTPException(status_code=500, detail="Error reseteando baseline")
 
 @router.get("/profitability")
 async def get_profitability_metrics(user = Depends(get_api_key_user)):
