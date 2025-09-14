@@ -12,12 +12,12 @@ Definir especificaciones técnicas del backend de trading para ejecución segura
 - **Infraestructura**: Docker Compose/K8s.
 
 ### 2.1 Diagramas UML (referencias)
-- Componentes: `docs/architecture.png`.
-- Secuencia (orden E2E): `docs/seq_order.png`.
-- DFD Emergencia/Breakers: `docs/dfd_emergency.png`.
+- Componentes: `docs/architecture.svg`.
+- Secuencia (orden E2E): `docs/seq_order.svg`.
+- DFD Emergencia/Breakers: `docs/dfd_emergency.svg`.
 
 ## 3. Modelos de Datos
-- ERD del esquema PostgreSQL (`docs/erd.png`).
+- ERD del esquema PostgreSQL (`docs/erd.svg`).
 - Contratos Pydantic para requests/responses.
 
 ### 3.1 Esquema de datos (resumen)

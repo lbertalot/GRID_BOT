@@ -32,7 +32,7 @@ Incluye:
 GridBot v2.5 reduce el riesgo operativo y financiero en trading algorítmico automatizando defensas críticas antes de cada orden (PRECIO/CANTIDAD/NOTIONAL/Saldo), adaptando el tamaño por Kelly Fraccional según volatilidad y régimen de mercado, y ofreciendo observabilidad total (métricas/alertas/dashboards). ¿Por qué importa? Evita rechazos del exchange, pérdidas por precisión y decisiones con datos inconsistentes, manteniendo la ejecución segura y medible.
 
 ## 🏗 Arquitectura
-![Arquitectura](docs/architecture.png)
+![Arquitectura](docs/architecture.svg)
 
 ## 🚀 Instalación rápida
 ```bash
