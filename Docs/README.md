@@ -1,83 +1,94 @@
-# 📚 Documentación de GridBot V2.5
+# 🤖 Trading Backend – FastAPI + Celery + ML
 
-## 📋 **Índice de Documentación**
+[![Build](https://github.com/lbertalot/GRID_BOT/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lbertalot/GRID_BOT/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/lbertalot/GRID_BOT/branch/main/graph/badge.svg)](https://codecov.io/gh/lbertalot/GRID_BOT)
+[![Security Scan](https://img.shields.io/badge/Security-Passing-brightgreen)]()
+[![Version](https://img.shields.io/badge/version-v2.5-blue)]()
+[![Status](https://img.shields.io/badge/status-Public-brightgreen)]()
 
-### **🚀 Guías de Despliegue**
+## 📌 Resumen
+Backend algorítmico de trading para Binance con enfoque de bajo riesgo y alta observabilidad.  
+Incluye:
+- API `FastAPI` asíncrona.
+- ML/IA híbrido (LSTM/Transformer + River online) para predicción de régimen.
+- Orquestación `Docker/K8s`, cache `Redis`, base `PostgreSQL`.
+- Circuit breakers, reconciliación financiera (≤ 60 s), dashboards Prometheus/Grafana.
 
-#### **1. [Guía de Despliegue](DEPLOYMENT_GUIDE.md)**
-- Instalación y configuración completa
-- Requisitos del sistema
-- Despliegue paso a paso
-- Verificación y monitoreo
+## 🧭 Tabla de Contenidos
+- [Resumen](#-resumen)
+- [Pitch](#-pitch)
+- [Arquitectura](#-arquitectura)
+- [Instalación rápida](#-instalación-rápida)
+- [Ejemplo mínimo de uso](#-🧪-ejemplo-mínimo-de-uso)
+- [Variables de entorno](#-variables-de-entorno)
+- [Endpoints principales](#-endpoints-principales)
+- [Observabilidad](#-observabilidad)
+- [Testing](#-testing)
+- [Licencia](#-licencia)
+- [Agradecimientos y contribuidores](#-agradecimientos-y-contribuidores)
+ - [OpenAPI](#-openapi)
 
-#### **2. [Configuración de Binance](BINANCE_SETUP_GUIDE.md)**
-- Crear API Key en Binance
-- Configurar permisos y restricciones
-- Verificar credenciales
-- Solución de problemas comunes
+## 🎯 Pitch
+GridBot v2.5 reduce el riesgo operativo y financiero en trading algorítmico automatizando defensas críticas antes de cada orden (PRECIO/CANTIDAD/NOTIONAL/Saldo), adaptando el tamaño por Kelly Fraccional según volatilidad y régimen de mercado, y ofreciendo observabilidad total (métricas/alertas/dashboards). ¿Por qué importa? Evita rechazos del exchange, pérdidas por precisión y decisiones con datos inconsistentes, manteniendo la ejecución segura y medible.
 
-#### **3. [Guía de Monitoreo](MONITORING_GUIDE.md)**
-- Configuración de Prometheus
-- Dashboards de Grafana
-- Alertas y notificaciones
-- Métricas personalizadas
+## 🏗 Arquitectura
+![Arquitectura](docs/architecture.png)
 
-#### **4. [Comandos Rápidos](QUICK_COMMANDS.md)**
-- Comandos de diagnóstico
-- Operaciones de trading
-- Mantenimiento del sistema
-- Solución de problemas
+## 🚀 Instalación rápida
+```bash
+git clone https://github.com/ORG/REPO.git
+cd REPO
+cp .env.example .env
+docker-compose up --build
+```
 
-### **📊 Documentación Técnica**
+## 🧪 Ejemplo mínimo de uso
+1) Healthcheck:
+```bash
+curl -s http://localhost:8000/health
+```
 
-#### **5. [Verificación de Tests](VERIFICACION_TESTS_FINAL.md)**
-- Estado de los tests del sistema
-- Verificación de dependencias
-- Problemas conocidos y soluciones
-- Métricas de calidad
+2) Simulación (dry-run) validada, sin enviar orden real:
+```bash
+curl -s -X POST "http://localhost:8000/api/simulations/dry-run" \
+  -H "Authorization: Bearer ${API_KEY:-gridbot_api_key_2024_secure_12345}" \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"BTCUSDT","side":"BUY","order_type":"MARKET","quantity":0.0002}'
+```
 
-#### **6. [Resumen de Actualizaciones](RESUMEN_FINAL_ACTUALIZACION.md)**
-- Actualizaciones de seguridad aplicadas
-- Consolidación de dependencias
-- Cambios realizados en el sistema
-- Estado actual del proyecto
+## 🔑 Variables de entorno
+| Variable              | Descripción                                 |
+|-----------------------|----------------------------------------------|
+| `BINANCE_API_KEY`     | API Key de Binance                           |
+| `BINANCE_API_SECRET`  | API Secret de Binance                        |
+| `BINANCE_TESTNET`     | true/false                                   |
+| `PAPER_TRADING`       | true/false                                   |
+| `DATABASE_URL`        | PostgreSQL URI                               |
+| `REDIS_URL`           | Redis URI                                    |
+| `TELEGRAM_BOT_TOKEN`  | Token opcional para alertas                  |
+| `TELEGRAM_CHAT_ID`    | Chat ID opcional para alertas                |
 
-#### **7. [Índice de Documentación](INDEX_DOCUMENTACION.md)**
-- Índice completo de documentación
-- Organización por categorías
-- Guías por tipo de usuario
-- Enlaces a todos los documentos
+## 📡 Endpoints principales
+- `GET /health`
+- `GET /breakers/summary`
+- `GET /api/reconciliation/summary`
+- `POST /api/simulations/dry-run`
+- `GET /metrics` (Prometheus)
 
----
+## 📊 Observabilidad
+Capturas y dashboards Grafana → [`docs/observability.md`](docs/observability.md)
 
-## 🎯 **Guías por Categoría**
+## 🧪 Testing
+```bash
+pytest --cov=app
+```
 
-### **🆕 Para Nuevos Usuarios:**
-1. [Guía de Despliegue](DEPLOYMENT_GUIDE.md)
-2. [Configuración de Binance](BINANCE_SETUP_GUIDE.md)
-3. [Comandos Rápidos](QUICK_COMMANDS.md)
+## 📜 Licencia
+Este proyecto está licenciado bajo la Licencia MIT. Ver `LICENSE` para más detalles.
 
-### **🔧 Para Administradores:**
-1. [Guía de Monitoreo](MONITORING_GUIDE.md)
-2. [Verificación de Tests](VERIFICACION_TESTS_FINAL.md)
-3. [Resumen de Actualizaciones](RESUMEN_FINAL_ACTUALIZACION.md)
+## 🙌 Agradecimientos y contribuidores
+- Equipo GridBot — Plataforma/Trading, SRE/DevOps, Quant/ML.  
+Contacto: `support@gridbot.com` | Telegram: `@gridbot_support`
 
-### **📊 Para Desarrolladores:**
-1. [Verificación de Tests](VERIFICACION_TESTS_FINAL.md)
-2. [Resumen de Actualizaciones](RESUMEN_FINAL_ACTUALIZACION.md)
-3. [Índice de Documentación](INDEX_DOCUMENTACION.md)
-
----
-
-## 📝 **Notas de Organización**
-
-- **Documentación Limpia**: Solo se mantienen los archivos esenciales después de la limpieza del sistema
-- **Categorización**: Los archivos están organizados por función y prioridad
-- **Enlaces**: Todos los enlaces son relativos dentro de la carpeta `Docs/`
-- **Actualización**: Esta documentación refleja el estado actual después de la limpieza
-
----
-
-**📚 Total de Documentos: 8 archivos organizados en 2 categorías principales**
-
-*Última actualización: 2025-08-31 - Post limpieza del sistema* 
+## 📘 OpenAPI
+El esquema OpenAPI se publica como artefacto del CI y puede consultarse en `Docs/openapi.json` tras cada build.
