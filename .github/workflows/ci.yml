@@ -59,7 +59,7 @@ jobs:
           DATABASE_URL: sqlite:///./test.db
           REDIS_URL: redis://localhost:6379
         run: |
-          pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml
+          pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml
 
       - name: Export OpenAPI schema
         run: |
