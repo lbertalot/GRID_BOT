@@ -8,6 +8,6 @@ from app.api import metrics_routes
 router = APIRouter(prefix="/api")
 router.include_router(trade.router, prefix="/trade")
 router.include_router(strategies.router, prefix="/strategies")
-router.include_router(metrics.router, prefix="/metrics")
+# Evitar doble prefijo para métricas: 'metrics' ya define '/metrics'
 router.include_router(prometheus.router, prefix="/prometheus")
-# metrics_routes ya tiene su propio prefijo /api/v1/metrics 
+# No incluir metrics.router aquí; se incluye desde main con prefijo '/api/metrics'

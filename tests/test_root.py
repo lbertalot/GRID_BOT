@@ -1,9 +1,10 @@
-import pytest
-from fastapi.testclient import TestClient
-from app.main import app
+import os
+import requests
+
+BASE_URL = os.getenv("GRIDBOT_BASE_URL", "http://localhost:8000")
 
 def test_read_root():
-    client = TestClient(app)
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "GridBot Web" in response.text 
+    r = requests.get(f"{BASE_URL}/", timeout=10)
+    assert r.status_code == 200
+    js = r.json()
+    assert js.get("status") == "running"

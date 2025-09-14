@@ -48,4 +48,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.services.trading_tasks.assess_risk",
         "schedule": 300.0,  # Cada 5 minutos
     },
+    "dust-sweep-weekly": {
+        "task": "app.services.trading_tasks.dust_sweep",
+        "schedule": crontab(minute=0, hour=3, day_of_week='sun'),  # Domingos 03:00 UTC
+        "options": {"queue": "low"},
+        "args": (True,),  # dry_run por defecto
+    },
 } 

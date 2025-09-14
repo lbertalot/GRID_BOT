@@ -102,6 +102,45 @@
       ],
       "title": "Portfolio vs Cash",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16},
+      "id": 101,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "integrity_score{component=\"overall\"}", "refId": "A"},
+        {"expr": "integrity_score{component=\"balance\"}", "refId": "B"},
+        {"expr": "integrity_score{component=\"operation\"}", "refId": "C"},
+        {"expr": "integrity_score{component=\"system\"}", "refId": "D"}
+      ],
+      "title": "Integrity Scores",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 16},
+      "id": 102,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "breaker_state{type=\"balance_discrepancy\"}", "refId": "A"},
+        {"expr": "breaker_state{type=\"operation_failure_rate\"}", "refId": "B"},
+        {"expr": "breaker_state{type=\"system_integrity\"}", "refId": "C"},
+        {"expr": "breaker_state{type=\"critical_mode\"}", "refId": "D"}
+      ],
+      "title": "Breaker States",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 103,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {"expr": "topk(10, rate(invalid_symbol_total[5m]))", "refId": "A"}
+      ],
+      "title": "Invalid Symbol Rate (top 10)",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",

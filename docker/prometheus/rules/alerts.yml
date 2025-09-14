@@ -1,15 +1,8 @@
 groups:
   - name: gridbot_alerts
     rules:
-      # Alerta cuando la API no responde
-      - alert: GridBotAPIDown
-        expr: up{job="gridbot-api"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "GridBot API está caída"
-          description: "La API de GridBot ha estado caída por más de 1 minuto"
+      # Regla GridBotAPIDown se gestiona en availability_rules.yml (5m warning / 15m critical)
+      # Evitamos duplicados que generan ruido durante deploys/restarts.
 
       # Alerta cuando hay errores en las órdenes de trading
       - alert: TradingOrderErrors

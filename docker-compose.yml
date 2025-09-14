@@ -66,9 +66,12 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SECRET_KEY=gridbot-secret-key-2025-super-secure
-      - DEBUG=true
-      - ENVIRONMENT=development
+      - DEBUG=${DEBUG:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - DOCKER_ENV=true
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - FORCE_REAL_MODE=${FORCE_REAL_MODE}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - WEBSOCKET_ADVANCED=true
@@ -85,6 +88,7 @@ services:
       - REPORTS_DIR=/app/reports
     volumes:
       - ./app:/app/app
+      - ./tests:/app/tests
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
@@ -93,7 +97,10 @@ services:
       - ./reports:/app/reports
       - ./.venv:/app/.venv
       - numba_cache:/tmp/numba_cache
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --workers 2
+    # Modo por defecto: producción sin reload. Activar reload solo en perfil dev.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 3
+    profiles:
+      - production
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -302,6 +309,18 @@ services:
       - gridbot_network
     profiles:
       - production
+
+  # API (perfil desarrollo) con reload y exclusiones para evitar reinicios por tests
+  api_dev:
+    extends:
+      service: api
+    container_name: gridbot_api_dev
+    environment:
+      - DEBUG=true
+      - ENVIRONMENT=development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude tests/* --workers 1
+    profiles:
+      - development
 
 volumes:
   pgdata:

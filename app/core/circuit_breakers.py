@@ -4,6 +4,7 @@ GridBot v2.5 - Componente de Integridad Integrado
 """
 
 import logging
+import time
 from typing import Dict, Any
 from datetime import datetime
 
@@ -21,6 +22,13 @@ class CircuitBreakers:
             'critical_mode': {'active': False, 'activated_at': None, 'reason': None}
         }
         self.logger.info("🔧 Módulo de circuit breakers inicializado")
+        # Cooldown por breaker y estado
+        self._last_activation_ts: Dict[str, float] = {}
+        import os
+        try:
+            self._cooldown_seconds = int(os.getenv("CB_COOLDOWN_SECONDS", "300"))
+        except Exception:
+            self._cooldown_seconds = 300  # 5 minutos
     
     async def activate_breaker(self, breaker_type: str, reason: str = None) -> bool:
         """Activar un circuit breaker específico"""
@@ -29,11 +37,25 @@ class CircuitBreakers:
                 self.logger.warning(f"⚠️ Tipo de circuit breaker desconocido: {breaker_type}")
                 return False
             
-            self.breakers[breaker_type]['active'] = True
-            self.breakers[breaker_type]['activated_at'] = datetime.now().isoformat()
-            self.breakers[breaker_type]['reason'] = reason or f"Activado automáticamente"
-            
-            self.logger.warning(f"🚨 Circuit breaker '{breaker_type}' activado: {reason}")
+            # Edge-trigger: solo loggear/cambiar estado si pasa de inactivo a activo
+            if not self.breakers[breaker_type]['active']:
+                # Cooldown: evitar flapping
+                now = time.time()
+                last = self._last_activation_ts.get(breaker_type, 0.0)
+                if now - last < self._cooldown_seconds:
+                    self.logger.warning(f"⏳ Cooldown activo para '{breaker_type}', activación omitida")
+                    return False
+                self.breakers[breaker_type]['active'] = True
+                self.breakers[breaker_type]['activated_at'] = datetime.now().isoformat()
+                self.breakers[breaker_type]['reason'] = reason or f"Activado automáticamente"
+                self._last_activation_ts[breaker_type] = now
+                self.logger.warning(f"🚨 Circuit breaker '{breaker_type}' activado: {reason}")
+                # Métrica de estado
+                try:
+                    from app.core.metrics import breaker_state
+                    breaker_state.labels(type=breaker_type).set(1)
+                except Exception:
+                    pass
             return True
             
         except Exception as e:
@@ -52,6 +74,11 @@ class CircuitBreakers:
             self.breakers[breaker_type]['reason'] = None
             
             self.logger.info(f"✅ Circuit breaker '{breaker_type}' desactivado")
+            try:
+                from app.core.metrics import breaker_state
+                breaker_state.labels(type=breaker_type).set(0)
+            except Exception:
+                pass
             return True
             
         except Exception as e:

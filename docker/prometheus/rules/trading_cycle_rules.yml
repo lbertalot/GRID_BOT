@@ -1,0 +1,24 @@
+groups:
+  - name: gridbot-trading-cycle
+    rules:
+      - alert: GridBotNoExecutionWithDecisions
+        expr: |
+          (sum_over_time(cycle_decision_ready[15m]) > 0)
+          and on() (sum_over_time(cycle_order_executed[15m]) == 0)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sin ejecuciones con decisiones listas (15m)"
+          description: "Hay decisiones listas pero no se enviaron órdenes en los últimos 15 minutos."
+
+      - alert: GridBotTickStalled
+        expr: |
+          absent(cycle_phase_timestamp{phase="evaluation"})
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tick 5m detenido"
+          description: "No se observa actividad de fase 'evaluation' en 10 minutos."
+
