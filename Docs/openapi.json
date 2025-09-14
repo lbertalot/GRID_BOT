@@ -1,0 +1,5 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "GridBot API", "version": "0.0.0-local" },
+  "paths": {}
+}
