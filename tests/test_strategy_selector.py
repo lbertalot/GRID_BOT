@@ -61,8 +61,16 @@ class TestStrategySelector:
         """Test de determinación de volatilidad alta."""
         mock_regime_prediction.short_regime = MarketRegime.HIGH_VOL
         
+        dummy_state = AccountState(
+            total_equity=10000.0,
+            available_balance=5000.0,
+            total_exposure=0.2,
+            daily_pnl=0.0,
+            max_drawdown=0.05,
+            risk_score=0.3
+        )
         volatility = strategy_selector._determine_volatility_level(
-            mock_regime_prediction, Mock()
+            mock_regime_prediction, dummy_state
         )
         
         assert volatility == VolatilityLevel.HIGH

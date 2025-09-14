@@ -1,15 +1,40 @@
 {
   "metrics": {
-    "total_trades": 0,
-    "successful_trades": 0,
-    "failed_trades": 0,
-    "total_profit": 0.0,
+    "total_trades": 2,
+    "successful_trades": 1,
+    "failed_trades": 1,
+    "total_profit": 5.0,
     "total_loss": 0.0,
-    "current_balance": 1000.0,
-    "daily_pnl": 0.0,
+    "current_balance": 310.0,
+    "daily_pnl": -0.69,
     "hourly_pnl": 0.0,
     "last_update": "2025-09-01T22:29:11.616054"
   },
-  "alerts": [],
-  "last_save": "2025-09-01T22:29:11.616061"
+  "alerts": [
+    {
+      "level": "WARNING",
+      "message": "P\u00e9rdida por trade excedida: $2.00",
+      "timestamp": "2025-09-07T23:48:08.694832",
+      "category": "TRADING",
+      "data": {
+        "symbol": "ETHUSDT",
+        "side": "SELL",
+        "quantity": 0.01,
+        "price": 4400,
+        "profit_loss": -2.0
+      }
+    },
+    {
+      "level": "WARNING",
+      "message": "P\u00e9rdida significativa detectada: -69.00%",
+      "timestamp": "2025-09-07T23:48:08.697446",
+      "category": "FINANCIAL",
+      "data": {
+        "old_balance": 1000.0,
+        "new_balance": 310.0,
+        "change": -0.69
+      }
+    }
+  ],
+  "last_save": "2025-09-07T23:48:08.699031"
 }

@@ -1,5 +1,66 @@
 ## RFC — Plan técnico de corrección y endurecimiento GridBot v2.5
 
+### Resumen de cambios implementados en esta iteración
+
+- Ciclo 5m orquestado (4m evaluación + 1m ejecución) con métricas `cycle_phase_timestamp`, `cycle_decision_ready`, `cycle_order_executed`.
+- Reconciliación endurecida: `portfolio_total_value_usdt` valora (free+locked), `balance_discrepancy_usd` reporta 0 cuando no hay contabilidad interna (evita falsos positivos) y breaker solo se activa si hay contabilidad y gap > umbral.
+- Métricas y dashboard:
+  - `roi_daily_percent` y `profit_daily_usdt` se publican explícitamente (evita No data).
+  - Nueva métrica `portfolio_change_usdt{strategy="grid"}` (delta vs baseline persistente en BD) y panel "Δ Portafolio (USDT)".
+  - Endpoint para resetear baseline: `POST/GET /api/v1/metrics/baseline/reset` (token opcional `DASH_RESET_TOKEN`).
+- Alerting Prometheus:
+  - Reglas de discrepancia usan `balance_discrepancy_usd` con `for: 6m`.
+  - Nuevas alertas: `GridBotNoExecutionWithDecisions` (15m) y `GridBotTickStalled` (10m).
+- Telegram anti-spam: dedupe + cooldown configurable (`TELEGRAM_COOLDOWN_SECONDS`).
+- Alerta -2015 (IP no autorizada): envía IP pública detectada y sugerencia de whitelisting; métrica `external_auth_failures_total`.
+- Resiliencia Binance:
+  - Métrica `binance_api_errors_total{code,phase}`.
+  - "Circuit open" para llamadas privadas tras 3 fallos consecutivos (omitir 5m; variables `BINANCE_PRIVATE_FAIL_THRESHOLD`, `BINANCE_PRIVATE_CIRCUIT_OPEN_SECONDS`).
+- PnL realizado: al SELL se cierra el último BUY abierto y se registra `exit_price` y `profit_loss` en `trades` (habilita Ganancia Total/Diaria real).
+
+### Motivación
+
+Reducir falsos positivos de integridad y discrepancia, mejorar la visibilidad del desempeño (distinción entre PnL realizado vs revalorización), y endurecer la resiliencia a fallos externos (DNS, límites de API/IP) sin degradar la disponibilidad del sistema.
+
+### Diseño
+
+1) Reconciliación y Breakers
+- Si `int_usdt==0` (sin contabilidad interna), publicar `balance_discrepancy_usd=0` y no activar breakers por discrepancia.
+- Al tener contabilidad, activar breaker según gap relativo > umbral.
+
+2) Métricas y Baseline
+- Persistencia en `system_settings` de `profit:baseline_iso` y `portfolio:baseline_value_usdt`.
+- `portfolio_change_usdt = portfolio_actual - baseline_portfolio`.
+- Endpoint de reset (GET/POST) para uso desde Grafana.
+
+3) Alertas y Dashboard
+- Migrar reglas a `balance_discrepancy_usd`, `for: 6m`.
+- Alertas de ciclo (sin ejecución con decisiones listas y tick detenido).
+- Paneles: Δ Portafolio, Segundos desde última evaluación.
+
+4) Telegram y Anti-spam
+- Dedupe por hash del mensaje con cooldown (por defecto 10 min) y edge-trigger de circuit breakers.
+
+5) Binance resiliencia
+- Métrica de errores con etiquetas (código, fase).
+- IP inválida (-2015): notificación con IP pública, cooldown 30 min.
+- Circuit breaker "privado" (interno) para llamadas `get_account` tras N fallos.
+
+6) PnL Realizado
+- A nivel `OptimizedGridManager`, cerrar BUY al SELL y registrar `profit_loss`. Adapta métricas de ganancia.
+
+### Consideraciones de Seguridad
+- El endpoint GET de reset baseline puede protegerse con `DASH_RESET_TOKEN`.
+- Edge-trigger y cooldown reducen spam de alertas.
+
+### Plan de despliegue
+- Variables nuevas opcionales: `TELEGRAM_COOLDOWN_SECONDS`, `BINANCE_PRIVATE_FAIL_THRESHOLD`, `BINANCE_PRIVATE_CIRCUIT_OPEN_SECONDS`, `DASH_RESET_TOKEN`.
+- Recargar Prometheus y Grafana para nuevas reglas/paneles.
+
+### Trabajo Futuro
+- Integrar contabilidad interna para `int_usdt` y activar discrepancias reales.
+- Panel de PnL realizado por día y WinRate 7d.
+
 Fecha: 2025-09-04
 Autor: Equipo Plataforma / Trading
 Estado: En progreso

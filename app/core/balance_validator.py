@@ -29,8 +29,9 @@ class BalanceValidator:
         self.circuit_breakers = CircuitBreakers()
         
         # Configuración de validación
-        self.alert_threshold = Decimal('0.01')  # 1%
-        self.critical_threshold = Decimal('0.05')  # 5%
+        from os import getenv
+        self.alert_threshold = Decimal(getenv('BALANCE_ALERT_THRESHOLD', '0.01'))  # 1%
+        self.critical_threshold = Decimal(getenv('BALANCE_CRITICAL_THRESHOLD', '0.05'))  # 5%
         self.check_interval = 900  # 15 minutos
         
         # Estado de validación
@@ -42,6 +43,9 @@ class BalanceValidator:
         self.integrity_score = 100.0
         self.consecutive_failures = 0
         self.total_validations = 0
+        
+        # Tolerancia de comparación
+        self.value_epsilon = Decimal(getenv('BALANCE_EPSILON_USDT', '0'))  # 0 evita falsos positivos exactos (0E-8)
         
     async def start_validation_loop(self):
         """Iniciar loop de validación continua"""
@@ -247,6 +251,11 @@ class BalanceValidator:
                 # Calcular diferencia total
                 total_difference = system_total - binance_total
                 total_difference_pct = abs(total_difference / binance_total) * 100
+                
+                # Ignorar diferencias nulas o insignificantes (evitar falso positivo 0E-8)
+                if total_difference == 0:
+                    logger.info("✅ Sin discrepancia de balance total (diferencia exacta 0)")
+                    return discrepancies
                 
                 discrepancy = {
                     'type': 'TOTAL_BALANCE_DISCREPANCY',

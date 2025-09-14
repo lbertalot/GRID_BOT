@@ -60,6 +60,44 @@ active_breakers_total = Gauge(
     'Cantidad de circuit breakers activos'
 )
 
+# Estado de breakers (0/1) por tipo
+breaker_state = Gauge(
+    'breaker_state',
+    'Estado de breaker (0 inactivo, 1 activo)',
+    ['type']
+)
+
+# Scores de integridad por componente
+integrity_score = Gauge(
+    'integrity_score',
+    'Score de integridad (0-100) por componente',
+    ['component']
+)
+
+# =========================================================================
+# MÉTRICAS DE POLVO (DUST)
+# =========================================================================
+
+dust_assets_count = Gauge(
+    'dust_assets_count',
+    'Cantidad de activos con valor < 1 USDT'
+)
+
+dust_value_usd = Gauge(
+    'dust_value_usd',
+    'Suma de valor (USDT) de activos < 1 USDT'
+)
+
+dust_swept_usd_total = Counter(
+    'dust_swept_usd_total',
+    'Valor total (USDT) barrido (vendido/convertido) como polvo'
+)
+
+last_dust_sweep_timestamp = Gauge(
+    'last_dust_sweep_timestamp',
+    'Timestamp unix del último barrido de polvo'
+)
+
 # Ganancia por activo específico
 profit_by_asset_usdt = Gauge(
     'profit_by_asset_usdt',
@@ -141,6 +179,13 @@ commission_update_failures = Counter(
     'commission_update_failures_total',
     'Total de fallos al actualizar comisiones externas',
     ['provider', 'reason']
+)
+
+# Errores de API de Binance (códigos y fase)
+binance_api_errors_total = Counter(
+    'binance_api_errors_total',
+    'Total de errores de API de Binance',
+    ['code', 'phase']
 )
 
 # ============================================================================
@@ -399,6 +444,13 @@ def record_symbol_error(symbol: str, error_type: str):
         bot_errors_total.labels(error_type=error_type, strategy="grid").inc()
     except Exception as e:
         print(f"Error registrando error por símbolo: {e}")
+
+# Contador de símbolos inválidos detectados
+invalid_symbol_total = Counter(
+    'invalid_symbol_total',
+    'Total de ocurrencias de símbolo inválido normalizado',
+    ['symbol']
+)
 
 def update_balance(asset: str, free: float, locked: float):
     """

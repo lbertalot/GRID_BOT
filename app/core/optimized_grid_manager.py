@@ -774,27 +774,54 @@ class OptimizedGridManager:
         try:
             from app.db.session import SessionLocal
             from app.models.trade import Trade
+            from sqlalchemy import desc
             
             logger.info(f"🔄 Guardando trade en BD: {side} {quantity} {symbol} @ ${price:.6f}")
             
             db = SessionLocal()
             
-            # Crear trade con validación
-            trade = Trade(
-                symbol=symbol,
-                side=side,
-                quantity=quantity,
-                entry_price=price,
-                timestamp=datetime.now()
-            )
+            if side.upper() == 'SELL':
+                # Buscar última BUY sin cerrar para realizar PnL
+                open_buy = db.query(Trade).filter(
+                    Trade.symbol == symbol,
+                    Trade.side == 'BUY',
+                    Trade.exit_price == None
+                ).order_by(desc(Trade.timestamp)).first()
+                if open_buy:
+                    open_buy.exit_price = float(price)
+                    open_buy.profit_loss = (float(price) - float(open_buy.entry_price)) * float(min(quantity, open_buy.quantity))
+                    db.commit()
+                    db.refresh(open_buy)
+                    logger.info(f"✅ PnL realizado registrado: {open_buy.profit_loss:.6f} USDT en {symbol}")
+                else:
+                    # Sin BUY abierto: registrar trade SELL como evento de salida sin PnL
+                    trade = Trade(
+                        symbol=symbol,
+                        side=side,
+                        quantity=quantity,
+                        entry_price=price,
+                        timestamp=datetime.now()
+                    )
+                    db.add(trade)
+                    db.commit()
+                    db.refresh(trade)
+            else:
+                # BUY: crear entrada abierta
+                trade = Trade(
+                    symbol=symbol,
+                    side=side,
+                    quantity=quantity,
+                    entry_price=price,
+                    timestamp=datetime.now()
+                )
+                db.add(trade)
+                db.commit()
+                db.refresh(trade)
             
             # Validar datos antes de guardar
             if not symbol or not side or quantity <= 0 or price <= 0:
                 raise ValueError(f"Datos inválidos: symbol={symbol}, side={side}, quantity={quantity}, price={price}")
             
-            db.add(trade)
-            db.commit()
-            db.refresh(trade)
             logger.info(f"✅ Trade guardado exitosamente en BD - ID: {trade.id}")
             
         except Exception as e:

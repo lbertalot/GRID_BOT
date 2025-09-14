@@ -3,6 +3,20 @@ import requests
 import logging
 import asyncio
 import aiohttp
+import time
+import hashlib
+
+_last_sent: dict[str, float] = {}
+_cooldown_seconds = int(os.getenv("TELEGRAM_COOLDOWN_SECONDS", "600"))  # 10 min por defecto
+
+def _should_send(msg: str) -> bool:
+    now = time.time()
+    key = hashlib.sha256(msg.encode("utf-8")).hexdigest()
+    last = _last_sent.get(key, 0)
+    if now - last < _cooldown_seconds:
+        return False
+    _last_sent[key] = now
+    return True
 
 def send_telegram_alert(message: str) -> bool:
     """
@@ -15,6 +29,9 @@ def send_telegram_alert(message: str) -> bool:
     if not token or not chat_id:
         logger.error(f"No se encontró TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en las variables de entorno. Mensaje no enviado: {message}")
         return False
+    if not _should_send(message):
+        logger.info("Telegram dedupe/cooldown: mensaje suprimido")
+        return True
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message}
     try:
@@ -41,6 +58,9 @@ async def send_telegram_alert_async(message: str) -> bool:
         logger.error(f"No se encontró TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en las variables de entorno. Mensaje no enviado: {message}")
         return False
     
+    if not _should_send(message):
+        logger.info("Telegram dedupe/cooldown (async): mensaje suprimido")
+        return True
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message}
     

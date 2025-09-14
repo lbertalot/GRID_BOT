@@ -622,6 +622,16 @@
       "type": "stat"
     },
     {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 32},
+      "id": 14,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "time() - cycle_phase_timestamp{phase=\"evaluation\"}", "refId": "A"}],
+      "title": "⏱️ Segundos desde última evaluación",
+      "type": "stat"
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

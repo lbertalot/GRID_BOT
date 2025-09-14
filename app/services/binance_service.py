@@ -28,6 +28,10 @@ class BinanceService:
         
         # Inicializar modo simulación (paper mode fuerza simulación)
         self.simulation_mode = bool(settings.paper_trading)
+        # Permitir forzar modo real ignorando PAPER_TRADING
+        self.force_real_mode = os.getenv("FORCE_REAL_MODE", "false").lower() == "true"
+        if self.force_real_mode:
+            self.simulation_mode = False
         
         # Inicializar cliente automáticamente
         self._initialize_client()
@@ -35,15 +39,19 @@ class BinanceService:
     def _initialize_client(self):
         """Inicializa el cliente de Binance con manejo de errores"""
         try:
-            if self.simulation_mode:
+            # Si está forzado modo real, no activar simulación por PAPER_TRADING
+            if self.simulation_mode and not self.force_real_mode:
                 logger.info("📄 PAPER_TRADING activo: habilitando modo simulación en BinanceService")
                 return
             
             if not self.api_key or not self.api_secret:
-                logger.warning("Credenciales de Binance no configuradas. Activando modo simulación.")
-                self.simulation_mode = True
-                # binance_connection_status.set(0)
-                return
+                if self.force_real_mode:
+                    raise ValueError("Credenciales de Binance no configuradas y FORCE_REAL_MODE=true")
+                else:
+                    logger.warning("Credenciales de Binance no configuradas. Activando modo simulación.")
+                    self.simulation_mode = True
+                    # binance_connection_status.set(0)
+                    return
             
             # Intentar crear el cliente
             self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
@@ -62,22 +70,29 @@ class BinanceService:
         except BinanceAPIException as e:
             if e.code == -1022:
                 logger.error(f"❌ Error de autenticación Binance (1022): {e.message}")
+                if self.force_real_mode:
+                    # En modo forzado, propagar el error para que falle visiblemente
+                    raise
                 logger.warning("🔧 Activando modo simulación debido a credenciales inválidas")
                 self.simulation_mode = True
                 # binance_connection_status.set(0)
             else:
                 logger.error(f"❌ Error de Binance API: {e}")
+                if self.force_real_mode:
+                    raise
                 self.simulation_mode = True
                 # binance_connection_status.set(0)
                 
         except Exception as e:
             logger.error(f"❌ Error inesperado inicializando Binance: {e}")
+            if self.force_real_mode:
+                raise
             self.simulation_mode = True
             # binance_connection_status.set(0)
     
     def get_account_info(self) -> Dict[str, Any]:
         """Obtiene información de la cuenta"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info("🔄 Modo simulación: Retornando datos simulados de cuenta")
             return self._get_simulated_account_info()
         
@@ -96,7 +111,7 @@ class BinanceService:
     
     def get_balance(self, asset: str) -> Dict[str, Any]:
         """Obtiene el balance de un activo específico"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info(f"🔄 Modo simulación: Retornando balance simulado para {asset}")
             return self._get_simulated_balance(asset)
         
@@ -245,7 +260,7 @@ class BinanceService:
 
     def get_current_price(self, symbol: str) -> float:
         """Obtiene el precio actual de un símbolo"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info(f"🔄 Modo simulación: Retornando precio simulado para {symbol}")
             return self._get_simulated_price(symbol)
         
@@ -264,7 +279,7 @@ class BinanceService:
     
     def execute_trading_order(self, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
         """Coloca una orden en Binance con cálculo de comisiones"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info(f"🔄 Modo simulación: Simulando orden {side} {quantity} {symbol} @ {price}")
             return self._simulate_order(symbol, side, order_type, quantity, price)
         
@@ -323,7 +338,7 @@ class BinanceService:
     
     def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """Obtiene órdenes abiertas"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info("🔄 Modo simulación: Retornando órdenes simuladas")
             return self._get_simulated_open_orders(symbol)
         
@@ -393,7 +408,7 @@ class BinanceService:
     
     def cancel_order(self, symbol: str, order_id: int) -> Dict[str, Any]:
         """Cancela una orden"""
-        if self.simulation_mode:
+        if self.simulation_mode and not self.force_real_mode:
             logger.info(f"🔄 Modo simulación: Simulando cancelación de orden {order_id}")
             return self._simulate_cancel_order(symbol, order_id)
         

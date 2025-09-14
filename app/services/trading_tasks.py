@@ -4,10 +4,12 @@ Tareas de trading mejoradas con logging detallado y validaciones robustas
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from celery import shared_task
 from app.core.celery_app import celery_app
+import os
 
 from app.core.optimized_grid_manager import create_optimized_grid_manager
 from app.services.metrics_service import MetricsService
@@ -23,6 +25,7 @@ from app.services.ml_engine import MLEngine
 from app.services.strategy_selector import StrategySelector, AccountState
 from app.core.risk_manager import RiskManager, PositionSizeParams
 from app.services.cache import get_async_cache
+from app.core.metrics import dust_assets_count, dust_value_usd, dust_swept_usd_total, last_dust_sweep_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -493,3 +496,80 @@ def health_check():
     except Exception as e:
         logger.error(f"❌ Error en verificación de salud: {e}")
         return {"status": "unhealthy", "error": str(e)} 
+
+
+@shared_task
+def dust_sweep(dry_run: bool = True) -> dict:
+    """
+    Barre saldos pequeños (< 1 USDT) según política:
+    - Si existe par ASSETUSDT y supera MIN_NOTIONAL: vender MARKET a USDT
+    - Si no, intentar Convert/Dust to BNB (no implementado por API pública): registrar recomendación
+    - Respetar whitelist y límites
+    """
+    try:
+        logger.info("🧹 Iniciando barrido de polvo (dry_run=%s)", dry_run)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        from app.services.binance_client_singleton import get_binance_client_singleton
+        client_singleton = get_binance_client_singleton()
+
+        async def _run() -> dict:
+            # Obtener balances actuales (dict asset -> qty)
+            balances = client_singleton.get_balances() or {}
+            # Precios helper
+            def px(sym: str) -> float:
+                return client_singleton.get_symbol_price(sym)
+
+            whitelist = set(os.getenv("DUST_WHITELIST", "").split(",")) if os.getenv("DUST_WHITELIST") else set()
+            min_notional = float(os.getenv("DUST_MIN_NOTIONAL", "10"))
+            dust_threshold = float(os.getenv("DUST_THRESHOLD_USD", "1"))
+
+            items = []
+            total_dust = 0.0
+            for asset, qty in balances.items():
+                if asset in ("USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"):
+                    continue
+                if asset in whitelist:
+                    continue
+                price = 1.0 if asset == "USD" else px(f"{asset}USDT") or 0.0
+                value = float(qty) * float(price)
+                if 0.0 < value < dust_threshold:
+                    items.append({"asset": asset, "qty": float(qty), "price": float(price), "value": value})
+                    total_dust += value
+
+            dust_assets_count.set(len(items))
+            dust_value_usd.set(total_dust)
+
+            actions = []
+            swept_total = 0.0
+            for it in items:
+                symbol = f"{it['asset']}USDT"
+                if it["value"] >= min_notional:
+                    action = {"asset": it["asset"], "symbol": symbol, "qty": it["qty"], "type": "SELL_MARKET"}
+                    actions.append({**action, "executed": not dry_run})
+                    if not dry_run:
+                        try:
+                            client_singleton.create_order(symbol=symbol, side="SELL", order_type="MARKET", quantity=str(it["qty"]))
+                            swept_total += it["value"]
+                        except Exception as e:
+                            logger.warning(f"Dust sell fallo {symbol}: {e}")
+                else:
+                    actions.append({"asset": it["asset"], "symbol": symbol, "qty": it["qty"], "type": "RECOMMEND_DUST_TO_BNB", "executed": False})
+
+            if swept_total > 0:
+                dust_swept_usd_total.inc(swept_total)
+            last_dust_sweep_timestamp.set(time.time())
+
+            return {"count": len(items), "total_value": round(total_dust, 4), "actions": actions, "dry_run": dry_run}
+
+        try:
+            result = loop.run_until_complete(_run())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+        logger.info("🧹 Barrido de polvo: %s", result)
+        return result
+    except Exception as e:
+        logger.error(f"❌ Error en dust_sweep: {e}")
+        return {"status": "error", "message": str(e)}

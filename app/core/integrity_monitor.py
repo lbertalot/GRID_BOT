@@ -6,6 +6,7 @@ GridBot v2.5 - Componente de Integridad Integrado
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
@@ -17,6 +18,7 @@ from app.core.grafana_metrics import GrafanaMetrics
 from app.core.circuit_breakers import CircuitBreakers
 from app.core.database import Database
 from app.core.config import settings
+from app.core.metrics import integrity_score
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +39,15 @@ class IntegrityMonitor:
         self.check_interval = 300  # 5 minutos
         self.critical_check_interval = 60  # 1 minuto para verificaciones críticas
         
-        # Umbrales de integridad
-        self.critical_threshold = 70.0  # 70% - Activar circuit breakers
-        self.warning_threshold = 85.0   # 85% - Enviar alertas
-        self.healthy_threshold = 95.0   # 95% - Sistema saludable
+        # Umbrales de integridad (configurables por ENV)
+        try:
+            self.critical_threshold = float(os.getenv("INTEGRITY_CRITICAL_THRESHOLD", "70"))
+            self.warning_threshold = float(os.getenv("INTEGRITY_WARNING_THRESHOLD", "85"))
+            self.healthy_threshold = float(os.getenv("INTEGRITY_HEALTHY_THRESHOLD", "95"))
+        except Exception:
+            self.critical_threshold = 70.0
+            self.warning_threshold = 85.0
+            self.healthy_threshold = 95.0
         
         # Estado del monitoreo
         self.last_comprehensive_check = None
@@ -58,6 +65,19 @@ class IntegrityMonitor:
         self.critical_alerts_count = 0
         self.warning_alerts_count = 0
         self.consecutive_critical_checks = 0
+        
+        # Estabilización: periodo de gracia y umbral de fallos consecutivos
+        self.startup_time = datetime.now()
+        self.startup_grace_seconds = int(os.getenv("INTEGRITY_STARTUP_GRACE_SECONDS", "120"))
+        self.required_consecutive_critical = int(os.getenv("INTEGRITY_REQUIRED_CONSECUTIVE_CRITICAL", "3"))
+        self.consecutive_overall_critical = 0
+        # Histéresis de recuperación
+        try:
+            self.recovery_threshold = float(os.getenv("INTEGRITY_RECOVERY_THRESHOLD", "85"))
+            self.recovery_cycles = int(os.getenv("INTEGRITY_RECOVERY_CYCLES", "2"))
+        except Exception:
+            self.recovery_threshold = 85.0
+            self.recovery_cycles = 2
         
     def set_components(self, balance_validator: BalanceValidator, operation_tracker: OperationTracker):
         """Establecer referencias a otros componentes de integridad"""
@@ -116,6 +136,15 @@ class IntegrityMonitor:
             # 4. Calcular score de integridad general
             self.overall_integrity_score = (balance_integrity + operation_integrity + system_integrity) / 3
             
+            # Publicar métricas por componente
+            try:
+                integrity_score.labels(component="balance").set(balance_integrity)
+                integrity_score.labels(component="operation").set(operation_integrity)
+                integrity_score.labels(component="system").set(system_integrity)
+                integrity_score.labels(component="overall").set(self.overall_integrity_score)
+            except Exception:
+                pass
+
             # 5. Actualizar métricas
             await self.update_integrity_metrics()
             
@@ -265,19 +294,48 @@ class IntegrityMonitor:
     async def check_integrity_thresholds(self):
         """Verificar umbrales de integridad y enviar alertas"""
         try:
+            # Periodo de gracia post-arranque: no activar crítico
+            if (datetime.now() - self.startup_time).total_seconds() < self.startup_grace_seconds:
+                logger.info("⏳ Periodo de gracia activo: omitiendo activación crítica")
+                return
+
             if self.overall_integrity_score <= self.critical_threshold:
-                await self.trigger_critical_integrity_alert()
-                await self.activate_critical_circuit_breakers()
+                self.consecutive_overall_critical += 1
+                if self.consecutive_overall_critical >= self.required_consecutive_critical:
+                    await self.trigger_critical_integrity_alert()
+                    await self.activate_critical_circuit_breakers()
+                else:
+                    logger.warning(
+                        f"⚠️ Score crítico {self.overall_integrity_score:.2f} pero aún no supera consecutivos requeridos "
+                        f"({self.consecutive_overall_critical}/{self.required_consecutive_critical})"
+                    )
                 
             elif self.overall_integrity_score <= self.warning_threshold:
+                self.consecutive_overall_critical = 0
                 await self.trigger_warning_integrity_alert()
                 
             elif self.overall_integrity_score >= self.healthy_threshold:
+                self.consecutive_overall_critical = 0
                 # Sistema saludable, resetear contadores de alertas
                 if self.critical_alerts_count > 0 or self.warning_alerts_count > 0:
                     await self.trigger_health_recovery_alert()
                     self.critical_alerts_count = 0
                     self.warning_alerts_count = 0
+                # Histeresis: salida de modo crítico sólo con salud sostenida
+                try:
+                    if self.circuit_breakers.is_critical_mode_active():
+                        # Requerir dos ciclos consecutivos saludables >= 85
+                        if not hasattr(self, "_healthy_streak"):
+                            self._healthy_streak = 0
+                        if self.overall_integrity_score >= self.recovery_threshold:
+                            self._healthy_streak += 1
+                        else:
+                            self._healthy_streak = 0
+                        if self._healthy_streak >= self.recovery_cycles:
+                            await self.circuit_breakers.deactivate_critical_mode()
+                            self._healthy_streak = 0
+                except Exception:
+                    pass
                     
         except Exception as e:
             logger.error(f"❌ Error verificando umbrales de integridad: {e}")

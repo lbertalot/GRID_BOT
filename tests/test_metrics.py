@@ -1,30 +1,23 @@
+import os
 import pytest
 import requests
 import time
-from app.core.metrics import (
-    record_order_execution,
-    record_order_failure,
-    update_balance,
-    update_strategy_status,
-    update_profit_loss
-)
 
 class TestMetrics:
     """Tests para verificar el sistema de métricas"""
     
     @pytest.fixture
     def api_base_url(self):
-        """URL base de la API"""
-        return "http://localhost:8000"
+        return os.getenv("GRIDBOT_BASE_URL", "http://localhost:8000")
     
     @pytest.fixture
     def auth_headers(self):
-        """Headers de autenticación"""
-        return {"Authorization": "Bearer gridbot_api_key_2024_secure_12345"}
+        api_key = os.getenv("API_KEY", "aPZGos-2ok2Cb9t0OeOMPzUqtMU0GPk0")
+        return {"Authorization": f"Bearer {api_key}"}
     
     def test_metrics_health_endpoint(self, api_base_url, auth_headers):
         """Test del endpoint de health check de métricas"""
-        response = requests.get(f"{api_base_url}/api/metrics/metrics/health", headers=auth_headers)
+        response = requests.get(f"{api_base_url}/api/metrics/metrics/health", headers=auth_headers, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -37,7 +30,7 @@ class TestMetrics:
     
     def test_prometheus_metrics_endpoint(self, api_base_url):
         """Test del endpoint principal de métricas de Prometheus"""
-        response = requests.get(f"{api_base_url}/api/metrics/metrics/")
+        response = requests.get(f"{api_base_url}/api/metrics/metrics/", timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -64,11 +57,7 @@ class TestMetrics:
             "success": True
         }
         
-        response = requests.post(
-            f"{api_base_url}/api/metrics/metrics/record-order",
-            headers=auth_headers,
-            params=order_data
-        )
+        response = requests.post(f"{api_base_url}/api/metrics/metrics/record-order", headers=auth_headers, params=order_data, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -84,11 +73,7 @@ class TestMetrics:
             "error_type": "INSUFFICIENT_BALANCE"
         }
         
-        response = requests.post(
-            f"{api_base_url}/api/metrics/metrics/record-order",
-            headers=auth_headers,
-            params=failed_order_data
-        )
+        response = requests.post(f"{api_base_url}/api/metrics/metrics/record-order", headers=auth_headers, params=failed_order_data, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -102,11 +87,7 @@ class TestMetrics:
             "locked": 50.0
         }
         
-        response = requests.post(
-            f"{api_base_url}/api/metrics/metrics/update-balance",
-            headers=auth_headers,
-            params=balance_data
-        )
+        response = requests.post(f"{api_base_url}/api/metrics/metrics/update-balance", headers=auth_headers, params=balance_data, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -119,11 +100,7 @@ class TestMetrics:
             "active_count": 3
         }
         
-        response = requests.post(
-            f"{api_base_url}/api/metrics/metrics/update-strategy",
-            headers=auth_headers,
-            params=strategy_data
-        )
+        response = requests.post(f"{api_base_url}/api/metrics/metrics/update-strategy", headers=auth_headers, params=strategy_data, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -137,11 +114,7 @@ class TestMetrics:
             "pnl": 25.50
         }
         
-        response = requests.post(
-            f"{api_base_url}/api/metrics/metrics/update-pnl",
-            headers=auth_headers,
-            params=pnl_data
-        )
+        response = requests.post(f"{api_base_url}/api/metrics/metrics/update-pnl", headers=auth_headers, params=pnl_data, timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -149,7 +122,7 @@ class TestMetrics:
     
     def test_prometheus_target_status(self):
         """Test para verificar el estado de los targets de Prometheus"""
-        response = requests.get("http://localhost:9090/api/v1/targets")
+        response = requests.get(os.getenv("PROM_URL", "http://localhost:9090/api/v1/targets"), timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
@@ -168,7 +141,7 @@ class TestMetrics:
     
     def test_grafana_health(self):
         """Test para verificar el estado de Grafana"""
-        response = requests.get("http://localhost:3000/api/health")
+        response = requests.get(os.getenv("GRAFANA_URL", "http://localhost:3000/api/health"), timeout=10)
         
         assert response.status_code == 200, f"Status code: {response.status_code}"
         
