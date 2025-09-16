@@ -11,6 +11,9 @@ def get_binance_client_with_verification() -> Tuple[_FakeClient, Dict[str, Any]]
     client = _FakeClient()
     return client, {"valid": True, "account_info": {"balances": []}, "account_type": "SPOT"}
 
+# Backwards-compatible export path expected by tests
+get_client_with_verification = get_binance_client_with_verification
+
 #!/usr/bin/env python3
 """
 Módulo para manejo robusto de credenciales de Binance
