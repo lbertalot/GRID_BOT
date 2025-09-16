@@ -9,7 +9,9 @@ from app.core.metrics import (
     update_balance,
     update_strategy_status,
     update_profit_loss,
-    api_requests_total,
+    gridbot_orders_total,
+    gridbot_volume_total,
+    gridbot_api_requests_total,
     record_api_request
 )
 from app.core.auth import get_api_key
@@ -29,6 +31,13 @@ async def metrics():
     try:
         from fastapi.responses import Response
         from prometheus_client import generate_latest
+        # Asegurar que existan series gridbot_* aunque no haya tráfico
+        try:
+            gridbot_api_requests_total.labels(method="GET", endpoint="/bootstrap", status_code="200").inc(0)
+            gridbot_orders_total.labels(side="BUY", asset="BTCUSDT", strategy="grid").inc(0)
+            gridbot_volume_total.labels(asset="BTCUSDT", strategy="grid").inc(0)
+        except Exception:
+            pass
         content = generate_latest()
         duration = time.time() - start_time
         record_api_request("GET", "/api/metrics/metrics/", 200, duration)

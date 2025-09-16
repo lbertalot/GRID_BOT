@@ -116,10 +116,10 @@ roi_by_asset_percent = Gauge(
 # MÉTRICAS DE OPERACIONES
 # ============================================================================
 
-# Total de trades ejecutados
-trades_executed_total = Counter(
-    'trades_executed_total',
-    'Total de trades ejecutados',
+# Prefijo gridbot_* requerido por tests
+gridbot_orders_total = Counter(
+    'gridbot_orders_total',
+    'Total de órdenes procesadas por GridBot',
     ['side', 'asset', 'strategy']
 )
 
@@ -219,8 +219,8 @@ trade_execution_duration = Histogram(
 )
 
 # Volumen de trading
-trading_volume_usdt = Counter(
-    'trading_volume_usdt',
+gridbot_volume_total = Counter(
+    'gridbot_volume_total',
     'Volumen total de trading en USDT',
     ['asset', 'strategy']
 )
@@ -262,8 +262,8 @@ cycle_order_executed = Gauge(
 # ============================================================================
 
 # Contador de requests de API
-api_requests_total = Counter(
-    'api_requests_total',
+gridbot_api_requests_total = Counter(
+    'gridbot_api_requests_total',
     'Total de requests de API',
     ['method', 'endpoint', 'status_code']
 )
@@ -321,7 +321,7 @@ def record_api_request(method: str, endpoint: str, status_code: int, duration: f
     """
     try:
         # Incrementar contador de requests
-        api_requests_total.labels(
+        gridbot_api_requests_total.labels(
             method=method,
             endpoint=endpoint,
             status_code=str(status_code)

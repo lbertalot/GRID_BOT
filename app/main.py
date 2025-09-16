@@ -241,6 +241,15 @@ async def execute_trade_alias(api_key: str = Depends(require_auth)):
 async def backtest_trade_alias(api_key: str = Depends(require_auth)):
     return {"status": "ok"}
 
+# Endpoints GET equivalentes para pruebas de autenticación
+@app.get("/api/trade/execute")
+async def execute_trade_alias_get(api_key: str = Depends(require_auth)):
+    return {"status": "ok"}
+
+@app.get("/api/trade/backtest")
+async def backtest_trade_alias_get(api_key: str = Depends(require_auth)):
+    return {"status": "ok"}
+
 # Endpoints de integridad integrados
 @app.get("/breakers/summary")
 async def breakers_summary():
