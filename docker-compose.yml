@@ -76,6 +76,7 @@ services:
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
       - GRAFANA_URL=http://grafana:3000/api/health
       - PROMETHEUS_URL=http://prometheus:9090/-/healthy
+      - PROM_URL=http://prometheus:9090/api/v1/targets
       - FORCE_REAL_MODE=
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}

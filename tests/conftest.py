@@ -5,6 +5,9 @@ import types
 import requests
 import pytest
 
+from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig
+
+
 # Install a lightweight stub of the Binance SDK for all tests unless explicitly disabled
 if os.getenv("USE_REAL_BINANCE") != "1":
     fake_binance = types.ModuleType("binance")
@@ -165,6 +168,16 @@ if os.getenv("USE_REAL_BINANCE") != "1":
     sys.modules["binance"] = fake_binance
     sys.modules["binance.client"] = client_mod
     sys.modules["binance.exceptions"] = exceptions_mod
+
+@pytest.fixture
+def mock_config():
+    # Configuración mínima para OptimizedGridManager en tests
+    assets = {
+        "BTCUSDT": AssetConfig(symbol="BTCUSDT", min_price=10000.0, max_price=200000.0, grids=10, quantity=0.0001),
+        "ETHUSDT": AssetConfig(symbol="ETHUSDT", min_price=500.0, max_price=10000.0, grids=10, quantity=0.01),
+    }
+    return GridManagerConfig(assets=assets, update_interval=60, min_notional_threshold=10.0)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def wait_api_ready():
