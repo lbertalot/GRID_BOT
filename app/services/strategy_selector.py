@@ -324,7 +324,7 @@ class StrategySelector:
             
             if account_state.daily_pnl < -0.05:  # Pérdida diaria > 5%
                 confidence *= 0.49  # Reducir confianza si pérdidas (estrictamente menor)
-
+            
             # Si el régimen es BULL_TREND en ambos horizontes con confianza suficiente, preferir DCA
             if (regime_prediction.long_regime == MarketRegime.BULL_TREND and 
                 regime_prediction.short_regime == MarketRegime.BULL_TREND and 
@@ -416,8 +416,8 @@ class StrategySelector:
         # Estado de la cuenta
         if account_state.risk_score > 0.7:
             reasoning_parts.append("High risk score - conservative approach")
-        elif account_state.daily_pnl < -0.03:
-            reasoning_parts.append("Daily losses detected - reducing exposure")
+        if account_state.daily_pnl < 0:
+            reasoning_parts.append("Daily losses detected")
         
         # Justificación de estrategia
         if strategy_type == StrategyType.GRID_TRADING:
@@ -445,12 +445,7 @@ class StrategySelector:
         if confidence > 0.8:
             reasoning_parts.append("High confidence in prediction")
         elif confidence < 0.6:
-            reasoning_parts.append("Low confidence - conservative parameters")
-        else:
-            reasoning_parts.append("High confidence")
-        # Añadir mensaje explícito de pérdidas diarias si aplica
-        if account_state.daily_pnl < 0:
-            reasoning_parts.append("Daily losses detected")
+            reasoning_parts.append("Low confidence")
         
         return " | ".join(reasoning_parts)
     
