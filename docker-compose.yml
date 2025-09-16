@@ -74,6 +74,8 @@ services:
       - DOCKER_ENV=true
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - GRAFANA_URL=http://grafana:3000/api/health
+      - PROMETHEUS_URL=http://prometheus:9090/-/healthy
       - FORCE_REAL_MODE=
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
