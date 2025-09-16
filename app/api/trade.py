@@ -130,7 +130,8 @@ def get_trades(
     side: Optional[str] = Query(None, description="Filtrar por lado (BUY/SELL)"),
     limit: int = Query(10, ge=1, le=100, description="Número de resultados"),
     offset: int = Query(0, ge=0, description="Número de resultados a saltar"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_auth)
 ):
     query = db.query(Trade)
     if symbol:

@@ -12,7 +12,8 @@ from app.core.metrics import (
     gridbot_orders_total,
     gridbot_volume_total,
     gridbot_api_requests_total,
-    record_api_request
+    record_api_request,
+    gridbot_profit_loss
 )
 from app.core.auth import get_api_key
 from typing import Dict, Any
@@ -201,6 +202,10 @@ async def update_pnl_metrics():
         }
         
         duration = time.time() - start_time
+        try:
+            gridbot_profit_loss.set(pnl_absolute)
+        except Exception:
+            pass
         record_api_request("POST", "/api/metrics/update-pnl", 200, duration)
         return result
         
