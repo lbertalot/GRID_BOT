@@ -1,31 +1,24 @@
-from fastapi import HTTPException, Security, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, Depends, Request
 import os
 from typing import Optional
 
-security = HTTPBearer()
-
-def get_api_key(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+def get_api_key(request: Request) -> str:
     """
-    Valida el API key proporcionado en el header Authorization.
-    Retorna el API key si es válido, sino lanza HTTPException.
+    Valida el API key en el header Authorization con formato Bearer.
+    Devuelve 401 para ausente/malformado/inválido (tests esperan 401).
     """
-    api_key = credentials.credentials
+    header = request.headers.get("Authorization")
+    if not header:
+        raise HTTPException(status_code=401, detail="Falta Authorization")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Formato Authorization inválido")
+    token = header.split(" ", 1)[1].strip()
     valid_api_key = os.getenv("API_KEY") or "gridbot_api_key_2024_secure_12345"
-    
     if not valid_api_key:
-        raise HTTPException(
-            status_code=500, 
-            detail="API key no configurado en el servidor"
-        )
-    
-    if api_key != valid_api_key:
-        raise HTTPException(
-            status_code=401, 
-            detail="API key inválido"
-        )
-    
-    return api_key
+        raise HTTPException(status_code=500, detail="API key no configurado en el servidor")
+    if token != valid_api_key:
+        raise HTTPException(status_code=401, detail="API key inválido")
+    return token
 
 def require_auth(api_key: str = Depends(get_api_key)) -> str:
     """

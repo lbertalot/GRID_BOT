@@ -448,6 +448,9 @@ class StrategySelector:
             reasoning_parts.append("Low confidence - conservative parameters")
         else:
             reasoning_parts.append("High confidence")
+        # Añadir mensaje explícito de pérdidas diarias si aplica
+        if account_state.daily_pnl < 0:
+            reasoning_parts.append("Daily losses detected")
         
         return " | ".join(reasoning_parts)
     
