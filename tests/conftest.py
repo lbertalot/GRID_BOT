@@ -211,13 +211,13 @@ try:
     @pytest.fixture
     def client():
         return TestClient(app)
-    # Variable global esperada por algunos tests
-    client = TestClient(app)
-    # Exponer símbolos globales usados sin import explícito en tests
-    globals()['OptimizedGridManager'] = OptimizedGridManager
-    globals()['Mock'] = Mock
-    globals()['AsyncMock'] = AsyncMock
-    globals()['patch'] = patch
+    # Exponer en builtins para tests que referencian nombres sin importar
+    import builtins
+    builtins.client = TestClient(app)
+    builtins.OptimizedGridManager = OptimizedGridManager
+    builtins.Mock = Mock
+    builtins.AsyncMock = AsyncMock
+    builtins.patch = patch
 except Exception:
     # Si falla, los tests que requieran 'client' se saltarán/fracasar.
     pass
