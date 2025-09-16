@@ -10,7 +10,8 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig
+from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig, OptimizedGridManager
+from unittest.mock import Mock, AsyncMock, patch
 
 
 # Install a lightweight stub of the Binance SDK for all tests unless explicitly disabled
@@ -210,6 +211,13 @@ try:
     @pytest.fixture
     def client():
         return TestClient(app)
+    # Variable global esperada por algunos tests
+    client = TestClient(app)
+    # Exponer símbolos globales usados sin import explícito en tests
+    globals()['OptimizedGridManager'] = OptimizedGridManager
+    globals()['Mock'] = Mock
+    globals()['AsyncMock'] = AsyncMock
+    globals()['patch'] = patch
 except Exception:
     # Si falla, los tests que requieran 'client' se saltarán/fracasar.
     pass
