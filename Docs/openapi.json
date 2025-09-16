@@ -1,5 +1,15 @@
 {
   "openapi": "3.0.3",
-  "info": { "title": "GridBot API", "version": "0.0.0-local" },
-  "paths": {}
+  "info": { "title": "GridBot API", "version": "v2.5" },
+  "paths": {
+    "/health": {"get": {"summary": "Healthcheck"}},
+    "/breakers/summary": {"get": {"summary": "Breakers summary"}},
+    "/api/reconciliation/summary": {"get": {"summary": "Reconciliation summary"}},
+    "/integrity/status": {"get": {"summary": "Integrity status"}},
+    "/integrity/validate-balances": {"post": {"summary": "Force balance validation"}},
+    "/integrity/check-operations": {"post": {"summary": "Force operation check"}},
+    "/integrity/operations/failed": {"get": {"summary": "List failed operations"}},
+    "/integrity/operations/partial-fills": {"get": {"summary": "List partial fills"}},
+    "/order": {"post": {"summary": "Place order with E2E validation"}}
+  }
 }

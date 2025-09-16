@@ -18,6 +18,10 @@ from app.core.optimized_grid_manager import OptimizedGridManager, create_optimiz
 from app.services.telegram_alert import send_telegram_alert, send_telegram_alert_async
 from app.services.min_qty_updater import update_min_qty_in_db_and_config, create_asset_min_qty_table
 from app.services.auto_rebalancer import auto_rebalancer
+from app.scheduler.reconciliation_job import run_reconciliation_forever  # new
+from app.scheduler.operation_tracking_job import run_operation_tracking_forever  # new
+from app.services.user_stream_handler import start_user_stream_and_track  # new
+from app.services.binance_credentials import get_api_key  # type: ignore
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,6 +76,41 @@ class OptimizedGridScheduler:
                 IntervalTrigger(minutes=5),
                 id="system_health_monitor",
                 name="System Health Monitor",
+                replace_existing=True
+            )
+
+            # Add reconciliation job (cada 60s)
+            self.scheduler.add_job(
+                lambda: asyncio.create_task(run_reconciliation_forever(interval_seconds=60)),
+                IntervalTrigger(seconds=60),
+                id="reconciliation_cycle",
+                name="Reconciliation Cycle",
+                replace_existing=True
+            )
+
+            # Add operation tracking job (cada 30s)
+            self.scheduler.add_job(
+                lambda: asyncio.create_task(run_operation_tracking_forever(interval_seconds=30)),
+                IntervalTrigger(seconds=30),
+                id="operation_tracking_cycle",
+                name="Operation Tracking Cycle",
+                replace_existing=True
+            )
+
+            # Start userDataStream listener (mantener vivo en background)
+            async def _start_user_stream():
+                try:
+                    api_key = await get_api_key()
+                except Exception:
+                    api_key = None
+                if api_key:
+                    asyncio.create_task(start_user_stream_and_track(api_key))
+
+            self.scheduler.add_job(
+                lambda: asyncio.create_task(_start_user_stream()),
+                IntervalTrigger(minutes=60),
+                id="user_stream_listener",
+                name="User Stream Listener",
                 replace_existing=True
             )
             

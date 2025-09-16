@@ -56,16 +56,25 @@ class BinanceService:
             # Intentar crear el cliente
             self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
             
-            # Verificar credenciales con una llamada simple
-            start_time = time.time()
-            account_info = self.client.get_account()
-            duration = time.time() - start_time
+            # Verificar credenciales con una llamada simple si no estamos en PAPER_TRADING
+            if not self.simulation_mode:
+                start_time = time.time()
+                try:
+                    account_info = self.client.get_account(recvWindow=10000)
+                except BinanceAPIException as e:
+                    if e.code == -2015:
+                        logger.error(f"❌ Binance -2015 (IP/Permisos). Activando simulación: {e}")
+                        self.simulation_mode = True
+                        return
+                    raise
+                duration = time.time() - start_time
             
             # record_binance_api_call("get_account", "success", duration)
             # binance_connection_status.set(1)
             
             logger.info("✅ Cliente de Binance inicializado correctamente")
-            logger.info(f"   Tipo de cuenta: {account_info.get('accountType', 'N/A')}")
+            if not self.simulation_mode:
+                logger.info(f"   Tipo de cuenta: {account_info.get('accountType', 'N/A')}")
             
         except BinanceAPIException as e:
             if e.code == -1022:
