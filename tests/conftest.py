@@ -5,6 +5,11 @@ import types
 import requests
 import pytest
 
+# Asegurar que /app esté en PYTHONPATH antes de importar 'app'
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig
 
 
@@ -195,3 +200,16 @@ def wait_api_ready():
             last_err = e
         time.sleep(2)
     raise RuntimeError(f"API no disponible en {base_url} tras espera: {last_err}")
+
+
+# Cliente de pruebas FastAPI para tests que usan 'client'
+try:
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    @pytest.fixture
+    def client():
+        return TestClient(app)
+except Exception:
+    # Si falla, los tests que requieran 'client' se saltarán/fracasar.
+    pass
