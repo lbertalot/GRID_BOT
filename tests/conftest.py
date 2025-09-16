@@ -175,14 +175,17 @@ if os.getenv("USE_REAL_BINANCE") != "1":
     sys.modules["binance.client"] = client_mod
     sys.modules["binance.exceptions"] = exceptions_mod
 
-@pytest.fixture
-def mock_config():
+def _build_mock_config() -> GridManagerConfig:
     # Configuración mínima para OptimizedGridManager en tests
     assets = {
         "BTCUSDT": AssetConfig(symbol="BTCUSDT", min_price=10000.0, max_price=200000.0, grids=10, quantity=0.0001),
         "ETHUSDT": AssetConfig(symbol="ETHUSDT", min_price=500.0, max_price=10000.0, grids=10, quantity=0.01),
     }
     return GridManagerConfig(assets=assets, update_interval=60, min_notional_threshold=10.0)
+
+@pytest.fixture
+def mock_config():
+    return _build_mock_config()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -218,6 +221,7 @@ try:
     builtins.Mock = Mock
     builtins.AsyncMock = AsyncMock
     builtins.patch = patch
+    builtins.mock_config = _build_mock_config()
 except Exception:
     # Si falla, los tests que requieran 'client' se saltarán/fracasar.
     pass
