@@ -184,6 +184,9 @@ def mock_config():
     }
     return GridManagerConfig(assets=assets, update_interval=60, min_notional_threshold=10.0)
 
+# Exponer mock_config como global para tests que no usan fixture correctamente
+globals()['mock_config'] = mock_config()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def wait_api_ready():
