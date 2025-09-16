@@ -110,7 +110,7 @@ async def update_pnl_metrics():
         # Cargar variables de entorno
         load_dotenv()
         api_key = os.getenv("BINANCE_API_KEY")
-        api_secret = os.getenv("BINANCE_API_SECRET")
+        api_secret = os.getenv("BINANCE_SECRET_KEY")
         
         if not api_key or not api_secret:
             duration = time.time() - start_time
