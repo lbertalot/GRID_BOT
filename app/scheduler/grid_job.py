@@ -122,7 +122,7 @@ scheduler = None
 def execute_grid_trading_job():
     """Ejecuta execute_grid_trading_job."""
     api_key = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key, api_secret)
     
     # Crear validador de órdenes

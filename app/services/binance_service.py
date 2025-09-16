@@ -20,7 +20,7 @@ class BinanceService:
     def __init__(self):
         """Ejecuta __init__."""
         self.api_key = os.getenv("BINANCE_API_KEY", "")
-        self.api_secret = os.getenv("BINANCE_API_SECRET", "")
+        self.api_secret = os.getenv("BINANCE_SECRET_KEY", "")
         self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
         
         # Cache para información de símbolos

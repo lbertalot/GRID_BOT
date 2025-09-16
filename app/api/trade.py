@@ -158,7 +158,7 @@ async def place_order(
     except Exception:
         pass
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key_binance, api_secret)
 
     # Validación previa unificada (PRECIO/LOT/MIN_NOTIONAL + balance) usando dependencia E2E
@@ -265,7 +265,7 @@ def run_grid(
     api_key: str = Depends(require_auth)
 ):
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key_binance, api_secret)
     
     # Crear validador de órdenes
