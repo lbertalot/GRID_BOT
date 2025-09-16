@@ -6,6 +6,10 @@ from typing import Tuple, Dict, Any
 class _FakeClient:
     api_key: str = "test"
     api_secret: str = "test"
+    def get_account(self, recvWindow: int | None = None):
+        return {"accountType": "SPOT", "balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}, {"asset": "BTC", "free": "0.001", "locked": "0"}]}
+    def create_order(self, *args, **kwargs):
+        return {"orderId": 1, "status": "FILLED"}
 
 def get_binance_client_with_verification() -> Tuple[_FakeClient, Dict[str, Any]]:
     client = _FakeClient()

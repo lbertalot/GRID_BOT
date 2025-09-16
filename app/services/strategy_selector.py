@@ -442,9 +442,9 @@ class StrategySelector:
             )
         
         # Confianza
-        if confidence > 0.8:
-            reasoning_parts.append("High confidence in prediction")
-        elif confidence < 0.6:
+        if confidence >= 0.8:
+            reasoning_parts.append("High confidence")
+        elif confidence <= 0.6:
             reasoning_parts.append("Low confidence")
         
         return " | ".join(reasoning_parts)
