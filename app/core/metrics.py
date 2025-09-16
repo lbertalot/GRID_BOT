@@ -112,6 +112,12 @@ roi_by_asset_percent = Gauge(
     ['asset', 'strategy']
 )
 
+# Métrica requerida por tests: gridbot_profit_loss (gauge simple)
+gridbot_profit_loss = Gauge(
+    'gridbot_profit_loss',
+    'PnL agregado de GridBot en USDT',
+)
+
 # ============================================================================
 # MÉTRICAS DE OPERACIONES
 # ============================================================================
