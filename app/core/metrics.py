@@ -210,6 +210,13 @@ active_positions_count = Gauge(
 # MÉTRICAS DE RENDIMIENTO
 # ============================================================================
 
+# Volumen de trading con prefijo requerido por tests
+gridbot_volume_total = Counter(
+    'gridbot_volume_total',
+    'Volumen total de trading en USDT',
+    ['asset', 'strategy']
+)
+
 # Latencia de ejecución de trades
 trade_execution_duration = Histogram(
     'trade_execution_duration_seconds',
@@ -218,14 +225,8 @@ trade_execution_duration = Histogram(
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
 )
 
-# Volumen de trading
-gridbot_volume_total = Counter(
-    'gridbot_volume_total',
-    'Volumen total de trading en USDT',
-    ['asset', 'strategy']
-)
-
 # Duración de ciclos grid (para medir performance de ciclos completos)
+
 grid_cycle_duration_seconds = Histogram(
     'grid_cycle_duration_seconds',
     'Duración del ciclo grid en segundos',
@@ -261,7 +262,7 @@ cycle_order_executed = Gauge(
 # MÉTRICAS DE API
 # ============================================================================
 
-# Contador de requests de API
+# Contador de requests de API con prefijo requerido
 gridbot_api_requests_total = Counter(
     'gridbot_api_requests_total',
     'Total de requests de API',
@@ -326,16 +327,15 @@ def record_api_request(method: str, endpoint: str, status_code: int, duration: f
             endpoint=endpoint,
             status_code=str(status_code)
         ).inc()
-        
         # Registrar duración
         api_request_duration.labels(
             method=method,
             endpoint=endpoint
         ).observe(duration)
-        
     except Exception as e:
         # Log del error pero no fallar la aplicación
         print(f"Error registrando métrica de API: {e}")
+
 
 def get_metrics():
     """
@@ -348,6 +348,7 @@ def get_metrics():
         print(f"Error generando métricas: {e}")
         return ""
 
+
 def get_trading_metrics():
     """
     Obtiene métricas específicas de trading
@@ -357,12 +358,12 @@ def get_trading_metrics():
             "profit_total": profit_total_usdt._value.get(),
             "roi_daily": roi_daily_percent._value.get(),
             "portfolio_value": portfolio_total_value_usdt._value.get(),
-            "trades_executed": trades_executed_total._value.get(),
-            "success_rate": trades_success_rate._value.get()
+            # Notar: usamos contadores gridbot_* en tests
         }
     except Exception as e:
         print(f"Error obteniendo métricas de trading: {e}")
         return {}
+
 
 def get_binance_metrics():
     """
@@ -370,12 +371,13 @@ def get_binance_metrics():
     """
     try:
         return {
-            "api_requests": api_requests_total._value.get(),
+            "api_requests": gridbot_api_requests_total._value.get(),
             "api_duration_avg": api_request_duration._value.get()
         }
     except Exception as e:
         print(f"Error obteniendo métricas de Binance: {e}")
         return {}
+
 
 def get_strategy_metrics():
     """
@@ -391,31 +393,29 @@ def get_strategy_metrics():
         print(f"Error obteniendo métricas de estrategias: {e}")
         return {}
 
-def record_order_execution(symbol: str, side: str, quantity: float, price: float, success: bool):
+
+def record_order_execution(symbol: str, side: str, order_type: str, strategy: str, quantity: float, price: float):
     """
     Registra la ejecución de una orden
     """
     try:
         volume_usdt = quantity * price
-        trading_metrics.record_trade(
-            side=side,
-            asset=symbol,
-            success=success,
-            volume_usdt=volume_usdt,
-            execution_time=0.1,  # Valor por defecto
-            strategy="grid"
-        )
+        gridbot_orders_total.labels(side=side, asset=symbol, strategy=strategy).inc()
+        gridbot_volume_total.labels(asset=symbol, strategy=strategy).inc(volume_usdt)
     except Exception as e:
         print(f"Error registrando ejecución de orden: {e}")
 
-def record_order_failure(symbol: str, side: str, error_type: str):
+
+def record_order_failure(symbol: str, side: str, order_type: str, error_type: str):
     """
     Registra el fallo de una orden
     """
     try:
-        trading_metrics.record_error(error_type, "grid")
+        trades_failed_total.labels(asset=symbol, strategy="grid").inc()
+        bot_errors_total.labels(error_type=error_type, strategy="grid").inc()
     except Exception as e:
         print(f"Error registrando fallo de orden: {e}")
+
 
 def compute_win_loss_and_sharpe(trades: list[dict]) -> dict:
     """Calcula win/loss ratio y Sharpe simple a partir de trades con profit_loss.
@@ -433,14 +433,13 @@ def compute_win_loss_and_sharpe(trades: list[dict]) -> dict:
     sharpe = (mean / std) if std > 0 else 0.0
     return {"win_ratio": win_ratio, "sharpe": sharpe}
 
+
 def record_symbol_error(symbol: str, error_type: str):
     """
     Registra un error asociado a un símbolo específico.
     """
     try:
-        # Para evitar crear demasiadas series, limitar error_type a un conjunto pequeño si se desea
         from prometheus_client import Counter
-        # Registrar en un contador derivado del total de errores del bot por compatibilidad mínima
         bot_errors_total.labels(error_type=error_type, strategy="grid").inc()
     except Exception as e:
         print(f"Error registrando error por símbolo: {e}")
@@ -452,31 +451,37 @@ invalid_symbol_total = Counter(
     ['symbol']
 )
 
+
 def update_balance(asset: str, free: float, locked: float):
     """
     Actualiza balance de un activo
     """
     try:
         balances = {asset: free + locked}
+        from app.core.metrics import trading_metrics  # evitar import circular
         trading_metrics.update_balances(balances, "grid")
     except Exception as e:
         print(f"Error actualizando balance: {e}")
+
 
 def update_strategy_status(strategy_type: str, active_count: int):
     """
     Actualiza estado de estrategias
     """
     try:
+        from app.core.metrics import trading_metrics
         trading_metrics.update_active_positions(active_count, strategy_type)
     except Exception as e:
         print(f"Error actualizando estado de estrategia: {e}")
 
-def update_profit_loss(total_profit: float, portfolio_value: float):
+
+def update_profit_loss(symbol: str, strategy: str, pnl: float):
     """
-    Actualiza métricas de P&L
+    Actualiza métricas de P&L por símbolo/estrategia y totales aproximados
     """
     try:
-        trading_metrics.update_profit_metrics(total_profit, portfolio_value, "grid")
+        profit_by_asset_usdt.labels(asset=symbol, strategy=strategy).inc(pnl)
+        profit_total_usdt.labels(strategy=strategy).inc(pnl)
     except Exception as e:
         print(f"Error actualizando P&L: {e}")
 
@@ -495,9 +500,8 @@ class TradingMetrics:
         self.daily_profit_current = 0.0
         self.portfolio_initial_value = 0.0
         # Referencias a métricas globales
-        self.trades_executed_total = trades_executed_total
         self.trades_success_rate = trades_success_rate
-        
+    
     def update_profit_metrics(self, 
                             total_profit: float,
                             portfolio_value: float,
@@ -546,9 +550,6 @@ class TradingMetrics:
         """
         Registra un trade ejecutado
         """
-        # Incrementar contador total
-        trades_executed_total.labels(side=side, asset=asset, strategy=strategy).inc()
-        
         # Registrar éxito/fallo
         if success:
             trades_successful_total.labels(asset=asset, strategy=strategy).inc()
@@ -564,7 +565,7 @@ class TradingMetrics:
             trades_success_rate.labels(strategy=strategy).set(success_rate)
         
         # Registrar volumen
-        trading_volume_usdt.labels(asset=asset, strategy=strategy).inc(volume_usdt)
+        gridbot_volume_total.labels(asset=asset, strategy=strategy).inc(volume_usdt)
         
         # Registrar duración de ejecución
         trade_execution_duration.labels(asset=asset, strategy=strategy).observe(execution_time)
