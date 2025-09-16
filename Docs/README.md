@@ -92,3 +92,54 @@ Contacto: `support@gridbot.com` | Telegram: `@gridbot_support`
 
 ## 📘 OpenAPI
 El esquema OpenAPI se publica como artefacto del CI y puede consultarse en `Docs/openapi.json` tras cada build.
+
+### Documentation Index
+
+- Architecture and Specs
+  - `docs/architecture.svg`
+  - `docs/erd.svg`
+  - `docs/dfd_emergency.svg`
+  - `../FSD.md`, `../PRD.md`
+  - `docs/observability.md`
+
+- Machine Learning
+  - `docs/ml_overview.md`
+  - `docs/ml_engine.md`
+  - `docs/hybrid_ml_engine.md`
+
+- Core Components and Services
+  - `docs/components.md` (RiskManager, StrategySelector, MarketDataCollector, PerformanceAnalyzer, grid helpers)
+  - `docs/backtesting.md`
+
+- OpenAPI
+  - `../openapi.json`
+
+### Quickstart (ML and Strategy Selection)
+
+```python
+import asyncio
+import pandas as pd
+from app.services.hybrid_ml_engine import HybridMLEngine
+from app.services.strategy_selector import StrategySelector, AccountState
+from app.core.risk_manager import RiskManager
+
+async def main():
+    engine = HybridMLEngine()
+    selector = StrategySelector(RiskManager())
+
+    # Prepare inputs
+    recent = pd.DataFrame({"close": [100,101,102,103,104], "volume": [1,2,3,4,5], "high": [101,102,103,104,105], "low": [99,100,101,102,103], "returns": [0,.01,.009,.008,.007]})
+    features_now = {"volatility": 0.02, "spread": 0.001, "volume": 1_200_000, "rsi": 55.0, "atr": 1.2}
+
+    engine.initialize_river_model("BTCUSDT")
+    rp = await engine.predict_regime("BTCUSDT", recent, features_now)
+
+    spec = selector.select_strategy(
+        rp, "BTCUSDT",
+        AccountState(total_equity=10_000, available_balance=8_000, total_exposure=0.2, daily_pnl=0.0, max_drawdown=0.1, risk_score=0.2)
+    )
+
+    print(spec.strategy_name.value, spec.params)
+
+asyncio.run(main())
+```
