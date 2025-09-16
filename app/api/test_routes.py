@@ -10,6 +10,13 @@ router = APIRouter(prefix="/api/v1/test", tags=["Test"])
 @router.get("/binance")
 async def test_binance_connection():
     try:
+        # Seguridad CI/CD: deshabilitar por defecto llamadas reales a Binance
+        if os.getenv("ALLOW_BINANCE_TEST", "0") != "1":
+            return {
+                "status": "disabled",
+                "message": "Test de Binance deshabilitado en este entorno",
+                "timestamp": datetime.now().isoformat()
+            }
         from binance import Client
         api_key = os.getenv("BINANCE_API_KEY", "")
         api_secret = os.getenv("BINANCE_SECRET_KEY", "")
