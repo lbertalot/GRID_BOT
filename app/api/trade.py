@@ -140,6 +140,24 @@ def get_trades(
     trades = query.offset(offset).limit(limit).all()
     return trades
 
+# Alias protegido explícito para tests: /api/trades requiere auth
+@router.get("/api/trades")
+def get_trades_api_protected(
+    symbol: Optional[str] = Query(None),
+    side: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_auth)
+):
+    query = db.query(Trade)
+    if symbol:
+        query = query.filter(Trade.symbol == symbol.upper())
+    if side:
+        query = query.filter(Trade.side == side.upper())
+    trades = query.offset(offset).limit(limit).all()
+    return trades
+
 @router.post("/order")
 async def place_order(
     order: OrderRequest = Body(...), 
