@@ -266,7 +266,7 @@ class OptimizedGridManager:
             if current_price <= 0:
                 continue
             
-            # Usar la cantidad configurada en el archivo
+            # Usar la cantidad mayor entre config y mínima por notional
             quantity_to_use = asset_config.quantity
             
             # Verificar que cumple con min_notional del sistema y del exchange
@@ -280,9 +280,7 @@ class OptimizedGridManager:
             notional_value = quantity_to_use * current_price
             
             if notional_value < min_notional:
-                logger.warning(f"La cantidad configurada para {symbol} no cumple min_notional. "
-                             f"Valor: {notional_value:.4f}, Mínimo: {min_notional}")
-                # Calcular cantidad mínima requerida
+                # Ajustar hacia arriba para cumplir notional mínimo
                 min_quantity = min_notional / current_price
                 quantity_to_use = min_quantity
             

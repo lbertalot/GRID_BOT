@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, List, Optional
 import logging
+from pydantic import BaseModel, Field
 
 # Importar configuración unificada
 from app.core.unified_config import get_config, unified_config
@@ -446,3 +447,60 @@ async def reset_configuration():
     except Exception as e:
         logger.error(f"Error reseteando configuración: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}") 
+
+@router.post("/paper/reset")
+async def reset_paper_trading(balance: float = 1000.0):
+    """Resetea el sistema de paper trading con un balance inicial dado."""
+    try:
+        from app.core.paper_trading import paper_trading_system
+        paper_trading_system.reset_paper_trading(new_balance=balance)
+        return {"status": "ok", "balance": balance}
+    except Exception as e:
+        logger.error(f"Error reseteando paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/paper/summary")
+async def get_paper_summary():
+    """Devuelve el resumen actual de paper trading (PnL, posiciones, trades)."""
+    try:
+        from app.core.paper_trading import get_paper_portfolio_summary
+        summary = get_paper_portfolio_summary()
+        return summary
+    except Exception as e:
+        logger.error(f"Error obteniendo resumen de paper trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
+
+class PaperOrderRequest(BaseModel):
+    symbol: str = Field(..., description="Símbolo, ej: ETHUSDT")
+    quantity: float = Field(..., gt=0)
+    price: Optional[float] = Field(None, gt=0)
+
+@router.post("/paper/buy")
+async def paper_buy(req: PaperOrderRequest):
+    try:
+        price = req.price
+        if price is None:
+            from app.services.binance_async import AsyncBinanceWrapper
+            aw = AsyncBinanceWrapper()
+            price = await aw.get_price(req.symbol)
+        from app.core.paper_trading import place_paper_buy_order
+        order = place_paper_buy_order(req.symbol.upper(), float(req.quantity), float(price))
+        return {"status": "ok", "order": order}
+    except Exception as e:
+        logger.error(f"Error en paper buy: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/paper/sell")
+async def paper_sell(req: PaperOrderRequest):
+    try:
+        price = req.price
+        if price is None:
+            from app.services.binance_async import AsyncBinanceWrapper
+            aw = AsyncBinanceWrapper()
+            price = await aw.get_price(req.symbol)
+        from app.core.paper_trading import place_paper_sell_order
+        order = place_paper_sell_order(req.symbol.upper(), float(req.quantity), float(price))
+        return {"status": "ok", "order": order}
+    except Exception as e:
+        logger.error(f"Error en paper sell: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 

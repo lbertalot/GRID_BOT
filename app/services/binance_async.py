@@ -72,6 +72,13 @@ class AsyncBinanceWrapper:
                     delay = min(delay * 2, 8.0)
                     continue
                 raise
+            except Exception as e:
+                # Errores transitorios de red (socket/timeout)
+                if any(s in str(e).lower() for s in ["timed out", "temporarily unavailable", "connection reset", "network is unreachable", "read timeout", "write timeout"]):
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 8.0)
+                    continue
+                raise
 
     async def get_price(self, symbol: str) -> float:
         key = f"price:{symbol.upper()}"
