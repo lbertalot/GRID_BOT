@@ -57,13 +57,15 @@ if os.getenv("USE_REAL_BINANCE") != "1":
             self.api_secret = api_secret
 
         # Account and permissions
-        def get_account(self):
+        def get_account(self, *_, **__):
             return {
                 "accountType": "SPOT",
                 "makerCommission": 10,
                 "takerCommission": 10,
                 "balances": _fake_balances(),
             }
+        def create_order(self, *_, **__):
+            return {"orderId": 999, "status": "FILLED"}
 
         def get_open_orders(self, *_, **__):
             return []
@@ -222,6 +224,9 @@ try:
     builtins.AsyncMock = AsyncMock
     builtins.patch = patch
     builtins.mock_config = _build_mock_config()
+    # Datos simulados para tests de cantidades óptimas
+    builtins.mock_balances = {"BTC": 0.002, "ETH": 0.02, "USDT": 1000.0}
+    builtins.mock_prices = {"BTCUSDT": 116000.0, "ETHUSDT": 4500.0}
 except Exception:
     # Si falla, los tests que requieran 'client' se saltarán/fracasar.
     pass
