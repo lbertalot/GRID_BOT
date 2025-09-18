@@ -77,7 +77,7 @@ class BinanceClientSingleton:
             load_dotenv()
             
             api_key = os.getenv("BINANCE_API_KEY")
-            api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
+            api_secret = os.getenv("BINANCE_SECRET_KEY")
             testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
             
             if not api_key or not api_secret:
@@ -176,7 +176,7 @@ class BinanceClientSingleton:
             # Fallback ccxt
             try:
                 api_key = os.getenv("BINANCE_API_KEY")
-                api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
+                api_secret = os.getenv("BINANCE_SECRET_KEY")
                 ex = ccxt.binance({"apiKey": api_key, "secret": api_secret, "enableRateLimit": True})
                 _bal = ex.fetch_balance()
                 result["auth_ok"] = True
@@ -186,7 +186,7 @@ class BinanceClientSingleton:
             # Fallback ccxt
             try:
                 api_key = os.getenv("BINANCE_API_KEY")
-                api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
+                api_secret = os.getenv("BINANCE_SECRET_KEY")
                 ex = ccxt.binance({"apiKey": api_key, "secret": api_secret, "enableRateLimit": True})
                 _bal = ex.fetch_balance()
                 result["auth_ok"] = True

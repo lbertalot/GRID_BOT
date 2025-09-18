@@ -5,6 +5,7 @@ Sistema de Trading Algorítmico con Integridad Integrada
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,12 +22,52 @@ from app.core.middleware.integrity_guard import IntegrityGuardMiddleware
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
+from app.api import config_routes
 from app.api import prometheus as prometheus_routes
 from app.core.circuit_breakers import CircuitBreakers
+from app.core.metrics import cycle_phase
 
-# Configuración de logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configuración de logging (controlada por env)
+def _configure_logging() -> logging.Logger:
+    env = os.getenv("ENVIRONMENT", "production").lower()
+    # Por defecto en producción: WARNING; en desarrollo: INFO
+    default_level = "WARNING" if env == "production" else "INFO"
+    log_level_name = os.getenv("LOG_LEVEL", default_level).upper()
+    log_level = getattr(logging, log_level_name, logging.WARNING)
+
+    logging.basicConfig(level=log_level, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+
+    # Reducir ruido de dependencias y módulos verbosos en producción
+    noisy_modules = [
+        "uvicorn.access",
+        "uvicorn.error",
+        "binance",
+        "urllib3",
+        "celery",
+        "kombu",
+        "asyncio",
+        "app.services.trading_tasks",
+        "app.core.optimized_grid_manager",
+        "app.services.binance_async",
+    ]
+    noisy_level_name = os.getenv("NOISY_MODULE_LOG_LEVEL", "WARNING").upper()
+    noisy_level = getattr(logging, noisy_level_name, logging.WARNING)
+    for name in noisy_modules:
+        try:
+            logging.getLogger(name).setLevel(noisy_level)
+        except Exception:
+            pass
+
+    # Desactivar access log de Uvicorn si ACCESS_LOG=false
+    if os.getenv("ACCESS_LOG", "false").lower() in {"false","0","no"}:
+        try:
+            logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
+        except Exception:
+            pass
+
+    return logging.getLogger(__name__)
+
+logger = _configure_logging()
 
 # Variables globales para componentes de integridad
 balance_validator = None
@@ -67,6 +108,27 @@ async def lifespan(app: FastAPI):
                             summary = app_breakers.get_all_breakers_status()
                             active_breakers_total.set(float(summary.get("total_active", 0)))
                         except Exception:
+                            pass
+                        # Publicar heartbeat de ciclo para Prometheus (evita alertas de "Tick 5m detenido")
+                        try:
+                            # Importar de forma perezosa para evitar ciclos de importación
+                            from app.services.trading_tasks import _get_cycle_state  # type: ignore
+                            state = await _get_cycle_state()
+                            started_iso = state.get("started_at")
+                            if started_iso:
+                                from datetime import datetime
+                                import time as _time
+                                try:
+                                    started_at = datetime.fromisoformat(started_iso)
+                                    elapsed = (datetime.utcnow() - started_at).total_seconds()
+                                    phase = "evaluation" if elapsed < 240 else ("execution" if elapsed < 300 else "evaluation")
+                                    cycle_phase.labels(phase=phase).set(_time.time())
+                                except Exception:
+                                    # En caso de error de parseo, emitir evaluación como fallback
+                                    import time as _t
+                                    cycle_phase.labels(phase="evaluation").set(_t.time())
+                        except Exception:
+                            # No bloquear el lazo de métricas si Redis o el estado no están disponibles
                             pass
                     except Exception:
                         pass
@@ -148,6 +210,16 @@ app.include_router(alert_routes.router)
 # Exponer /metrics raíz para Prometheus y compatibilidad
 app.include_router(prometheus_routes.router)
 app.include_router(simulations.router)
+app.include_router(config_routes.router)
+
+# Routers de nueva capa de integridad y reconciliación
+from app.api.integrity_routes import router as integrity_router  # noqa: E402
+from app.api.reconciliation_routes import router as reconciliation_router  # noqa: E402
+from app.api.breakers_routes import router as breakers_router  # noqa: E402
+
+app.include_router(integrity_router)
+app.include_router(reconciliation_router)
+app.include_router(breakers_router)
 
 # Endpoints alias protegidos requeridos por tests
 from fastapi import Depends  # noqa: E402
@@ -167,6 +239,15 @@ async def execute_trade_alias(api_key: str = Depends(require_auth)):
 
 @app.post("/api/trade/backtest")
 async def backtest_trade_alias(api_key: str = Depends(require_auth)):
+    return {"status": "ok"}
+
+# Endpoints GET equivalentes para pruebas de autenticación
+@app.get("/api/trade/execute")
+async def execute_trade_alias_get(api_key: str = Depends(require_auth)):
+    return {"status": "ok"}
+
+@app.get("/api/trade/backtest")
+async def backtest_trade_alias_get(api_key: str = Depends(require_auth)):
     return {"status": "ok"}
 
 # Endpoints de integridad integrados

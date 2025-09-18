@@ -20,14 +20,19 @@ class BinanceService:
     def __init__(self):
         """Ejecuta __init__."""
         self.api_key = os.getenv("BINANCE_API_KEY", "")
-        self.api_secret = os.getenv("BINANCE_API_SECRET", "")
+        self.api_secret = os.getenv("BINANCE_SECRET_KEY", "")
         self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
         
         # Cache para información de símbolos
         self._symbol_info_cache = {}
         
-        # Inicializar modo simulación (paper mode fuerza simulación)
-        self.simulation_mode = bool(settings.paper_trading)
+        # Inicializar modo simulación (paper/testnet fuerza simulación)
+        self.simulation_mode = (
+            bool(settings.paper_trading)
+            or bool(settings.binance_testnet)
+            or os.getenv("PAPER_TRADING", "false").lower() == "true"
+            or os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+        )
         # Permitir forzar modo real ignorando PAPER_TRADING
         self.force_real_mode = os.getenv("FORCE_REAL_MODE", "false").lower() == "true"
         if self.force_real_mode:
@@ -56,16 +61,25 @@ class BinanceService:
             # Intentar crear el cliente
             self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
             
-            # Verificar credenciales con una llamada simple
-            start_time = time.time()
-            account_info = self.client.get_account()
-            duration = time.time() - start_time
+            # Verificar credenciales con una llamada simple si no estamos en PAPER_TRADING
+            if not self.simulation_mode:
+                start_time = time.time()
+                try:
+                    account_info = self.client.get_account(recvWindow=10000)
+                except BinanceAPIException as e:
+                    if e.code == -2015:
+                        logger.error(f"❌ Binance -2015 (IP/Permisos). Activando simulación: {e}")
+                        self.simulation_mode = True
+                        return
+                    raise
+                duration = time.time() - start_time
             
             # record_binance_api_call("get_account", "success", duration)
             # binance_connection_status.set(1)
             
             logger.info("✅ Cliente de Binance inicializado correctamente")
-            logger.info(f"   Tipo de cuenta: {account_info.get('accountType', 'N/A')}")
+            if not self.simulation_mode:
+                logger.info(f"   Tipo de cuenta: {account_info.get('accountType', 'N/A')}")
             
         except BinanceAPIException as e:
             if e.code == -1022:

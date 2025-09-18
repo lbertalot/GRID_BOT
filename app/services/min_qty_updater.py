@@ -28,7 +28,7 @@ CONFIG_FILE = os.path.join(PROJECT_ROOT, "grid_config_optimized.json")
 async def update_min_qty_in_db():
     load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
     api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
+    api_secret = os.getenv("BINANCE_SECRET_KEY")
     db_user = os.getenv("POSTGRES_USER")
     db_pass = os.getenv("POSTGRES_PASSWORD")
     db_name = os.getenv("POSTGRES_DB")
@@ -65,7 +65,7 @@ async def update_min_qty_in_db():
 async def update_min_qty_in_db_and_config():
     load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
     api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
+    api_secret = os.getenv("BINANCE_SECRET_KEY")
     db_user = os.getenv("POSTGRES_USER")
     db_pass = os.getenv("POSTGRES_PASSWORD")
     db_name = os.getenv("POSTGRES_DB")

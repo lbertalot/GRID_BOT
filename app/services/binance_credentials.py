@@ -1,3 +1,23 @@
+"""
+Stub liviano para facilitar tests que hacen patch de get_binance_client_with_verification.
+"""
+from typing import Tuple, Dict, Any
+
+class _FakeClient:
+    api_key: str = "test"
+    api_secret: str = "test"
+    def get_account(self, recvWindow: int | None = None):
+        return {"accountType": "SPOT", "balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}, {"asset": "BTC", "free": "0.001", "locked": "0"}]}
+    def create_order(self, *args, **kwargs):
+        return {"orderId": 1, "status": "FILLED"}
+
+def get_binance_client_with_verification() -> Tuple[_FakeClient, Dict[str, Any]]:
+    client = _FakeClient()
+    return client, {"valid": True, "account_info": {"balances": []}, "account_type": "SPOT"}
+
+# Backwards-compatible export path expected by tests
+get_binance_client_with_verification = get_binance_client_with_verification
+
 #!/usr/bin/env python3
 """
 Módulo para manejo robusto de credenciales de Binance

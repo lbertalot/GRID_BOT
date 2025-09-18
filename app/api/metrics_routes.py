@@ -5,7 +5,7 @@ Endpoints para métricas de rentabilidad y Prometheus
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
 
 from app.services.metrics_service import metrics_service
@@ -70,7 +70,7 @@ async def reset_baseline(user = Depends(get_api_key_user)):
 
 
 @router.get("/baseline/reset")
-async def reset_baseline_get(token: str | None = None):
+async def reset_baseline_get(token: Optional[str] = None):
     """Versión GET para usar desde Grafana (opcional token DASH_RESET_TOKEN)."""
     try:
         required = os.getenv('DASH_RESET_TOKEN')

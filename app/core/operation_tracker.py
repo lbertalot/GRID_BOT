@@ -125,7 +125,8 @@ class OperationTracker:
         """Actualizar estado de operación"""
         try:
             if operation_id not in self.active_operations:
-                logger.warning(f"⚠️ Operación {operation_id} no encontrada en operaciones activas")
+                logger.warning(f"⚠️ Operación {operation_id} no encontrada en memoria. Actualizando DB directamente.")
+                await self.db.update_operation_status(operation_id, status.value, result_data)
                 return
             
             operation = self.active_operations[operation_id]
@@ -423,6 +424,12 @@ class OperationTracker:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         random_suffix = str(hash(timestamp))[-6:]
         return f"OP_{timestamp}_{random_suffix}"
+
+    def generate_client_order_id(self, asset: str, side: str, quantity: str, price: str, metadata: str) -> str:
+        """Generar newClientOrderId determinístico para idempotencia y correlación con Binance."""
+        base = f"{asset}|{side}|{quantity}|{price}|{metadata}"
+        suffix = str(abs(hash(base)))[:12]
+        return f"GRIDBOT_{suffix}"
     
     async def cleanup_old_operations(self, days_old: int = 30):
         """Limpiar operaciones antiguas de la memoria"""
