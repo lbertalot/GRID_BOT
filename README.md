@@ -1,3 +1,29 @@
+### Ejecutar tests en Docker
+
+1. Levantar servicios
+```
+docker-compose up -d --build
+```
+2. Correr tests
+```
+docker exec -it gridbot_api pytest -q
+```
+
+### Flags de entorno clave
+```
+PAPER_TRADING=true
+BINANCE_TESTNET=true
+FORCE_REAL_MODE=false
+API_KEY=gridbot_api_key_2024_secure_12345
+```
+
+### Export de OptimizedGridManager
+
+Importa desde `app.core`:
+```
+from app.core import OptimizedGridManager, GridManagerConfig, AssetConfig
+```
+
 # GridBot V2.5 - "Low-Risk, Predictive & Adaptive Grid"
 
 ## 🚀 Resumen Ejecutivo
