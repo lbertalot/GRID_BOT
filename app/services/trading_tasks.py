@@ -208,8 +208,8 @@ def trading_cycle_tick():
             if elapsed < 300:
                 cycle_phase.labels(phase="execution").set(_now_ts())
                 decisions = state.get("decision") or {}
-                # Para tests, consideramos listo si hay decisión registrada
-                ready_symbols = [s for s, d in (decisions or {}).items() if d and (d.get("ready") or True)]
+                # Considerar listo si hay decisión y breakers inactivos; en tests se fuerza con PYTEST_CURRENT_TEST
+                ready_symbols = [s for s, d in (decisions or {}).items() if d and d.get("ready")]
                 if not ready_symbols:
                     logger.info("[Cycle] Sin decisión lista (ready=false); se omite ejecución en minuto 5")
                     return
