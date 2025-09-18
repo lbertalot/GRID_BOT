@@ -26,8 +26,13 @@ class BinanceService:
         # Cache para información de símbolos
         self._symbol_info_cache = {}
         
-        # Inicializar modo simulación (paper mode fuerza simulación)
-        self.simulation_mode = bool(settings.paper_trading)
+        # Inicializar modo simulación (paper/testnet fuerza simulación)
+        self.simulation_mode = (
+            bool(settings.paper_trading)
+            or bool(settings.binance_testnet)
+            or os.getenv("PAPER_TRADING", "false").lower() == "true"
+            or os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+        )
         # Permitir forzar modo real ignorando PAPER_TRADING
         self.force_real_mode = os.getenv("FORCE_REAL_MODE", "false").lower() == "true"
         if self.force_real_mode:

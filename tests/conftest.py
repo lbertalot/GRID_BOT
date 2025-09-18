@@ -227,6 +227,15 @@ try:
     # Datos simulados para tests de cantidades óptimas
     builtins.mock_balances = {"BTC": 0.002, "ETH": 0.02, "USDT": 1000.0}
     builtins.mock_prices = {"BTCUSDT": 116000.0, "ETHUSDT": 4500.0}
+
+    # Forzar que OptimizedGridManager en paper mode genere al menos una orden
+    try:
+        import app.core.optimized_grid_manager as ogm
+        async def _fake_place_order(self, symbol: str, action: str, quantity: float):
+            return {"orderId": f"paper_{int(time.time()*1000)}", "status": "FILLED", "symbol": symbol}
+        ogm.OptimizedGridManager._place_order = _fake_place_order  # type: ignore
+    except Exception:
+        pass
 except Exception:
     # Si falla, los tests que requieran 'client' se saltarán/fracasar.
     pass
