@@ -14,7 +14,7 @@ async def update_asset_limits_in_db():
     logger.info("Iniciando actualización de límites de activos desde Binance...")
 
     api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
+    api_secret = os.getenv("BINANCE_SECRET_KEY")
     
     db_user = os.getenv("POSTGRES_USER")
     db_pass = os.getenv("POSTGRES_PASSWORD")

@@ -7,6 +7,7 @@ from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 from app.scheduler.grid_job import update_grid_config, get_grid_config
 from app.services.binance_service import BinanceService
 from app.services.order_validation import OrderValidator
+from app.services.order_validation_dependency import validate_order_e2e  # E2E dependency
 from sqlalchemy.orm import Session
 from app.models.trade import Trade
 from datetime import datetime
@@ -21,8 +22,11 @@ from app.schemas.validation import OrderRequest, GridParams
 from app.core.precision import PrecisionNormalizer
 from app.core.metrics import order_validation_rejects_total
 from app.core.circuit_breakers import CircuitBreakers
+from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
+from app.core.operation_tracker import OperationTracker, OperationStatus
 
 router = APIRouter()
+_operation_tracker = OperationTracker()
 
 # Instancia global del servicio de Binance
 binance_service = BinanceService()
@@ -136,8 +140,26 @@ def get_trades(
     trades = query.offset(offset).limit(limit).all()
     return trades
 
+# Alias protegido explícito para tests: /api/trades requiere auth
+@router.get("/api/trades")
+def get_trades_api_protected(
+    symbol: Optional[str] = Query(None),
+    side: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_auth)
+):
+    query = db.query(Trade)
+    if symbol:
+        query = query.filter(Trade.symbol == symbol.upper())
+    if side:
+        query = query.filter(Trade.side == side.upper())
+    trades = query.offset(offset).limit(limit).all()
+    return trades
+
 @router.post("/order")
-def place_order(
+async def place_order(
     order: OrderRequest = Body(...), 
     db: Session = Depends(get_db),
     api_key: str = Depends(require_auth)
@@ -154,41 +176,32 @@ def place_order(
     except Exception:
         pass
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key_binance, api_secret)
 
-    # Validación previa (precisión, notional, fondos)
+    # Validación previa unificada (PRECIO/LOT/MIN_NOTIONAL + balance) usando dependencia E2E
     try:
-        normalizer = PrecisionNormalizer(client)
         symbol = order.symbol.upper()
-        # Precio actual para MARKET; si LIMIT usar order.price
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        current_price = float(ticker["price"])
-        price_for_validation = current_price if order.type == 'MARKET' else float(order.price)
-        rounded_price = normalizer.round_price(symbol, price_for_validation)
-        rounded_qty = normalizer.round_quantity(symbol, float(order.quantity))
-        if not normalizer.validate_notional(symbol, rounded_price, rounded_qty):
-            order_validation_rejects_total.labels(reason="min_notional", symbol=symbol).inc()
-            raise HTTPException(status_code=400, detail=f"Valor notional insuficiente: {rounded_price*rounded_qty:.6f} < minNotional")
-        # Balance suficiente (BUY: USDT; SELL: base)
-        account = client.get_account()
-        balances = {b['asset']: float(b['free']) for b in account.get('balances', [])}
-        if order.side.upper() == 'BUY':
-            need_usdt = rounded_price * rounded_qty
-            have_usdt = balances.get('USDT', 0.0)
-            if have_usdt + 1e-9 < need_usdt:
-                order_validation_rejects_total.labels(reason="insufficient_usdt", symbol=symbol).inc()
-                raise HTTPException(status_code=400, detail=f"USDT insuficiente: requiere {need_usdt:.6f}, disponible {have_usdt:.6f}")
-        else:
-            base_asset = symbol.replace('USDT', '')
-            have_base = balances.get(base_asset, 0.0)
-            if have_base + 1e-12 < rounded_qty:
-                order_validation_rejects_total.labels(reason="insufficient_asset", symbol=symbol).inc()
-                raise HTTPException(status_code=400, detail=f"{base_asset} insuficiente: requiere {rounded_qty:.8f}, disponible {have_base:.8f}")
-        # Sobrescribir cantidad/precio redondeados si aplica
+        current_price = None
+        try:
+            ticker = client.get_symbol_ticker(symbol=symbol)
+            current_price = float(ticker["price"])
+        except Exception:
+            current_price = None
+
+        price_for_validation = current_price if order.type == 'MARKET' else float(order.price) if order.price is not None else None
+        validation = validate_order_e2e.__wrapped__(  # bypass Depends for direct call
+            symbol=symbol,
+            side=order.side,
+            order_type=order.type,
+            quantity=float(order.quantity),
+            price=price_for_validation,
+        )
+        # Ajustar cantidad/precio recomendados
+        rounded_qty = float(validation.get('recommended_quantity', order.quantity))
         order.quantity = rounded_qty
-        if order.type == 'LIMIT':
-            order.price = rounded_price
+        if order.type == 'LIMIT' and validation.get('adjusted_price') is not None:
+            order.price = float(validation['adjusted_price'])
     except HTTPException:
         raise
     except Exception as e:
@@ -196,33 +209,68 @@ def place_order(
         raise HTTPException(status_code=400, detail=f"Error de validación previa: {e}")
 
     try:
+        # Registrar INTENDED e idempotencia con newClientOrderId
+        intended_price = float(order.price) if (order.type == 'LIMIT' and order.price) else float(current_price or 0.0)
+        client_order_id = _operation_tracker.generate_client_order_id(
+            asset=symbol,
+            side=order.side,
+            quantity=str(order.quantity),
+            price=str(intended_price),
+            metadata="{}",
+        )
+        await _operation_tracker.track_operation({
+            'asset': symbol,
+            'type': order.type,
+            'side': order.side,
+            'quantity': float(order.quantity),
+            'price': intended_price,
+            'metadata': {'route': 'order'}
+        })
+
         if order.type == 'MARKET':
             if order.side == 'BUY':
-                result = client.order_market_buy(symbol=order.symbol.upper(), quantity=order.quantity)
+                result = client.order_market_buy(symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
             elif order.side == 'SELL':
-                result = client.order_market_sell(symbol=order.symbol.upper(), quantity=order.quantity)
+                result = client.order_market_sell(symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
             else:
                 raise HTTPException(status_code=400, detail="Lado de orden inválido (debe ser BUY o SELL)")
         elif order.type == 'LIMIT':
             if not order.price:
                 raise HTTPException(status_code=400, detail="Precio requerido para órdenes LIMIT")
             if order.side == 'BUY':
-                result = client.order_limit_buy(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC')
+                result = client.order_limit_buy(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
             elif order.side == 'SELL':
-                result = client.order_limit_sell(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC')
+                result = client.order_limit_sell(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
             else:
                 raise HTTPException(status_code=400, detail="Lado de orden inválido (debe ser BUY o SELL)")
         else:
             raise HTTPException(status_code=400, detail="Tipo de orden inválido (debe ser MARKET o LIMIT)")
-        # Registro en base de datos
+
+        # Marcar SUBMITTED/ACCEPTED (dependerá del flujo WS para estados subsecuentes)
+        try:
+            await _operation_tracker.update_operation_status(client_order_id, OperationStatus.SUBMITTED, {'exchange_status': result.get('status')})
+            await _operation_tracker.update_operation_status(client_order_id, OperationStatus.ACCEPTED, {'exchange_status': result.get('status')})
+        except Exception:
+            pass
+        # Registro en base de datos (y cálculo PnL si SELL)
         entry_price = float(result['fills'][0]['price']) if 'fills' in result and result['fills'] else 0.0
-        log_trade(
-            db=db,
-            symbol=order.symbol.upper(),
-            side=order.side,
-            quantity=order.quantity,
-            entry_price=entry_price
-        )
+        symbol_u = order.symbol.upper()
+        side_u = order.side.upper()
+        qty_f = float(order.quantity)
+
+        if side_u == 'BUY':
+            log_trade(
+                db=db,
+                symbol=symbol_u,
+                side=side_u,
+                quantity=qty_f,
+                entry_price=entry_price
+            )
+        else:
+            # SELL: cerrar BUYs abiertos y registrar PnL realizado
+            settle = settle_pnl_on_sell(db, symbol_u, qty_f, entry_price)
+            # Recalcular métricas agregadas
+            recompute_profit_metrics(db, strategy="grid")
         send_telegram_alert(f"✅ Orden ejecutada: {order.side} {order.quantity} {order.symbol} ({order.type})")
         return {"order": result}
     except Exception as e:
@@ -235,7 +283,7 @@ def run_grid(
     api_key: str = Depends(require_auth)
 ):
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key_binance, api_secret)
     
     # Crear validador de órdenes

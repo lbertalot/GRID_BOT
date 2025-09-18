@@ -68,10 +68,16 @@ services:
       - SECRET_KEY=gridbot-secret-key-2025-super-secure
       - DEBUG=${DEBUG:-false}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-WARNING}
+      - NOISY_MODULE_LOG_LEVEL=${NOISY_MODULE_LOG_LEVEL:-ERROR}
+      - ACCESS_LOG=${ACCESS_LOG:-false}
       - DOCKER_ENV=true
       - BINANCE_API_KEY=${BINANCE_API_KEY}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
-      - FORCE_REAL_MODE=${FORCE_REAL_MODE}
+      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - GRAFANA_URL=http://grafana:3000/api/health
+      - PROMETHEUS_URL=http://prometheus:9090/-/healthy
+      - PROM_URL=http://prometheus:9090/api/v1/targets
+      - FORCE_REAL_MODE=
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - WEBSOCKET_ADVANCED=true
@@ -98,7 +104,7 @@ services:
       - ./.venv:/app/.venv
       - numba_cache:/tmp/numba_cache
     # Modo por defecto: producción sin reload. Activar reload solo en perfil dev.
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 3
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 3 --no-access-log
     profiles:
       - production
     healthcheck:
@@ -130,6 +136,9 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
+      - FORCE_REAL_MODE=
+      - CELERYD_HIJACK_ROOT_LOGGER=false
+      - CELERY_WORKER_REDIRECT_STDOUTS_LEVEL=${CELERY_LOG_LEVEL:-WARNING}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
@@ -143,6 +152,7 @@ services:
       - ./reports:/app/reports
       - ./.venv:/app/.venv
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    # Celery env vars añadidas en bloque superior de environment (evitar claves duplicadas)
     healthcheck:
       test: ["CMD", "celery", "-A", "app.core.celery_app", "inspect", "ping"]
       interval: 30s
@@ -172,7 +182,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
-      - BINANCE_API_SECRET=${BINANCE_SECRET_KEY}
+      - PAPER_TRADING=false
+      - FORCE_REAL_MODE=
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
     volumes:
@@ -181,7 +192,7 @@ services:
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
       - ./.venv:/app/.venv
-    command: celery -A app.core.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
+    command: celery -A app.core.celery_app beat --loglevel=warning --schedule /tmp/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule"]
       interval: 30s

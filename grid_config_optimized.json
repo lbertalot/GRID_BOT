@@ -44,7 +44,7 @@
   },
   "BTCUSDT": {
     "symbol": "BTCUSDT",
-    "is_active": true,
+    "is_active": false,
     "min_price": 108116,
     "max_price": 114803,
     "grids": 7,
@@ -57,8 +57,8 @@
   "ETHUSDT": {
     "symbol": "ETHUSDT",
     "is_active": true,
-    "min_price": 4203,
-    "max_price": 4462,
+    "min_price": 0,
+    "max_price": 0,
     "grids": 7,
     "quantity": 0.0025,
     "investment_amount": 15.0,
@@ -68,7 +68,7 @@
   },
   "BNBUSDT": {
     "symbol": "BNBUSDT",
-    "is_active": true,
+    "is_active": false,
     "min_price": 854,
     "max_price": 907,
     "grids": 7,
@@ -149,16 +149,16 @@
     "safe_mode": true
   },
   "_metadata": {
-    "last_updated": "2025-09-14T13:48:56.389489",
+    "last_updated": "2025-09-17T16:32:38.436130",
     "version": "2.5_unified",
     "total_assets": 11
   },
   "_safety_limits": {
-    "max_daily_loss": 0.03,
-    "max_total_loss": 0.06,
-    "max_trade_loss": 0.015,
-    "max_consecutive_losses": 3,
-    "max_hourly_loss": 0.02,
+    "max_daily_loss": 0.06,
+    "max_total_loss": 0.12,
+    "max_trade_loss": 0.025,
+    "max_consecutive_losses": 4,
+    "max_hourly_loss": 0.04,
     "min_balance": 60.0,
     "min_notional_value": 15.0
   },

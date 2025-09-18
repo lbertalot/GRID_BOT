@@ -9,6 +9,9 @@ import time
 from typing import Dict, Any
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.core.metrics import portfolio_total_value_usdt, cash_balance_usdt
+from sqlalchemy.orm import Session
+from app.db.session import SessionLocal
+from app.models.trade import Trade
 
 from binance.client import Client
 from app.core.metrics import (
@@ -57,8 +60,23 @@ class ReconciliationService:
             except Exception:
                 pass
 
-            # Datos internos (placeholder: usar 0 hasta integrar DB)
+            # Datos internos: valuación simple desde ledger interno (trades cerrados + cash simulado)
+            # Estrategia mínima: sumar PnL realizado + cash reportado en settings si existe
             int_usdt = 0.0
+            try:
+                db: Session = SessionLocal()
+                # PnL realizado
+                realized_pnl_rows = (
+                    db.query(Trade)
+                    .filter(Trade.profit_loss != None)  # noqa: E711
+                    .all()
+                )
+                realized_pnl = sum(float(t.profit_loss or 0.0) for t in realized_pnl_rows)
+                # Cash base desde métrica externa (fallback: 0)
+                # Nota: Para una contabilidad completa, leer balances/posiciones internas.
+                int_usdt = realized_pnl
+            except Exception:
+                int_usdt = 0.0
 
             has_internal_accounting = int_usdt > 0.0
             if has_internal_accounting:

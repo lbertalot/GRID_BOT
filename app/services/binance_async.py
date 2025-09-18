@@ -49,8 +49,8 @@ class AsyncBinanceWrapper:
     """
 
     def __init__(self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10):
-        api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_API_SECRET")
-        api_secret = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_SECRET_KEY")
+        api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+        api_secret = os.getenv("BINANCE_SECRET_KEY")
         testnet = (os.getenv("BINANCE_TESTNET", "false").lower() == "true")
         self.client = Client(api_key, api_secret, testnet=testnet)
         self.cache = get_async_cache()
@@ -68,6 +68,13 @@ class AsyncBinanceWrapper:
             except BinanceAPIException as e:
                 # Retry en errores de rate limit o temporales
                 if getattr(e, 'code', None) in (-1003, -1015) or 429 in [getattr(e, 'status_code', None)]:
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 8.0)
+                    continue
+                raise
+            except Exception as e:
+                # Errores transitorios de red (socket/timeout)
+                if any(s in str(e).lower() for s in ["timed out", "temporarily unavailable", "connection reset", "network is unreachable", "read timeout", "write timeout"]):
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, 8.0)
                     continue

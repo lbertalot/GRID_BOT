@@ -22,3 +22,30 @@ groups:
           summary: "Tick 5m detenido"
           description: "No se observa actividad de fase 'evaluation' en 10 minutos."
 
+      - alert: LowDailyROI
+        expr: roi_daily_percent{strategy="grid"} < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ROI diario negativo"
+          description: "El ROI diario es < 0% durante 30m"
+
+      - alert: HighSlippage
+        expr: average_slippage > 0.0005
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slippage elevado"
+          description: "El slippage promedio supera 0.05% durante 10m"
+
+      - alert: BinanceAPIErrorsSpike
+        expr: rate(binance_api_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errores de API de Binance elevados"
+          description: "Tasa > 1 error/min en 5m"
+

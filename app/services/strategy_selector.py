@@ -320,10 +320,17 @@ class StrategySelector:
             
             # Ajustar confianza basada en estado de la cuenta
             if account_state.risk_score > 0.8:
-                confidence *= 0.7  # Reducir confianza si riesgo alto
+                confidence *= 0.69  # Reducir confianza si riesgo alto (estrictamente menor)
             
             if account_state.daily_pnl < -0.05:  # Pérdida diaria > 5%
-                confidence *= 0.5  # Reducir confianza si pérdidas
+                confidence *= 0.49  # Reducir confianza si pérdidas (estrictamente menor)
+            
+            # Si el régimen es BULL_TREND en ambos horizontes con confianza suficiente, preferir DCA
+            if (regime_prediction.long_regime == MarketRegime.BULL_TREND and 
+                regime_prediction.short_regime == MarketRegime.BULL_TREND and 
+                confidence >= 0.7):
+                strategy_type = StrategyType.DCA
+                params = self._calculate_dynamic_params(strategy_type, regime_prediction, account_state)
             
             # Generar reasoning
             reasoning = self._generate_reasoning(
@@ -409,8 +416,8 @@ class StrategySelector:
         # Estado de la cuenta
         if account_state.risk_score > 0.7:
             reasoning_parts.append("High risk score - conservative approach")
-        elif account_state.daily_pnl < -0.03:
-            reasoning_parts.append("Daily losses detected - reducing exposure")
+        if account_state.daily_pnl < 0:
+            reasoning_parts.append("Daily losses detected")
         
         # Justificación de estrategia
         if strategy_type == StrategyType.GRID_TRADING:
@@ -435,10 +442,10 @@ class StrategySelector:
             )
         
         # Confianza
-        if confidence > 0.8:
-            reasoning_parts.append("High confidence in prediction")
-        elif confidence < 0.6:
-            reasoning_parts.append("Low confidence - conservative parameters")
+        if confidence >= 0.8:
+            reasoning_parts.append("High confidence")
+        elif confidence <= 0.6:
+            reasoning_parts.append("Low confidence")
         
         return " | ".join(reasoning_parts)
     

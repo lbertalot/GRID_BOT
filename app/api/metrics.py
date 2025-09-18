@@ -9,8 +9,11 @@ from app.core.metrics import (
     update_balance,
     update_strategy_status,
     update_profit_loss,
-    api_requests_total,
-    record_api_request
+    gridbot_orders_total,
+    gridbot_volume_total,
+    gridbot_api_requests_total,
+    record_api_request,
+    gridbot_profit_loss
 )
 from app.core.auth import get_api_key
 from typing import Dict, Any
@@ -29,6 +32,13 @@ async def metrics():
     try:
         from fastapi.responses import Response
         from prometheus_client import generate_latest
+        # Asegurar que existan series gridbot_* aunque no haya tráfico
+        try:
+            gridbot_api_requests_total.labels(method="GET", endpoint="/bootstrap", status_code="200").inc(0)
+            gridbot_orders_total.labels(side="BUY", asset="BTCUSDT", strategy="grid").inc(0)
+            gridbot_volume_total.labels(asset="BTCUSDT", strategy="grid").inc(0)
+        except Exception:
+            pass
         content = generate_latest()
         duration = time.time() - start_time
         record_api_request("GET", "/api/metrics/metrics/", 200, duration)
@@ -110,7 +120,7 @@ async def update_pnl_metrics():
         # Cargar variables de entorno
         load_dotenv()
         api_key = os.getenv("BINANCE_API_KEY")
-        api_secret = os.getenv("BINANCE_API_SECRET")
+        api_secret = os.getenv("BINANCE_SECRET_KEY")
         
         if not api_key or not api_secret:
             duration = time.time() - start_time
@@ -192,6 +202,10 @@ async def update_pnl_metrics():
         }
         
         duration = time.time() - start_time
+        try:
+            gridbot_profit_loss.set(pnl_absolute)
+        except Exception:
+            pass
         record_api_request("POST", "/api/metrics/update-pnl", 200, duration)
         return result
         

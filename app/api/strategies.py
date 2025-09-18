@@ -10,7 +10,7 @@ router = APIRouter()
 
 def get_price_history(symbol: str, interval: str, limit: int) -> list[float]:
     api_key = os.getenv("BINANCE_API_KEY", "")
-    api_secret = os.getenv("BINANCE_API_SECRET", "")
+    api_secret = os.getenv("BINANCE_SECRET_KEY", "")
     client = Client(api_key, api_secret)
     klines = client.get_klines(symbol=symbol.upper(), interval=interval, limit=limit)
     return [float(k[4]) for k in klines]
