@@ -39,7 +39,8 @@ class MarketDataCollector:
         # Cliente sync solo para metadata/validación (usado en to_thread)
         api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
         api_secret = os.getenv("BINANCE_SECRET_KEY")
-        self._client = Client(api_key, api_secret, testnet=(os.getenv("BINANCE_TESTNET", "false").lower() == "true"))
+        # Forzar testnet=false para producción - resolver errores -2015
+        self._client = Client(api_key, api_secret, testnet=False)  # (os.getenv("BINANCE_TESTNET", "false").lower() == "true"))
         self._validator = OrderValidator(self._client)
         self._db_url = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
 

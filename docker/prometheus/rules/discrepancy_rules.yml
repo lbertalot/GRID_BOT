@@ -1,22 +1,46 @@
 groups:
   - name: gridbot-discrepancy
     rules:
-      - alert: GridBotPortfolioDiscrepancyHighPercent
+      # Alerta INFO (1.5% del portfolio) - Solo para logging
+      - alert: GridBotPortfolioDiscrepancyInfo
         expr: |
-          (balance_discrepancy_usd / clamp_min(portfolio_total_value_usdt{strategy="grid"}, 1)) > 0.01
-        for: 6m
+          balance_discrepancy_usd > (portfolio_total_value_usdt * 0.015)
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Discrepancia de portafolio >1.5%"
+          description: "Diferencia entre sistema y Binance supera 1.5% del portfolio por al menos 10m."
+
+      # Alerta WARNING (2.5% del portfolio) - Monitoreo activo
+      - alert: GridBotPortfolioDiscrepancyWarning
+        expr: |
+          balance_discrepancy_usd > (portfolio_total_value_usdt * 0.025)
+        for: 8m
         labels:
           severity: warning
         annotations:
-          summary: "Discrepancia de portafolio >1%"
-          description: "La diferencia entre sistema y Binance supera 1% por al menos 6m."
+          summary: "Discrepancia de portafolio >2.5%"
+          description: "Diferencia entre sistema y Binance supera 2.5% del portfolio por al menos 8m."
 
+      # Alerta CRITICAL (5.0% del portfolio) - Urgente
+      - alert: GridBotPortfolioDiscrepancyCritical
+        expr: |
+          balance_discrepancy_usd > (portfolio_total_value_usdt * 0.050)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Discrepancia de portafolio >5.0%"
+          description: "Diferencia entre sistema y Binance supera 5.0% del portfolio por al menos 5m."
+
+      # Alerta absoluta como fallback (umbral alto)
       - alert: GridBotPortfolioDiscrepancyHighAbsolute
         expr: |
-          balance_discrepancy_usd > 5
-        for: 6m
+          balance_discrepancy_usd > 20
+        for: 3m
         labels:
-          severity: warning
+          severity: critical
         annotations:
-          summary: "Discrepancia de portafolio >5 USDT"
-          description: "La diferencia entre sistema y Binance supera 5 USDT por al menos 6m."
+          summary: "Discrepancia de portafolio >20 USDT"
+          description: "Diferencia absoluta muy alta independiente del portfolio size por al menos 3m."

@@ -2,8 +2,8 @@
   "_safe_config_metadata": {
     "created_at": "2025-09-01T16:35:00Z",
     "version": "2.5_phase8_ready",
-    "status": "EMERGENCY_STOP_ACTIVE",
-    "reason": "DISCREPANCIA CRÍTICA ENTRE SISTEMA Y BALANCE REAL - TRADING SUSPENDIDO",
+    "status": "PHASE_8_2_ACTIVE",
+    "reason": "Sistema multi-asset operativo - BTCUSDT + ETHUSDT",
     "balance_before": 351.28,
     "balance_after": 316.82,
     "total_loss": -34.48,
@@ -15,7 +15,7 @@
       "validation_completed": true
     },
     "phase8_2_completed": true,
-    "completion_date": "2025-09-04T09:07:35.735773",
+    "completion_date": "2025-09-20T17:31:56.779066",
     "phase8_3_completed": true,
     "system_fully_operational": true,
     "emergency_activated_at": "2025-09-04T14:34:03.249574",
@@ -57,14 +57,14 @@
   "ETHUSDT": {
     "symbol": "ETHUSDT",
     "is_active": true,
-    "min_price": 0,
-    "max_price": 0,
+    "min_price": 4394.32,
+    "max_price": 4573.68,
     "grids": 7,
     "quantity": 0.0025,
     "investment_amount": 15.0,
-    "safe_mode": true,
-    "trading_mode": "PROTECTED",
-    "phase8_activated": false
+    "safe_mode": false,
+    "trading_mode": "REAL",
+    "phase8_activated": true
   },
   "BNBUSDT": {
     "symbol": "BNBUSDT",

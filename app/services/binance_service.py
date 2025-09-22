@@ -9,6 +9,7 @@ from binance import Client
 from binance.exceptions import BinanceAPIException
 from app.core.config import settings
 from app.services.commission_manager import commission_manager
+from app.core.redis_cache import redis_cache
 
 # from app.core.metrics import record_binance_api_call, binance_connection_status
 
@@ -25,6 +26,9 @@ class BinanceService:
         
         # Cache para información de símbolos
         self._symbol_info_cache = {}
+        
+        # Cache Redis para optimización de latencia
+        self.redis_cache = redis_cache
         
         # Inicializar modo simulación (paper/testnet fuerza simulación)
         self.simulation_mode = (
@@ -122,6 +126,10 @@ class BinanceService:
             # record_binance_api_call("get_account", f"error_{e.code}", 0)
             logger.error(f"Error obteniendo información de cuenta: {e}")
             raise
+    
+    def get_account(self) -> Dict[str, Any]:
+        """Alias para get_account_info para compatibilidad"""
+        return self.get_account_info()
     
     def get_balance(self, asset: str) -> Dict[str, Any]:
         """Obtiene el balance de un activo específico"""
@@ -548,3 +556,132 @@ class BinanceService:
             "type": "LIMIT",
             "side": "BUY"
         }
+    
+    # ============================================================================
+    # MÉTODOS OPTIMIZADOS CON CACHE REDIS
+    # ============================================================================
+    
+    async def get_account_optimized(self) -> Dict[str, Any]:
+        """
+        Obtener información de cuenta con cache Redis para reducir latencia
+        
+        Returns:
+            Información de cuenta optimizada
+        """
+        try:
+            # Intentar obtener desde cache primero
+            cached_account = await self.redis_cache.get_account_info()
+            if cached_account:
+                logger.debug("📦 Account info obtenido desde cache Redis")
+                return cached_account
+            
+            # Si no está en cache, obtener de Binance
+            start_time = time.time()
+            
+            if self.simulation_mode:
+                account_info = self._get_simulated_account_info()
+            else:
+                account_info = self.get_account()
+            
+            duration = time.time() - start_time
+            logger.info(f"⏱️ Account info obtenido de Binance en {duration:.3f}s")
+            
+            # Guardar en cache
+            await self.redis_cache.set_account_info(account_info)
+            
+            return account_info
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo account info optimizado: {e}")
+            # Fallback a método original
+            return self.get_account()
+    
+    async def get_symbol_ticker_optimized(self, symbol: str) -> Dict[str, Any]:
+        """
+        Obtener ticker de símbolo con cache Redis
+        
+        Args:
+            symbol: Símbolo a consultar
+            
+        Returns:
+            Ticker optimizado
+        """
+        try:
+            # Intentar obtener desde cache
+            cached_ticker = await self.redis_cache.get_symbol_ticker(symbol)
+            if cached_ticker:
+                logger.debug(f"📦 Ticker {symbol} obtenido desde cache Redis")
+                return cached_ticker
+            
+            # Obtener de Binance
+            start_time = time.time()
+            
+            if self.simulation_mode:
+                price = self._get_simulated_price(symbol)
+                ticker = {
+                    "symbol": symbol,
+                    "price": str(price),
+                    "time": int(time.time() * 1000)
+                }
+            else:
+                ticker = self.client.get_symbol_ticker(symbol=symbol)
+            
+            duration = time.time() - start_time
+            logger.debug(f"⏱️ Ticker {symbol} obtenido de Binance en {duration:.3f}s")
+            
+            # Guardar en cache
+            await self.redis_cache.set_symbol_ticker(symbol, ticker)
+            
+            return ticker
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo ticker optimizado {symbol}: {e}")
+            # Fallback a método original
+            return self.get_symbol_ticker(symbol)
+    
+    async def get_exchange_info_optimized(self, symbol: str = None) -> Dict[str, Any]:
+        """
+        Obtener información del exchange con cache Redis
+        
+        Args:
+            symbol: Símbolo específico (opcional)
+            
+        Returns:
+            Información del exchange optimizada
+        """
+        try:
+            # Intentar obtener desde cache
+            cached_info = await self.redis_cache.get_exchange_info(symbol)
+            if cached_info:
+                logger.debug(f"📦 Exchange info obtenido desde cache Redis")
+                return cached_info
+            
+            # Obtener de Binance
+            start_time = time.time()
+            
+            if self.simulation_mode:
+                exchange_info = self._get_simulated_exchange_info()
+            else:
+                exchange_info = self.client.get_exchange_info()
+            
+            duration = time.time() - start_time
+            logger.info(f"⏱️ Exchange info obtenido de Binance en {duration:.3f}s")
+            
+            # Guardar en cache
+            await self.redis_cache.set_exchange_info(exchange_info, symbol)
+            
+            return exchange_info
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo exchange info optimizado: {e}")
+            # Fallback a método original
+            return self.get_exchange_info()
+    
+    async def get_cache_stats(self) -> Dict[str, Any]:
+        """Obtener estadísticas del cache Redis"""
+        return await self.redis_cache.get_cache_stats()
+    
+    async def invalidate_symbol_cache(self, symbol: str):
+        """Invalidar cache de un símbolo específico"""
+        await self.redis_cache.invalidate_symbol(symbol)
+        logger.info(f"🗑️ Cache invalidado para {symbol}")

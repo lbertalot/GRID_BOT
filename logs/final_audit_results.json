@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-19T20:29:40.715969+00:00",
+  "balance_audit": {
+    "status": "FAILURE",
+    "binance_balance": 18.4756,
+    "gridbot_balance": 1000.0,
+    "discrepancy": 981.5244,
+    "message": "Discrepancia cr\u00edtica: 981.52440000 USDT"
+  },
+  "orders_audit": {
+    "status": "FAILURE",
+    "binance_orders": 0,
+    "gridbot_orders": 2,
+    "message": "\u00d3rdenes abiertas detectadas: Binance=0, GridBot=2"
+  },
+  "overall_status": "FAILURE"
+}

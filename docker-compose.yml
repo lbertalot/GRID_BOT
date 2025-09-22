@@ -66,6 +66,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SECRET_KEY=gridbot-secret-key-2025-super-secure
+      # Configuración de zona horaria para sincronización con Binance
+      - TZ=UTC
       - DEBUG=${DEBUG:-false}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-WARNING}
@@ -74,15 +76,25 @@ services:
       - DOCKER_ENV=true
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - BINANCE_TESTNET=false
+      - PAPER_TRADING=${PAPER_TRADING}
+      - FORCE_REAL_MODE=${FORCE_REAL_MODE}
+      - TRADING_ENABLED=${TRADING_ENABLED}
+      - EMERGENCY_STOP=${EMERGENCY_STOP}
       - GRAFANA_URL=http://grafana:3000/api/health
       - PROMETHEUS_URL=http://prometheus:9090/-/healthy
       - PROM_URL=http://prometheus:9090/api/v1/targets
-      - FORCE_REAL_MODE=
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - WEBSOCKET_ADVANCED=true
       - PAPER_TRADING=false
-      - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
+      - BINANCE_TESTNET=false
+      # Variables de optimización de estrategia
+      - CALIBRATION_MODE=true
+      - MIN_USDT_BALANCE=15.0
+      - TARGET_USDT_BALANCE=30.0
+      - ENABLE_AUTO_REBALANCE=true
+      - REBALANCE_ASSET_PRIORITY=SPK,HOME,SIGN,BNB,BTC
       # Configuración de Numba para evitar problemas de cache en Docker
       - NUMBA_CACHE_DIR=/dev/null
       - NUMBA_DISABLE_JIT=0
@@ -92,6 +104,8 @@ services:
       - MPLCONFIGDIR=/tmp/matplotlib
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
+      # Configuración de zona horaria para sincronización con Binance
+      - TZ=UTC
     volumes:
       - ./app:/app/app
       - ./tests:/app/tests
@@ -139,8 +153,14 @@ services:
       - FORCE_REAL_MODE=
       - CELERYD_HIJACK_ROOT_LOGGER=false
       - CELERY_WORKER_REDIRECT_STDOUTS_LEVEL=${CELERY_LOG_LEVEL:-WARNING}
-      - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
+      - BINANCE_TESTNET=false
       - MONITORING_DIR=/app/monitoring_data
+      # Variables de optimización de estrategia
+      - CALIBRATION_MODE=true
+      - MIN_USDT_BALANCE=15.0
+      - TARGET_USDT_BALANCE=30.0
+      - ENABLE_AUTO_REBALANCE=true
+      - REBALANCE_ASSET_PRIORITY=SPK,HOME,SIGN,BNB,BTC
       - REPORTS_DIR=/app/reports
     volumes:
       - ./app:/app/app
@@ -276,6 +296,26 @@ services:
       - GF_DATABASE_USER=grafana
       - GF_DATABASE_PASSWORD=grafana_pass
       - GF_DATABASE_SSL_MODE=disable
+      # Configuración para resolver problemas de token rotation
+      - GF_SECURITY_COOKIE_SECURE=false
+      - GF_SECURITY_COOKIE_SAMESITE=lax
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_SESSION_COOKIE_SECURE=false
+      - GF_SESSION_COOKIE_SAMESITE=lax
+      - GF_SESSION_COOKIE_NAME=grafana_sess
+      - GF_SESSION_GC_INTERVAL_TIME=86400
+      - GF_SESSION_GC_LIFETIME=86400
+      - GF_SESSION_LENGTH=86400
+      - GF_LIVE_MAX_CONNECTIONS=0
+      - GF_LIVE_ALLOWED_ORIGINS=
+      # Configuración de logging para debug
+      - GF_LOG_LEVEL=warn
+      - GF_LOG_MODE=console
+      # Configuración adicional para resolver problemas de autenticación
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_BASIC_ENABLED=true
+      - GF_AUTH_JWT_ENABLED=false
+      - GF_AUTH_PROXY_ENABLED=false
     depends_on:
       db:
         condition: service_healthy

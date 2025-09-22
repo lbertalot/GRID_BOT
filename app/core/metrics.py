@@ -136,6 +136,25 @@ trades_success_rate = Gauge(
     ['strategy']
 )
 
+# Total de trades ejecutados
+trades_executed_total = Counter(
+    'trades_executed_total',
+    'Total de trades ejecutados',
+    ['side', 'asset', 'strategy']
+)
+
+# Métricas de reconciliación
+reconciliation_discrepancies_total = Counter(
+    'reconciliation_discrepancies_total',
+    'Total de discrepancias de reconciliación detectadas',
+    ['type']
+)
+
+reconciliation_accuracy_percent = Gauge(
+    'reconciliation_accuracy_percent',
+    'Precisión de reconciliación en porcentaje (0-100)'
+)
+
 # Trades exitosos vs fallidos
 trades_successful_total = Counter(
     'trades_successful_total',
@@ -507,6 +526,7 @@ class TradingMetrics:
         self.portfolio_initial_value = 0.0
         # Referencias a métricas globales
         self.trades_success_rate = trades_success_rate
+        self.trades_executed_total = trades_executed_total
     
     def update_profit_metrics(self, 
                             total_profit: float,

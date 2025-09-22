@@ -6,7 +6,7 @@ from typing import Tuple, Dict, Any
 class _FakeClient:
     api_key: str = "test"
     api_secret: str = "test"
-    def get_account(self, recvWindow: int | None = None):
+    def get_account(self, recvWindow: int = None):
         return {"accountType": "SPOT", "balances": [{"asset": "USDT", "free": "1000.0", "locked": "0"}, {"asset": "BTC", "free": "0.001", "locked": "0"}]}
     def create_order(self, *args, **kwargs):
         return {"orderId": 1, "status": "FILLED"}
@@ -83,7 +83,7 @@ def get_binance_credentials() -> Tuple[Optional[str], Optional[str]]:
     
     return api_key, secret_key
 
-def create_binance_client(api_key: str, secret_key: str, testnet: bool = True) -> Client:
+def create_binance_client(api_key: str, secret_key: str, testnet: bool = False) -> Client:
     """
     Crea un cliente de Binance con validación robusta
     
@@ -192,7 +192,7 @@ def verify_binance_credentials(client: Client) -> Dict[str, Any]:
         logger.error(f"❌ Error inesperado verificando credenciales: {e}")
         raise BinanceConnectionError(f"Error inesperado: {e}")
 
-def get_binance_client_with_verification(testnet: bool = True) -> Tuple[Client, Dict[str, Any]]:
+def get_binance_client_with_verification(testnet: bool = False) -> Tuple[Client, Dict[str, Any]]:
     """
     Función principal que obtiene credenciales, crea cliente y verifica conexión
     
@@ -242,7 +242,8 @@ def test_binance_connection() -> bool:
     """
     try:
         # Obtener configuración de testnet desde variables de entorno
-        testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+        # Forzar testnet=false para producción - resolver errores -2015
+        testnet = False  # os.getenv("BINANCE_TESTNET", "false").lower() == "true"
         
         client, verification_info = get_binance_client_with_verification(testnet)
         logger.info("✅ Prueba de conexión con Binance exitosa")
