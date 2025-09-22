@@ -51,7 +51,8 @@ class AsyncBinanceWrapper:
     def __init__(self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10):
         api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
         api_secret = os.getenv("BINANCE_SECRET_KEY")
-        testnet = (os.getenv("BINANCE_TESTNET", "false").lower() == "true")
+        # Forzar testnet=false para producción - resolver errores -2015
+        testnet = False  # (os.getenv("BINANCE_TESTNET", "false").lower() == "true")
         self.client = Client(api_key, api_secret, testnet=testnet)
         self.cache = get_async_cache()
         self.ttl = ttl_seconds

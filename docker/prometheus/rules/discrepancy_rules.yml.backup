@@ -1,0 +1,22 @@
+groups:
+  - name: gridbot-discrepancy
+    rules:
+      - alert: GridBotPortfolioDiscrepancyHighPercent
+        expr: |
+          (balance_discrepancy_usd / clamp_min(portfolio_total_value_usdt{strategy="grid"}, 1)) > 0.01
+        for: 6m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Discrepancia de portafolio >1%"
+          description: "La diferencia entre sistema y Binance supera 1% por al menos 6m."
+
+      - alert: GridBotPortfolioDiscrepancyHighAbsolute
+        expr: |
+          balance_discrepancy_usd > 5
+        for: 6m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Discrepancia de portafolio >5 USDT"
+          description: "La diferencia entre sistema y Binance supera 5 USDT por al menos 6m."

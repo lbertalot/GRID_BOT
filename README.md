@@ -11,9 +11,12 @@ docker exec -it gridbot_api pytest -q
 
 ### Flags de entorno clave
 ```
-PAPER_TRADING=true
-BINANCE_TESTNET=true
-FORCE_REAL_MODE=false
+PAPER_TRADING=false
+BINANCE_TESTNET=false
+FORCE_REAL_MODE=true
+TRADING_ENABLED=true
+EMERGENCY_STOP=false
+TZ=UTC
 API_KEY=gridbot_api_key_2024_secure_12345
 ```
 
@@ -123,6 +126,7 @@ Python 3.11+
 PostgreSQL 13+
 Redis 6+
 Docker & Docker Compose
+Prometheus & Grafana
 ```
 
 ### Dependencias Principales
@@ -139,18 +143,31 @@ Dependencias clave:
 - `prometheus-client>=0.17.0`
 - `aiohttp>=3.8.0`
 - `websockets>=11.0.0`
+- `celery>=5.3.0`
+- `redis>=4.5.0`
 
 ### Configuración del Entorno
 ```bash
 # Copiar archivo de configuración
 cp env.example .env
 
-# Configurar variables de entorno
-BINANCE_API_KEY=your_api_key
-BINANCE_API_SECRET=your_api_secret
-BINANCE_TESTNET=true
-DATABASE_URL=postgresql://user:pass@localhost/gridbot
-REDIS_URL=redis://localhost:6379
+# Configurar variables de entorno para producción
+BINANCE_API_KEY=your_real_api_key
+BINANCE_SECRET_KEY=your_real_secret_key
+BINANCE_TESTNET=false
+PAPER_TRADING=false
+FORCE_REAL_MODE=true
+TRADING_ENABLED=true
+EMERGENCY_STOP=false
+TZ=UTC
+DATABASE_URL=postgresql://griduser:gridpass@db:5432/gridbot
+REDIS_URL=redis://redis:6379
+```
+
+### Configuración de Zona Horaria (CRÍTICO)
+```bash
+# Configurar UTC en Docker para evitar errores -1021 de Binance
+export TZ=UTC
 ```
 
 ## 🧪 Ejecución de Pruebas
@@ -177,6 +194,32 @@ pytest --cov=app tests/ --cov-report=html
 ```
 
 ## 📊 API Endpoints
+
+### Portfolio Management (v2.5)
+```bash
+# Resumen completo del portafolio
+GET /api/portfolio/summary
+Response: {
+  "cash_usdt": 6.98,
+  "portfolio_total_usdt": 325.5,
+  "assets": [...]
+}
+
+# Posiciones abiertas gestionadas por GridBot
+GET /api/portfolio/positions
+Response: {
+  "positions": [],
+  "total_count": 0
+}
+
+# Estado de reconciliación con Binance
+GET /api/reconciliation/summary
+Response: {
+  "cash_usdt": 6.98,
+  "portfolio_total_usdt": 325.5,
+  "status": "ok"
+}
+```
 
 ### Risk Management (v2)
 ```bash
@@ -238,6 +281,27 @@ Body: {
 GET /api/v2/strategies/ml/status?symbol=BTCUSDT
 ```
 
+### Auto-Rebalancer V2
+```bash
+# Verificar y ejecutar rebalanceo automático
+POST /api/rebalancer/check
+Response: {
+  "status": "success",
+  "assets_sold": 2,
+  "usdt_generated": 0.084,
+  "final_balance": 6.98
+}
+
+# Estado del rebalanceador
+GET /api/rebalancer/status
+Response: {
+  "enabled": true,
+  "min_usdt_balance": 25.0,
+  "target_usdt_balance": 50.0,
+  "asset_priority": ["SPK", "HOME", "SIGN", "BNB", "BTC"]
+}
+```
+
 ### Integridad y Reconciliación
 ```bash
 # Estado de breakers (resumen)
@@ -249,11 +313,11 @@ GET /api/reconciliation/summary
 # Respuesta ejemplo
 {
   "status": "ok",
-  "cash_usdt": 11.86747559,
+  "cash_usdt": 6.98,
   "portfolio_total_usdt": 325.5,
   "valued_count": 41,
   "unvalued_count": 0,
-  "timestamp": "2025-09-07T21:35:11.606976"
+  "timestamp": "2025-09-22T20:21:11.606976"
 }
 ```
 
@@ -303,6 +367,12 @@ strategy_spec = selector.select_strategy(
 
 ### Métricas Prometheus
 ```yaml
+# Métricas de trading
+trades_executed_total{side="BUY", asset="ETHUSDT", strategy="grid"}
+profit_total_usdt{strategy="grid"}
+roi_daily_percent{strategy="grid"}
+profit_daily_usdt{strategy="grid"}
+
 # Métricas de riesgo
 kelly_fraction_used{symbol="BTCUSDT"}
 position_size_usdt{symbol="BTCUSDT", strategy="dynamic"}
@@ -324,6 +394,11 @@ ws_lag_ms{symbol="BTCUSDT", type="bookTicker"}
 portfolio_total_value_usdt{strategy="grid"}
 cash_balance_usdt{strategy="grid"}
 active_breakers_total
+
+# Métricas de rebalanceo
+rebalance_assets_sold_total{asset="SPK"}
+rebalance_usdt_generated_total
+rebalance_success_rate
 ```
 
 ### Dashboards Grafana
@@ -332,10 +407,15 @@ active_breakers_total
 - **Financial Overview**: Portfolio Total (USDT), Cash (USDT), Portfolio vs Cash, Errores del bot
 - **ML Performance**: Precisión de modelos, predicciones de régimen
 - **Strategy Performance**: Rendimiento por estrategia y símbolo
+- **Auto-Rebalancer V2**: Estado de liquidez, activos liquidados, USDT generado
+- **Trading Metrics**: Trades ejecutados, PnL, ROI diario, ganancia total
 
 Alertas Prometheus/Alertmanager provisionadas:
 - Discrepancia financiera > 1% (5m) o > 5 USDT (5m)
 - API Down warning (5m) / critical (15m)
+- **Errores de Binance API** elevados (BinanceAPIErrorsSpike)
+- **Liquidez baja** USDT < 25 (activación auto-rebalancer)
+- **Circuit breakers** activados por pérdidas
 
 ## 🔒 Seguridad y Mejores Prácticas
 
@@ -571,14 +651,17 @@ Sugerencia operativa: ejecutar un job semanal que
 2) elimine artefactos que excedan su retención,
 3) exporte métricas de limpieza (archivos purgados, espacio liberado).
 
-## 📌 Estado actual (2025-09-07)
+## 📌 Estado actual (2025-09-22)
 
-- Binance: credenciales validadas; lectura de cuenta OK (USDT ~11.867). Singleton con validación de conectividad/privados en arranque.
-- Circuit breakers: expuestos en `/breakers/summary` y métrica `active_breakers_total`.
-- Reconciliación: endpoint `/api/reconciliation/summary` con `cash_usdt` y `portfolio_total_usdt` alineado con Binance; métricas `portfolio_total_value_usdt`/`cash_balance_usdt` exportadas.
-- Trading: modo REAL habilitado, sin fills por señales fuera de rango y/o fondos insuficientes (BTC/BNB). Sizing calibrado a `MIN_NOTIONAL`/`LOT_SIZE` del exchange.
-- Observabilidad: dashboards Grafana corregidos; alertas Prometheus/Alertmanager activas (discrepancia y disponibilidad API).
-- Herramientas: endpoint de simulación y objetivo Make para dry-run.
+- **Binance**: credenciales validadas; lectura de cuenta OK (USDT ~6.98). Singleton con validación de conectividad/privados en arranque.
+- **Sincronización temporal**: Configuración UTC aplicada, 0 errores -1021 (timestamp out of sync).
+- **Precisión de órdenes**: Validación automática de LOT_SIZE y precisión, 0 errores -1013 y -1111.
+- **Auto-Rebalancer V2**: Funcionando con liquidación priorizada (SPK → HOME → SIGN → BNB → BTC).
+- **Circuit breakers**: expuestos en `/breakers/summary` y métrica `active_breakers_total`.
+- **Reconciliación**: endpoint `/api/reconciliation/summary` con `cash_usdt` y `portfolio_total_usdt` alineado con Binance.
+- **Trading**: modo REAL habilitado, 20 trades ejecutados con PnL de 0.084 USDT.
+- **Observabilidad**: dashboards Grafana operativos con métricas en tiempo real.
+- **Métricas**: profit_total_usdt, roi_daily_percent, trades_executed_total funcionando correctamente.
 
 ## 🔁 Simulaciones (dry-run)
 

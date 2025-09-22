@@ -26,14 +26,17 @@ Definir especificaciones técnicas del backend de trading para ejecución segura
 - Alerts/metrics snapshots (persistencia opcional según retención).
 
 ## 4. APIs y Contratos
-- OpenAPI spec: [`openapi.json`](openapi.json)
- - OpenAPI spec: [`openapi.json`](openapi.json) — generado por CI en `Docs/openapi.json`.
+- OpenAPI spec: [`openapi.json`](openapi.json) — generado por CI en `Docs/openapi.json`.
 - Endpoints:
   - `POST /orders`: crea orden → valida PRICE_FILTER, LOT_SIZE.
   - `GET /positions`: estado de posiciones.
   - `GET /breakers/summary`: estado de breakers.
   - `GET /api/reconciliation/summary`: `cash_usdt`, `portfolio_total_usdt`.
   - `POST /api/simulations/dry-run`: preflight validado (PAPER).
+  - `GET /api/portfolio/summary`: resumen completo del portafolio con balances.
+  - `GET /api/portfolio/positions`: posiciones abiertas gestionadas por GridBot.
+  - `POST /api/rebalancer/check`: verificar y ejecutar rebalanceo automático.
+  - `GET /api/metrics/health`: estado de métricas y sincronización.
 
 ### 4.1 Contratos de datos (ejemplos)
 Request `POST /api/simulations/dry-run`:
@@ -74,11 +77,17 @@ Resumen del flujo de orden:
 | Escalabilidad | Horizontal en K8s              |
 | Seguridad     | API keys en Vault, TLS 1.3     |
 | Observabilidad| Métricas Prometheus + alertas   |
+| Sincronización| Timestamp UTC sincronizado con Binance |
+| Precisión     | Validación LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL |
+| Rebalanceo   | Auto-rebalancer V2 con priorización de activos |
 
 Detalles adicionales:
 - Reconciliación ≤ 60 s; colas asíncronas para I/O externo.
 - Idempotencia por `client_order_id` y exactamente-una-vez en tracking a nivel app.
 - Logs estructurados con correlación por orden.
+- Sincronización de zona horaria UTC para evitar errores -1021 de Binance.
+- Auto-rebalancer V2 con estrategia de liquidación: SPK → HOME → SIGN → BNB → BTC.
+- Circuit breakers automáticos basados en pérdidas diarias y totales.
 
 ## 7. Dependencias Externas
 - Binance API.
@@ -96,3 +105,8 @@ Detalles adicionales:
 - Fallo en River online learning → fallback a modelo LSTM estático.
 - Desincronización WS/API → reconciliación determinística y reintentos con backoff.
 - Errores de precisión → normalizador de cantidades/precios y caché `exchange_info`.
+- **Errores de timestamp (-1021)** → configuración UTC en Docker y sincronización automática.
+- **Errores de LOT_SIZE (-1013)** → validación automática de step_size y cantidad mínima.
+- **Errores de precisión (-1111)** → redondeo automático según filtros de Binance.
+- **Falta de liquidez USDT** → auto-rebalancer V2 con liquidación priorizada de activos.
+- **Circuit breakers no funcionales** → sistema automático de activación basado en métricas.

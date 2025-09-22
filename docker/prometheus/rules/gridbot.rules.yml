@@ -1,0 +1,130 @@
+groups:
+  - name: GridBotCriticalAlerts
+    rules:
+      - alert: HighDailyDrawdown
+        expr: gridbot_daily_pnl_pct <= -0.04  # Alerta al 4% para advertir antes del breaker del 5%
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Drawdown diario cercano al límite!"
+          description: "El PnL diario ha alcanzado el {{ $value | printf \"%.2f\" }}%. El circuit breaker se activará pronto si la tendencia continúa."
+
+      - alert: BotInactivity
+        expr: changes(gridbot_trades_executed_total[2h]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GridBot podría estar inactivo"
+          description: "No se han ejecutado nuevas operaciones en las últimas 2 horas. Verificar logs y estado del sistema."
+
+      - alert: ReconciliationDiscrepancyDetected
+        expr: increase(gridbot_reconciliation_discrepancies_found_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Discrepancia de reconciliación detectada!"
+          description: "El sistema de auditoría ha detectado una nueva discrepancia entre el estado local y Binance. Requiere investigación inmediata."
+
+      - alert: CircuitBreakerActivated
+        expr: gridbot_circuit_breakers_active_total > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit Breaker activado!"
+          description: "Se ha activado un circuit breaker. Trading detenido por seguridad. Revisar estado del sistema."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(gridbot_binance_api_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia alta de API de Binance"
+          description: "La latencia P95 de la API de Binance es {{ $value | printf \"%.2f\" }}s. Esto puede afectar el rendimiento del trading."
+
+      - alert: LowWinRate
+        expr: (sum(gridbot_trades_successful_total) / sum(gridbot_trades_executed_total)) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa de acierto baja"
+          description: "La tasa de acierto es del {{ $value | printf \"%.1f\" }}%. Considerar revisar la estrategia."
+
+      - alert: HighSlippage
+        expr: histogram_quantile(0.95, rate(gridbot_slippage_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slippage alto detectado"
+          description: "El slippage P95 es de {{ $value | printf \"%.2f\" }}s. Esto puede indicar problemas de conectividad o volatilidad extrema."
+
+      - alert: DatabaseConnectionIssues
+        expr: up{job="gridbot-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GridBot API no disponible"
+          description: "El servicio de GridBot API no está respondiendo. Verificar estado del contenedor y logs."
+
+      - alert: RedisConnectionIssues
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis no disponible"
+          description: "El servicio de Redis no está respondiendo. Esto puede afectar el cache y la cola de tareas."
+
+      - alert: PrometheusScrapeErrors
+        expr: increase(prometheus_target_scrapes_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errores de scraping de Prometheus"
+          description: "Se han detectado {{ $value }} errores de scraping en los últimos 5 minutos."
+
+  - name: GridBotPerformanceAlerts
+    rules:
+      - alert: TradingVolumeLow
+        expr: rate(gridbot_trades_executed_total[1h]) < 0.1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Volumen de trading bajo"
+          description: "El volumen de trading es menor a 0.1 trades/hora. Esto puede ser normal en mercados tranquilos."
+
+      - alert: HighErrorRate
+        expr: rate(gridbot_api_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa de errores alta en API"
+          description: "La tasa de errores de la API es del {{ $value | printf \"%.1f\" }}%. Revisar logs para identificar problemas."
+
+      - alert: MemoryUsageHigh
+        expr: (container_memory_usage_bytes{name="gridbot-api"} / container_spec_memory_limit_bytes{name="gridbot-api"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso de memoria alto"
+          description: "El uso de memoria del contenedor GridBot es del {{ $value | printf \"%.1f\" }}%. Considerar escalar recursos."
+
+      - alert: CPUUsageHigh
+        expr: rate(container_cpu_usage_seconds_total{name="gridbot-api"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso de CPU alto"
+          description: "El uso de CPU del contenedor GridBot es del {{ $value | printf \"%.1f\" }}%. Considerar escalar recursos."

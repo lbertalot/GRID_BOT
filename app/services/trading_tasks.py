@@ -19,6 +19,8 @@ from app.services.alert_tasks import notify_consecutive_api_failures
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.core.circuit_breakers import CircuitBreakers
+from app.core.auto_circuit_breaker import auto_circuit_breaker
+from app.core.strategy_blacklist import strategy_blacklist
 from app.core.metrics import cycle_phase, cycle_decision_ready, cycle_order_executed
 from app.services.market_data_collector import MarketDataCollector
 from app.services.ml_engine import MLEngine
@@ -26,6 +28,7 @@ from app.services.strategy_selector import StrategySelector, AccountState
 from app.core.risk_manager import RiskManager, PositionSizeParams
 from app.services.cache import get_async_cache
 from app.core.metrics import dust_assets_count, dust_value_usd, dust_swept_usd_total, last_dust_sweep_timestamp
+from app.services.auto_rebalancer_v2 import auto_rebalancer_v2
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +38,12 @@ _CYCLE_KEY = "cycle:state"
 _CYCLE_TTL = 600  # 10 minutos por seguridad
 
 # Parámetros de decisión/ejecución
-MIN_DECISION_CONFIDENCE = 0.55
+MIN_DECISION_CONFIDENCE = 0.50  # Reducido de 0.55 a 0.50 para mayor actividad
 MIN_NOTIONAL_USDT = 10.5
-SAFE_MIN_USDT = 20.0  # Guarda dura para evitar operar con liquidez insuficiente
+SAFE_MIN_USDT = 15.0  # Reducido de 20.0 a 15.0 para permitir trading con menos liquidez
+
+# Modo de calibración para validar nuevos parámetros sin riesgo
+CALIBRATION_MODE = os.getenv('CALIBRATION_MODE', 'false').lower() == 'true'
 BALANCES_CACHE_KEY = "balances:last"
 BALANCES_TTL = 300
 
@@ -122,6 +128,20 @@ def trading_cycle_tick():
                 ml = MLEngine()
                 # Universo temporal restringido para ejecuciones seguras
                 symbols = ["ETHUSDT"]
+                
+                # Verificar blacklist antes de procesar símbolos
+                filtered_symbols = []
+                for symbol in symbols:
+                    should_block, reason = strategy_blacklist.should_block_trading(symbol, "GridTrading")
+                    if should_block:
+                        logger.warning(f"🚫 Símbolo {symbol} bloqueado por blacklist: {reason}")
+                    else:
+                        filtered_symbols.append(symbol)
+                
+                symbols = filtered_symbols
+                if not symbols:
+                    logger.warning("[Cycle] Todos los símbolos están en blacklist, omitiendo ejecución")
+                    return
                 decisions = state.get("decision") or {}
                 # Estado de cuenta (equity, balance, exposición)
                 total_equity = 0.0
@@ -136,14 +156,21 @@ def trading_cycle_tick():
                     total_exposure = max(0.0, total_equity - available_balance)
                 except Exception as e:
                     logger.warning(f"[Cycle] No se pudo obtener estado de cuenta: {e}")
-                # Verificar breakers antes de preparar decisiones
+                # Verificar circuit breakers (auto-activación)
                 breakers_block = False
                 try:
+                    # Verificar y activar circuit breakers automáticamente
+                    activation_results = await auto_circuit_breaker.check_and_activate_breakers()
+                    
+                    # Verificar estado después de auto-activación
                     ck = CircuitBreakers()
                     breakers = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
                     if breakers.get('critical_mode') or ('system_integrity' in breakers.get('active_breakers', [])):
                         breakers_block = True
-                except Exception:
+                        logger.warning(f"[Cycle] Circuit breakers activos: {activation_results.get('breakers_activated', [])}")
+                        logger.warning(f"[Cycle] Razones: {activation_results.get('reasons', [])}")
+                except Exception as e:
+                    logger.error(f"[Cycle] Error verificando circuit breakers: {e}")
                     breakers_block = False
 
                 # Si estamos en PAPER_TRADING, usar balance del sistema de paper en lugar de Binance
@@ -329,8 +356,63 @@ def execute_trading_cycle():
                     asyncio.set_event_loop(None)
                     loop.close()
             available_usdt = float((summary or {}).get("usdt_balance", 0.0) or 0.0)
+            
+            # 🔧 MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
+            if CALIBRATION_MODE:
+                logger.info(f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f}")
+                logger.info(f"🔬 [CALIBRATION MODE] Umbral mínimo: ${SAFE_MIN_USDT}")
+                logger.info(f"🔬 [CALIBRATION MODE] Confianza mínima: {MIN_DECISION_CONFIDENCE}")
+                
+                # Simular trades que habrían sido ejecutados con los nuevos parámetros
+                if available_usdt >= 10.0:  # Umbral más bajo para calibración
+                    logger.info(f"🔬 [CALIBRATION MODE] Trade BUY para ETHUSDT habría sido ejecutado")
+                    logger.info(f"🔬 [CALIBRATION MODE] - Cantidad estimada: 0.0025 ETH")
+                    logger.info(f"🔬 [CALIBRATION MODE] - Valor estimado: ${available_usdt * 0.8:.2f}")
+                    logger.info(f"🔬 [CALIBRATION MODE] - Confianza: 0.60 (GridTrading)")
+                    logger.info(f"🔬 [CALIBRATION MODE] - Razón: Balance suficiente con nuevos umbrales")
+                else:
+                    logger.info(f"🔬 [CALIBRATION MODE] No se habrían ejecutado trades (balance muy bajo)")
+                
+                return {"status": "calibration", "message": "Calibration mode - no real trades executed"}
+            
             if available_usdt < SAFE_MIN_USDT:
-                logger.warning(f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}, omitiendo ejecución")
+                logger.warning(f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}")
+                
+                # 🔄 INTEGRACIÓN DEL REBALANCEADOR V2
+                logger.info("🔄 Disparando rebalanceador automático para generar liquidez...")
+                try:
+                    # Ejecutar rebalanceo asíncrono
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        rebalance_result = loop.run_until_complete(auto_rebalancer_v2.check_and_rebalance())
+                        logger.info(f"🎯 Resultado del rebalanceo: {rebalance_result}")
+                        
+                        # Verificar si se generó liquidez suficiente
+                        if rebalance_result.get("status") == "success":
+                            # Verificar balance actualizado
+                            updated_balances = loop.run_until_complete(manager.get_asset_balances())
+                            updated_summary = loop.run_until_complete(fund_manager.get_trading_summary(updated_balances))
+                            updated_usdt = float((updated_summary or {}).get("usdt_balance", 0.0) or 0.0)
+                            
+                            if updated_usdt >= SAFE_MIN_USDT:
+                                logger.info(f"✅ Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading")
+                                # Continuar con el ciclo normal
+                            else:
+                                logger.warning(f"⚠️ Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT")
+                                return {"status": "skipped", "message": "Insufficient USDT after rebalancing"}
+                        else:
+                            logger.warning(f"⚠️ Rebalanceo falló: {rebalance_result.get('message', 'Unknown error')}")
+                            return {"status": "skipped", "message": "Rebalancing failed"}
+                            
+                    finally:
+                        asyncio.set_event_loop(None)
+                        loop.close()
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error ejecutando rebalanceo automático: {e}")
+                    return {"status": "skipped", "message": "Auto-rebalancing failed"}
+                
                 return {"status": "skipped", "message": "Insufficient USDT"}
             ck = CircuitBreakers()
             bs = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}

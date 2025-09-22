@@ -126,6 +126,11 @@ class CircuitBreakers:
         """Verificar si el modo crítico está activo"""
         return self.breakers['critical_mode']['active']
     
+    def is_trading_halted(self) -> bool:
+        """Verificar si el trading está detenido por circuit breakers"""
+        # Trading está detenido si hay cualquier circuit breaker activo
+        return any(status['active'] for status in self.breakers.values())
+    
     def get_breaker_status(self, breaker_type: str) -> Dict[str, Any]:
         """Obtener estado de un circuit breaker específico"""
         if breaker_type not in self.breakers:
