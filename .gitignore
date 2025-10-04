@@ -12,6 +12,11 @@ ENV/
 # Archivos de entorno y configuración sensible
 .env
 .env.*
+*.env
+*.secret
+*.keys
+*.pem
+*production.env
 
 # Docker
 *.log
