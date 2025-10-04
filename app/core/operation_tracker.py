@@ -427,8 +427,9 @@ class OperationTracker:
 
     def generate_client_order_id(self, asset: str, side: str, quantity: str, price: str, metadata: str) -> str:
         """Generar newClientOrderId determinístico para idempotencia y correlación con Binance."""
-        base = f"{asset}|{side}|{quantity}|{price}|{metadata}"
-        suffix = str(abs(hash(base)))[:12]
+        import hashlib
+        base = f"{asset}|{side}|{quantity}|{price}|{metadata}".encode()
+        suffix = hashlib.sha256(base).hexdigest()[:24]
         return f"GRIDBOT_{suffix}"
     
     async def cleanup_old_operations(self, days_old: int = 30):
