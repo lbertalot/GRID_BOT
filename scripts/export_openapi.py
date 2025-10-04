@@ -1,6 +1,15 @@
 import json
+import os
+import sys
 from pathlib import Path
 from fastapi.openapi.utils import get_openapi
+
+# Asegurar que la raíz del repo esté en PYTHONPATH
+THIS_DIR = Path(__file__).resolve().parent
+ROOT = THIS_DIR.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from app.main import app
 
 

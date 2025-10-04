@@ -51,6 +51,8 @@ jobs:
           [ -f coverage.xml ] || touch coverage.xml
 
       - name: Export OpenAPI schema
+        env:
+          PYTHONPATH: .
         run: |
           python scripts/export_openapi.py
 
