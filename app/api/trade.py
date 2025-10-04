@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel
 from binance import Client
+import asyncio
 import os
 import json
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
@@ -230,18 +231,18 @@ async def place_order(
 
         if order.type == 'MARKET':
             if order.side == 'BUY':
-                result = client.order_market_buy(symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
+                result = await asyncio.to_thread(client.order_market_buy, symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
             elif order.side == 'SELL':
-                result = client.order_market_sell(symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
+                result = await asyncio.to_thread(client.order_market_sell, symbol=order.symbol.upper(), quantity=order.quantity, newClientOrderId=client_order_id)
             else:
                 raise HTTPException(status_code=400, detail="Lado de orden inválido (debe ser BUY o SELL)")
         elif order.type == 'LIMIT':
             if not order.price:
                 raise HTTPException(status_code=400, detail="Precio requerido para órdenes LIMIT")
             if order.side == 'BUY':
-                result = client.order_limit_buy(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
+                result = await asyncio.to_thread(client.order_limit_buy, symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
             elif order.side == 'SELL':
-                result = client.order_limit_sell(symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
+                result = await asyncio.to_thread(client.order_limit_sell, symbol=order.symbol.upper(), quantity=order.quantity, price=str(order.price), timeInForce='GTC', newClientOrderId=client_order_id)
             else:
                 raise HTTPException(status_code=400, detail="Lado de orden inválido (debe ser BUY o SELL)")
         else:

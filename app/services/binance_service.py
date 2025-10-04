@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_DOWN, getcontext
 
 from binance import Client
 from binance.exceptions import BinanceAPIException
+import tenacity
 from app.core.config import settings
 from app.services.commission_manager import commission_manager
 from app.core.redis_cache import redis_cache
@@ -116,7 +117,11 @@ class BinanceService:
         
         try:
             start_time = time.time()
-            account_info = self.client.get_account()
+            # Reintentos con backoff para robustez
+            @tenacity.retry(wait=tenacity.wait_exponential(max=8), stop=tenacity.stop_after_attempt(4), reraise=True)
+            def _get_account():
+                return self.client.get_account(recvWindow=10000)
+            account_info = _get_account()
             duration = time.time() - start_time
             
             # record_binance_api_call("get_account", "success", duration)
@@ -139,7 +144,10 @@ class BinanceService:
         
         try:
             start_time = time.time()
-            balance = self.client.get_asset_balance(asset=asset)
+            @tenacity.retry(wait=tenacity.wait_exponential(max=8), stop=tenacity.stop_after_attempt(4), reraise=True)
+            def _get_balance():
+                return self.client.get_asset_balance(asset=asset)
+            balance = _get_balance()
             duration = time.time() - start_time
             
             # record_binance_api_call("get_asset_balance", "success", duration)
@@ -290,7 +298,10 @@ class BinanceService:
         
         try:
             start_time = time.time()
-            ticker = self.client.get_symbol_ticker(symbol=symbol.upper())
+            @tenacity.retry(wait=tenacity.wait_exponential(max=8), stop=tenacity.stop_after_attempt(4), reraise=True)
+            def _get_ticker():
+                return self.client.get_symbol_ticker(symbol=symbol.upper())
+            ticker = _get_ticker()
             duration = time.time() - start_time
             
             # record_binance_api_call("get_symbol_ticker", "success", duration)
@@ -371,7 +382,10 @@ class BinanceService:
         
         try:
             start_time = time.time()
-            orders = self.client.get_open_orders(symbol=symbol)
+            @tenacity.retry(wait=tenacity.wait_exponential(max=8), stop=tenacity.stop_after_attempt(4), reraise=True)
+            def _get_open_orders():
+                return self.client.get_open_orders(symbol=symbol)
+            orders = _get_open_orders()
             duration = time.time() - start_time
             
             # record_binance_api_call("get_open_orders", "success", duration)
