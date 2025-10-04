@@ -71,9 +71,12 @@ async def prometheus_pnl_metrics():
     except Exception as e:
         return {"error": f"Error generando métricas: {str(e)}"}
 
+from fastapi import Depends
+from app.core.auth import require_auth
+
 @router.post("/update-pnl")
-async def update_pnl_metrics():
-    """Actualizar métricas de P&L en tiempo real (sin autenticación)"""
+async def update_pnl_metrics(api_key: str = Depends(require_auth)):
+    """Actualizar métricas de P&L en tiempo real (protegido)"""
     try:
         # Cargar variables de entorno
         load_dotenv()

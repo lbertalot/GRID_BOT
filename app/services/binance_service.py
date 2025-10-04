@@ -231,10 +231,12 @@ class BinanceService:
             # Obtener precio actual para validaciones
             current_price = self.get_current_price(symbol)
             
-            # Calcular valor notional
-            notional_value = quantity_info['adjusted_quantity'] * current_price
+            # Calcular valor notional con Decimal para precisión
+            q = Decimal(str(quantity_info['adjusted_quantity']))
+            p = Decimal(str(current_price))
+            notional_value = float(q * p)
             
-            # Calcular comisión
+            # Calcular comisión (internamente puede usar Decimal)
             commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
             
             # Validaciones
@@ -310,7 +312,10 @@ class BinanceService:
             
             # Calcular comisión antes de ejecutar la orden
             current_price = price if price else self.get_current_price(symbol)
-            notional_value = quantity * current_price
+            # Precisión monetaria con Decimal
+            qd = Decimal(str(quantity))
+            pd = Decimal(str(current_price))
+            notional_value = float(qd * pd)
             commission = commission_manager.calculate_commission(notional_value, order_type, symbol)
             
             logger.info(f"💰 Comisión calculada para {side} {quantity} {symbol}: ${commission:.6f} USDT")

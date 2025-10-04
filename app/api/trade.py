@@ -130,7 +130,8 @@ def get_trades(
     side: Optional[str] = Query(None, description="Filtrar por lado (BUY/SELL)"),
     limit: int = Query(10, ge=1, le=100, description="Número de resultados"),
     offset: int = Query(0, ge=0, description="Número de resultados a saltar"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: str = Depends(require_auth)
 ):
     query = db.query(Trade)
     if symbol:
@@ -392,7 +393,7 @@ def run_grid(
         raise HTTPException(status_code=400, detail=f"Error en grid trading: {e}")
 
 @router.get("/grid_config")
-def get_grid_config_endpoint():
+def get_grid_config_endpoint(api_key: str = Depends(require_auth)):
     try:
         with open('grid_config_optimized.json', 'r') as f:
             config = json.load(f)

@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal, ROUND_DOWN, getcontext
 import logging
 from typing import Dict, Any, Optional, Tuple
 
@@ -47,12 +48,20 @@ class OrderValidator:
     def _round_to_step(self, value: float, step: float) -> float:
         if step <= 0:
             return value
-        return math.floor(value / step) * step
+        getcontext().prec = 28
+        v = Decimal(str(value))
+        s = Decimal(str(step))
+        units = (v / s).to_integral_value(rounding=ROUND_DOWN)
+        return float(units * s)
 
     def _round_to_tick(self, price: float, tick: float) -> float:
         if tick <= 0:
             return price
-        return math.floor(price / tick) * tick
+        getcontext().prec = 28
+        p = Decimal(str(price))
+        t = Decimal(str(tick))
+        units = (p / t).to_integral_value(rounding=ROUND_DOWN)
+        return float(units * t)
 
     def adjust_quantity_precision(self, quantity: float, symbol: str) -> Dict[str, Any]:
         """Ajusta la cantidad a la precisión requerida por Binance y retorna información detallada"""
@@ -142,7 +151,8 @@ class OrderValidator:
                 adjusted_price = current_price
             
             # Calcular valor notional
-            notional_value = quantity_info['adjusted_quantity'] * adjusted_price
+            # Notional con Decimal
+            notional_value = float(Decimal(str(quantity_info['adjusted_quantity'])) * Decimal(str(adjusted_price)))
             
             # Validaciones
             errors = []
