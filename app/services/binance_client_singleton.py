@@ -78,8 +78,8 @@ class BinanceClientSingleton:
             
             api_key = os.getenv("BINANCE_API_KEY")
             api_secret = os.getenv("BINANCE_SECRET_KEY")
-            # Forzar testnet=false para producción - resolver errores -2015
-            testnet = False  # os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+            # Respetar bandera de entorno BINANCE_TESTNET
+            testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
             
             if not api_key or not api_secret:
                 raise ValueError("Credenciales de Binance no configuradas")

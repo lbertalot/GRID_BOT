@@ -112,9 +112,11 @@ async def strategy_metrics():
         record_api_request("GET", "/api/metrics/strategies", 500, duration)
         raise e
 
+from app.core.auth import require_auth
+
 @router.post("/update-pnl")
-async def update_pnl_metrics():
-    """Actualizar métricas de P&L en tiempo real"""
+async def update_pnl_metrics(api_key: str = Depends(require_auth)):
+    """Actualizar métricas de P&L en tiempo real (protegido)"""
     start_time = time.time()
     try:
         # Cargar variables de entorno

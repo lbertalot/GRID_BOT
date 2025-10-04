@@ -26,8 +26,9 @@ class PrometheusHTTPMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration = perf_counter() - start
         method = request.method
-        # Normalizar paths con ids a patrones simples para cardinalidad controlada
-        path = request.url.path
+        # Normalizar path usando plantilla de ruta si está disponible
+        route = getattr(request.scope.get("route"), "path", request.url.path)
+        path = route
         status = str(response.status_code)
         http_request_duration_seconds.labels(method=method, path=path, status=status).observe(duration)
         http_requests_total.labels(method=method, path=path, status=status).inc()
