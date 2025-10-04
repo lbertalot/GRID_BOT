@@ -6,8 +6,34 @@ import random
 import time
 from typing import Any, Dict, Optional
 
-from binance.client import Client
-from binance.exceptions import BinanceAPIException
+USE_REAL = os.getenv("USE_REAL_BINANCE", "0") == "1"
+if not USE_REAL:
+    class _DummyClient:
+        def get_symbol_ticker(self, symbol: str):
+            return {"symbol": symbol, "price": "100.0"}
+        def get_klines(self, symbol: str, interval: str, limit: int = 100):
+            now = int(time.time() * 1000)
+            out = []
+            for i in range(limit):
+                open_time = now - (limit - i) * 60_000
+                close_time = open_time + 60_000
+                o = 100.0 + i
+                h = o * 1.01
+                l = o * 0.99
+                c = o * 1.005
+                v = 10 + i
+                out.append([open_time, str(o), str(h), str(l), str(c), str(v), close_time])
+            return out
+        def create_order(self, **kwargs):
+            return {"orderId": int(time.time() * 1000), "status": "FILLED"}
+    class _DummyException(Exception):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args)
+    Client = _DummyClient  # type: ignore
+    BinanceAPIException = _DummyException  # type: ignore
+else:
+    from binance.client import Client
+    from binance.exceptions import BinanceAPIException
 
 from app.services.cache import get_async_cache
 from app.services.order_validation import OrderValidator
@@ -49,11 +75,13 @@ class AsyncBinanceWrapper:
     """
 
     def __init__(self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10):
-        api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
-        api_secret = os.getenv("BINANCE_SECRET_KEY")
-        # Forzar testnet=false para producción - resolver errores -2015
-        testnet = False  # (os.getenv("BINANCE_TESTNET", "false").lower() == "true")
-        self.client = Client(api_key, api_secret, testnet=testnet)
+        if USE_REAL:
+            api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+            api_secret = os.getenv("BINANCE_SECRET_KEY")
+            testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+            self.client = Client(api_key, api_secret, testnet=testnet)
+        else:
+            self.client = Client()
         self.cache = get_async_cache()
         self.ttl = ttl_seconds
         self.price_rl = RateLimiter(rate_per_sec, burst)
