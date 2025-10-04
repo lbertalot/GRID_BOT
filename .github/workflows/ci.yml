@@ -53,6 +53,9 @@ jobs:
       - name: Export OpenAPI schema
         env:
           PYTHONPATH: .
+          USE_REAL_BINANCE: "0"
+          BINANCE_TESTNET: "true"
+          PAPER_TRADING: "true"
         run: |
           python scripts/export_openapi.py
 
