@@ -12,6 +12,7 @@ if BASE_DIR not in sys.path:
 
 from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig, OptimizedGridManager
 from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 
 # Install a lightweight stub of the Binance SDK for all tests unless explicitly disabled
@@ -177,6 +178,25 @@ if os.getenv("USE_REAL_BINANCE") != "1":
     sys.modules["binance"] = fake_binance
     sys.modules["binance.client"] = client_mod
     sys.modules["binance.exceptions"] = exceptions_mod
+
+@pytest.fixture(autouse=True)
+def mock_binance_client_autouse(monkeypatch):
+    """Asegura que cualquier import de binance.Client sea un mock offline."""
+    if os.getenv("USE_REAL_BINANCE") == "1":
+        yield
+        return
+    # Mock directo del Client del SDK
+    try:
+        import binance.client as _bc
+        mock_client_cls = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance.get_account.return_value = {"balances": []}
+        mock_instance.get_symbol_ticker.return_value = {"symbol": "BTCUSDT", "price": "50000.0"}
+        mock_client_cls.return_value = mock_instance
+        monkeypatch.setattr(_bc, "Client", mock_client_cls)
+    except Exception:
+        pass
+    yield
 
 def _build_mock_config() -> GridManagerConfig:
     # Configuración mínima para OptimizedGridManager en tests
