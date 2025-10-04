@@ -23,6 +23,7 @@ from app.schemas.validation import OrderRequest, GridParams
 from app.core.precision import PrecisionNormalizer
 from app.core.metrics import order_validation_rejects_total
 from app.core.circuit_breakers import CircuitBreakers
+from fastapi import Request
 from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
 from app.core.operation_tracker import OperationTracker, OperationStatus
 
@@ -164,11 +165,12 @@ def get_trades_api_protected(
 async def place_order(
     order: OrderRequest = Body(...), 
     db: Session = Depends(get_db),
-    api_key: str = Depends(require_auth)
+    api_key: str = Depends(require_auth),
+    request: Request = None,
 ):
     # Bloqueo por breakers (si está en modo crítico/protegido, rechazar)
     try:
-        breakers = CircuitBreakers()
+        breakers = getattr(request.app.state, 'breakers', CircuitBreakers()) if request else CircuitBreakers()
         summary = breakers.get_all_breakers_status()
         if summary.get('critical_mode') or summary.get('total_active', 0) > 0:
             order_validation_rejects_total.labels(reason="breaker_active", symbol=order.symbol.upper()).inc()

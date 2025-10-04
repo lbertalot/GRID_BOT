@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     
     # Configuración adicional
     redis_url: str = "redis://localhost:6379/0"  # Cambiado a localhost
-    secret_key: str = "supersecretkey"
-    debug: bool = True
+    secret_key: str = os.getenv("SECRET_KEY", "")
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     binance_api_key: str = ""
@@ -48,5 +48,12 @@ class Settings(BaseSettings):
         # Flags de trading
         self.paper_trading = bool(os.getenv("PAPER_TRADING", "false").lower() == "true")
         self.binance_testnet = bool(os.getenv("BINANCE_TESTNET", "false").lower() == "true")
+
+        # Validaciones de seguridad para producción
+        if (os.getenv("ENV", "development").lower() == "production"):
+            if not self.secret_key:
+                raise ValueError("SECRET_KEY es obligatorio en producción")
+            if self.debug:
+                raise ValueError("DEBUG debe ser false en producción")
 
 settings = Settings() 
