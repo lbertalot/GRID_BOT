@@ -117,7 +117,8 @@ class MarketDataCollector:
                 await conn.close()
 
 
-# Instancia global opcional
-market_data_collector = MarketDataCollector()
+# Instancia global opcional (evitar efectos en exportación de OpenAPI/CI)
+if os.getenv("EXPORT_OPENAPI", "0") != "1":
+    market_data_collector = MarketDataCollector()
 
 
