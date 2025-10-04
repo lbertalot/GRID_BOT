@@ -15,6 +15,7 @@ from unittest.mock import Mock, AsyncMock, patch
 
 
 # Install a lightweight stub of the Binance SDK for all tests unless explicitly disabled
+# Force stubbing in CI to avoid external calls
 if os.getenv("USE_REAL_BINANCE") != "1":
     fake_binance = types.ModuleType("binance")
 

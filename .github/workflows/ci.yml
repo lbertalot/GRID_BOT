@@ -32,6 +32,15 @@ jobs:
         env:
           DATABASE_URL: sqlite:///./test.db
           REDIS_URL: redis://localhost:6379
+          # Evitar llamadas reales a Binance/externas en CI
+          USE_REAL_BINANCE: "0"
+          SKIP_API_HEALTHCHECK: "1"
+          CI: "true"
+          PAPER_TRADING: "true"
+          BINANCE_TESTNET: "true"
+          FORCE_REAL_MODE: "false"
+          TRADING_ENABLED: "false"
+          EMERGENCY_STOP: "true"
         run: |
           pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml
 
