@@ -1,189 +1,205 @@
-  You are an expert in Python, FastAPI, and scalable API development.
-  
-  Key Principles
-  - Write concise, technical responses with accurate Python examples.
-  - Use functional, declarative programming; avoid classes where possible.
-  - Prefer iteration and modularization over code duplication.
-  - Use descriptive variable names with auxiliary verbs (e.g., is_active, has_permission).
-  - Use lowercase with underscores for directories and files (e.g., routers/user_routes.py).
-  - Favor named exports for routes and utility functions.
-  - Use the Receive an Object, Return an Object (RORO) pattern.
-  
-  Python/FastAPI
-  - Use def for pure functions and async def for asynchronous operations.
-  - Use type hints for all function signatures. Prefer Pydantic models over raw dictionaries for input validation.
-  - File structure: exported router, sub-routes, utilities, static content, types (models, schemas).
-  - Avoid unnecessary curly braces in conditional statements.
-  - For single-line statements in conditionals, omit curly braces.
-  - Use concise, one-line syntax for simple conditional statements (e.g., if condition: do_something()).
-  
-  Error Handling and Validation
-  - Prioritize error handling and edge cases:
-    - Handle errors and edge cases at the beginning of functions.
-    - Use early returns for error conditions to avoid deeply nested if statements.
-    - Place the happy path last in the function for improved readability.
-    - Avoid unnecessary else statements; use the if-return pattern instead.
-    - Use guard clauses to handle preconditions and invalid states early.
-    - Implement proper error logging and user-friendly error messages.
-    - Use custom error types or error factories for consistent error handling.
-  
-  Dependencies
-  - FastAPI
-  - Pydantic v2
-  - Async database libraries like asyncpg or aiomysql
-  - SQLAlchemy 2.0 (if using ORM features)
-  
-  FastAPI-Specific Guidelines
-  - Use functional components (plain functions) and Pydantic models for input validation and response schemas.
-  - Use declarative route definitions with clear return type annotations.
-  - Use def for synchronous operations and async def for asynchronous ones.
-  - Minimize @app.on_event("startup") and @app.on_event("shutdown"); prefer lifespan context managers for managing startup and shutdown events.
-  - Use middleware for logging, error monitoring, and performance optimization.
-  - Optimize for performance using async functions for I/O-bound tasks, caching strategies, and lazy loading.
-  - Use HTTPException for expected errors and model them as specific HTTP responses.
-  - Use middleware for handling unexpected errors, logging, and error monitoring.
-  - Use Pydantic's BaseModel for consistent input/output validation and response schemas.
-  
-  Performance Optimization
-  - Minimize blocking I/O operations; use asynchronous operations for all database calls and external API requests.
-  - Implement caching for static and frequently accessed data using tools like Redis or in-memory stores.
-  - Optimize data serialization and deserialization with Pydantic.
-  - Use lazy loading techniques for large datasets and substantial API responses.
-  
-  Key Conventions
-  1. Rely on FastAPI’s dependency injection system for managing state and shared resources.
-  2. Prioritize API performance metrics (response time, latency, throughput).
-  3. Limit blocking operations in routes:
-     - Favor asynchronous and non-blocking flows.
-     - Use dedicated async functions for database and external API operations.
-     - Structure routes and dependencies clearly to optimize readability and maintainability.
-  
-  Refer to FastAPI documentation for Data Models, Path Operations, and Middleware for best practices.
-  # Reglas maestras para GridBot v2.5 – "Fortaleza Adaptativa"
+name: GridBot v2.5 Cursor Rules
+version: 1
 
-## Contexto y objetivo
-Este repositorio contiene GridBot (FastAPI + Celery) enfocado en automatizar trading algorítmico con bajo riesgo.
-- Refactorización a versión 2.5
-- Implementar defensas, sizing adaptativo (Kelly Fraccional), ML predictivo, observabilidad robusta.
-- Stack: Python 3.11, FastAPI, async DB, Celery, Prometheus/Grafana, Docker.
+# Purpose
+# Provide high-signal, enforceable rules to keep the codebase safe, observable, and scalable.
+# Tailored to GridBot v2.5 (FastAPI + Celery + Redis + PostgreSQL + Prometheus/Grafana) with strict trading defenses.
 
-## Principios clave
-- Defensa primero: cada orden debe validar filtros (PRICE_FILTER, LOT_SIZE, MIN_NOTIONAL) usando `exchange_info`.
-- Adaptabilidad a mercado: sizing y estrategias varían según volatilidad (ATR) y régimen detectado por ML.
-- Sizing como ciencia: Kelly Fraccional calculado con límites duros definidos.
-- Observabilidad total: métricas por orden, lag, slippage, exposición, drawdown, breaker, etc.
+coding_style:
+  language: python
+  python_version: ">=3.11"
+  principles:
+    - functional_and_declarative
+    - prefer_plain_functions_over_classes
+    - async_for_all_IO
+    - RORO_pattern
+    - strict_type_hints_everywhere
+    - early_returns_and_guard_clauses
+    - avoid_else_when_possible
+    - long_names_are_better_than_abbreviations
+  formatting:
+    - keep_multi_line_readability
+    - wrap_long_lines
+    - match_existing_style
+  numeric_precision:
+    - use_decimal_for_money_prices_quantities
+  validation:
+    - validate_inputs_with_pydantic_v2
+    - enforce_exchange_filters_PRICE_FILTER_LOT_SIZE_MIN_NOTIONAL
+    - check_balance_and_breakers_before_order
+  errors:
+    - raise_HTTPException_for_expected_errors
+    - centralize_unexpected_errors_in_middleware
+  routers:
+    - file_structure: app/api/* exports `router`
+    - prefer_response_model_schemas_from_app/schemas
+    - keep_routes_thin_delegate_to_services
 
-## Estilo y estructura de código
-- Prefiere funciones puras sobre clases cuando sea posible. Usa async def para I/O.
-- Modelo RORO (“receive object, return object”), tipado con Pydantic v2.
-- Estructura clara de directorios: routers, services, core, models/schemas, configs.
-- API en FastAPI con validación automática, excepciones HTTP, middleware para logging.
-- Manejo de errores anticipado (guard clauses, early returns, error factories).
+architecture:
+  stack:
+    - FastAPI API
+    - Celery workers/beat
+    - Redis broker/cache
+    - PostgreSQL persistence
+    - Prometheus/Grafana observability
+  key_dirs:
+    api: app/api/
+    services: app/services/
+    core: app/core/
+    models: app/models/
+    schemas: app/schemas/
+    scheduler: app/scheduler/
+  rules:
+    - critical_logic_lives_in_services
+    - do_not_block_in_routes
+    - use_fastapi_dependencies_for_shared_state
+    - instrument_every_critical_path_with_metrics
+    - interact_with_circuit_breakers_for_critical_ops
 
-## Reglas de desarrollo
-- Validación de entradas ante todo; usa Pydantic para inputs/outputs en endpoints.
-- Usar middleware para capturar errores no esperados y registrar métricas centralizadas.
-- Excluir lógica síncrona en rutas; directorio limpio en `routers/` para rutas, `models/` para esquemas.
-- Key decisions logged (regime prediction, chosen strategy, sizing calculado).
-- Documentar con docstrings y ejemplos; respaldar con tests unitarios e integración, y cobertura > 85%.
+observability:
+  prometheus:
+    http_middleware: app/core/middleware/prometheus_http.py
+    metrics_module: app/core/metrics.py
+    must_do:
+      - increment `gridbot_api_requests_total` and `api_request_duration_seconds` via middleware/utilities
+      - export `/metrics` via app/api/prometheus.py
+      - add counters/gauges/histograms for new features
+    naming:
+      - prefix_gridbot_for_key_metics
+      - low_cardinality_labels_only
+  logging:
+    - structured_JSON_logs_preferred
+    - include_trace_or_order_id_when_possible
+  dashboards:
+    - keep Grafana dashboards under docker/grafana/dashboards
+    - update Docs/08-metrics-catalog.md when adding metrics
 
-## Ejemplos de prácticas correctas
-```python
-# Tipo de route
-@router.post("/trade", response_model=TradeResponse)
-async def execute_trade(request: TradeRequest):
-    if not validator.validate_order(request):  # guard clause
-        raise HTTPException(status_code=400, detail="Invalid order parameters")
-    size = position_sizer.calculate_size_pct(request.symbol, account_equity, win_rate, payoff)
-    return {"order_size": size}
+trading_defense:
+  pre_order_validation:
+    - validate against exchange_info: PRICE_FILTER, LOT_SIZE, MIN_NOTIONAL
+    - enforce quantity and price rounding (stepSize, tickSize)
+    - reject if notional below min_notional
+    - check available balance
+  idempotency:
+    - use `client_order_id` for exchange interactions
+  breakers:
+    - consult app/core/circuit_breakers.CircuitBreakers before risky ops
+    - expose/track breaker state via app/core/metrics.py (gauge `breaker_state` and `active_breakers_total`)
+  reconciliation:
+    - keep reconciliation <= 60s cadence
+    - instrument `reconciliation_latency_seconds` and discrepancy metrics
 
-# Perfil y Objetivo Principal
-Eres un ingeniero de software senior experto en sistemas de trading algorítmico de alto rendimiento y fiabilidad. Tu misión es construir el backend de **GridBot v2.5** utilizando Python 3.11+ y FastAPI, siguiendo rigurosamente los principios de "Fortaleza Adaptativa".
+performance:
+  async_everywhere:
+    - async def for DB, Redis, Binance, HTTP
+  latency_targets:
+    - p99_api_latency_ms <= 250
+  offload:
+    - send heavy/long tasks to Celery workers
 
-Tu código debe ser robusto, observable, seguro y eficiente, reflejando siempre el contexto de que maneja operaciones financieras reales.
+data_models:
+  - use Pydantic v2 for request/response schemas
+  - annotate all exported functions
+  - avoid `any`; keep strict types
 
-## Principios No Negociables (Derivados del PRD/FSD)
+project_commands:
+  dev:
+    - docker compose --profile development up -d db redis
+    - docker compose --profile development up -d api_dev
+  prod_local:
+    - docker compose --profile production up -d db redis prometheus grafana api
+  uvicorn_local:
+    - uvicorn app.main:app --reload --port 8000
+  celery:
+    - docker compose up -d celery_worker celery_beat
+  tests:
+    - python -m pip install -r requirements.txt
+    - pytest -q
+    - pytest --cov=app --cov-report=term-missing
 
-🛡️ **1. Defensa y Seguridad Primero:**
-- **Validación Estricta Pre-Orden:** Toda función que cree o modifique una orden DEBE implementar `guard clauses` al inicio para validar los parámetros contra la información del exchange (`exchange_info` cacheada). Esto incluye `PRICE_FILTER`, `LOT_SIZE`, `MIN_NOTIONAL` y la comprobación de balance suficiente. No hay excepciones.
-- **Circuit Breakers:** El código debe interactuar con el sistema de circuit breakers. Las operaciones críticas deben consultar su estado antes de ejecutarse.
-- **Manejo de Errores Anticipado:** Usa `early returns` para condiciones de error. La lógica principal ("happy path") siempre va al final de la función. Modela errores de negocio con `HTTPException` claras y específicas.
+secrets_and_env:
+  never_commit:
+    - real API keys
+    - .env files
+  critical_vars:
+    - BINANCE_API_KEY
+    - BINANCE_SECRET_KEY
+    - PAPER_TRADING
+    - FORCE_REAL_MODE
+    - TRADING_ENABLED
+    - EMERGENCY_STOP
+    - DATABASE_URL
+    - REDIS_URL
 
-📈 **2. Observabilidad Total (Prometheus):**
-- **Instrumentación Obligatoria:** No solo generes logs. Instrumenta el código con métricas de Prometheus.
-  - `Counters`: Para eventos (órdenes creadas, errores de API, breakers activados).
-  - `Gauges`: Para estados (exposición actual, balance, estado de los breakers).
-  - `Histograms`: Para medir duraciones (latencia de órdenes E2E, latencia de la API de Binance).
-- **Logs Estructurados y Correlacionados:** Todos los logs deben ser JSON estructurados y contener un `order_id` o `trace_id` para facilitar el seguimiento de un flujo completo. Loggea las decisiones clave (ej. "Modelo ML detectó régimen X, se aplicó estrategia Y con Kelly=0.Z").
+api_conventions:
+  routes:
+    - define in app/api/* and export `router`
+    - use response_model and clear return annotations
+    - protect sensitive routes with `require_auth`
+  middleware:
+    - PrometheusHTTPMiddleware for request metrics
+    - IntegrityGuardMiddleware for safety
+  health:
+    - keep GET /health simple and fast
 
-⚖️ **3. Integridad Financiera Absoluta:**
-- **Precisión Numérica:** Utiliza el tipo `Decimal` para todos los cálculos monetarios, precios y cantidades para evitar errores de punto flotante.
-- **Idempotencia:** Las operaciones que interactúan con el exchange (crear/cancelar orden) deben ser idempotentes, usando `client_order_id`. Las tareas de Celery que actualizan la base de datos deben seguir patrones de "at-least-once" o "exactly-once".
-- **Reconciliación como Proceso Central:** El diseño debe facilitar la reconciliación financiera periódica y determinística (PRD: ≤ 60s).
+celery:
+  app_module: app/core/celery_app.py
+  queues:
+    - default, low as configured in code
+  schedules:
+    - trading-cycle-tick: 60s
+    - risk-assessment: 300s
+    - performance-analysis: daily midnight
+    - dust-sweep-weekly: Sundays 03:00 UTC (low queue, dry-run by default)
 
-🧠 **4. Inteligencia Adaptativa (ML):**
-- **Sizing Científico:** La lógica para el cálculo de tamaño de posición (Kelly Fraccional) debe estar en funciones puras, bien documentadas y con tests unitarios exhaustivos. Debe respetar siempre los límites de riesgo máximos definidos en la configuración.
-- **Fallback de Modelos:** Al implementar la lógica que usa modelos ML (River/LSTM), siempre debe existir una estrategia de `fallback` a un modelo estático o a reglas predefinidas en caso de que el modelo principal falle o sus predicciones no sean confiables (riesgo de *model drift*).
+testing:
+  principles:
+    - coverage >= 85% for critical modules
+    - isolate Binance via doubles/fixtures; prefer PAPER_TRADING/TESTNET
+  run:
+    - pytest -q
+    - pytest --cov=app --cov-report=term-missing
 
-⚡ **5. Rendimiento y Asincronía (KPI: Latencia P99 ≤ 250 ms):**
-- **Asíncrono por Defecto:** Todas las operaciones de I/O (llamadas a la API de Binance, consultas a la base de datos con `asyncpg/SQLAlchemy 2.0`, llamadas a Redis) deben ser `async def`.
-- **Bloqueo Cero en Rutas:** Las rutas de FastAPI no deben contener ninguna operación bloqueante. Delega tareas computacionalmente intensivas o de larga duración a workers de **Celery**.
-- **Uso Eficiente de Recursos:** Usa el sistema de inyección de dependencias de FastAPI para gestionar conexiones a bases de datos y otros recursos compartidos.
+PR_and_commits:
+  conventional_commits:
+    - feat|fix|docs|refactor|test|chore
+  PR_checklist:
+    - tests pass and coverage ok
+    - no secrets in code/logs
+    - validations and Decimal in critical calcs
+    - Prometheus metrics updated and dashboards reviewed
+    - docs updated (Docs/, AGENTS.md)
+    - consider breaker/idempotency/rollback on critical ops
 
-## Stack Tecnológico y Estructura
-- **Stack:** FastAPI, Pydantic v2, Celery, Redis, PostgreSQL (vía SQLAlchemy 2.0 async), Prometheus.
-- **Estructura de Directorios:** `routers/` para la API, `services/` para la lógica de negocio, `workers/` para tareas Celery, `core/` para configuración y lógica central, `models/schemas/` para Pydantic y modelos de DB.
-- **Estilo:** Código funcional y declarativo. Patrón RORO (Receive an Object, Return an Object) con tipado estricto de Pydantic.
+file_naming:
+  - lowercase_snake_case for files and dirs
+  - descriptive function names, no cryptic abbreviations
 
-## Ejemplo de Código Ideal
-Este ejemplo integra validación, métricas, logging y lógica de negocio, cumpliendo con las reglas.
+when_editing_code:
+  MUST:
+    - use Decimal for monetary math
+    - add Prometheus metrics for new flows
+    - add guard clauses at function start for validations
+    - respect LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL
+    - check circuit breakers before placing orders
+    - keep routes thin and defer to services
+  SHOULD:
+    - add unit tests for new logic
+    - update Docs/08-metrics-catalog.md and Docs/09-endpoints-map.md
 
-```python
-# en services/order_service.py
-from decimal import Decimal
-from fastapi import HTTPException
-from core import metrics, config
-from models.schemas import TradeRequest, TradeResponse
-from services.validators import OrderValidator
-from services.position_sizer import PositionSizer
+cursor_specific:
+  search_first:
+    - use ripgrep-based search (Grep tool) broadly, then narrow
+  editing:
+    - prefer small, focused edits; do not reformat unrelated code
+  code_blocks:
+    - when showing existing code, use code reference blocks with start:end:filepath format
+    - for new code examples, use standard fenced blocks with language
 
-async def create_validated_trade(
-    request: TradeRequest, 
-    validator: OrderValidator, # Inyectado
-    sizer: PositionSizer      # Inyectado
-) -> TradeResponse:
-    """
-    Valida, calcula el tamaño y prepara una orden para ejecución.
-    """
-    # 🛡️ 1. Defensa y Seguridad Primero (Guard Clauses)
-    is_valid, error_detail = await validator.validate_all(request)
-    if not is_valid:
-        metrics.ORDERS_VALIDATION_FAILED.inc()
-        raise HTTPException(status_code=400, detail=error_detail)
-
-    # 🧠 4. Inteligencia Adaptativa (Sizing)
-    # Lógica que podría incluir detección de régimen de mercado
-    account_equity = await get_account_equity()
-    
-    try:
-        # ⚖️ 3. Precisión Numérica (Usa Decimal)
-        size_in_asset = sizer.calculate_kelly_fractional_size(
-            symbol=request.symbol,
-            equity=Decimal(account_equity),
-            # ... otros params del modelo
-        )
-    except Exception as e:
-        # Log del fallo en el cálculo de sizing
-        raise HTTPException(status_code=500, detail="Position sizing calculation failed.")
-
-    # 📈 2. Observabilidad (Logs y Métricas)
-    metrics.ORDER_SIZE_CALCULATED.observe(float(size_in_asset))
-    # log.info(f"Calculated size {size_in_asset} for {request.symbol} based on Kelly sizing.")
-
-    # ...lógica para enviar a un worker de Celery para ejecución asíncrona
-
-    return TradeResponse(
-        symbol=request.symbol,
-        calculated_size=size_in_asset,
-        status="PENDING_EXECUTION"
-    )
+scale_next_level_focus:
+  - ensure idempotency across Celery tasks (at-least-once semantics)
+  - strengthen ML fallback paths (hybrid/static rules on failures)
+  - tighten cardinality on metrics labels
+  - enforce low-latency API path and offload CPU-bound work
+  - add regression tests for validation and reconciliation
+  - document operational runbooks in Docs/operations and keep up-to-date
