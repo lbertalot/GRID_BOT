@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
 import aiohttp
+from aiohttp import ClientTimeout
+import tenacity
 import websockets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -167,7 +169,8 @@ class BinanceClient:
         await self.rate_limiters["exchange_info"].wait_for_token()
         
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(f"{self.base_url}/api/v3/exchangeInfo") as response:
                     if response.status != 200:
                         raise ConnectionError(f"Failed to get exchange info: {response.status}", 
@@ -192,6 +195,13 @@ class BinanceClient:
         except Exception as e:
             self.logger.error(f"Error getting exchange info: {e}")
             raise
+
+    @tenacity.retry(wait=tenacity.wait_exponential(max=10), stop=tenacity.stop_after_attempt(5), reraise=True)
+    async def _get(self, session: aiohttp.ClientSession, url: str) -> Any:
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise ConnectionError(f"GET {url} -> {response.status}", url)
+            return await response.json()
     
     def normalize_price(self, symbol: str, price: float) -> float:
         """
