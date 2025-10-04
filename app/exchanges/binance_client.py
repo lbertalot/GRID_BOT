@@ -372,8 +372,8 @@ class BinanceClient:
             payload["price"] = normalized_price
             payload["timeInForce"] = time_in_force
         
-        # TODO: Implementar firma HMAC para autenticación
-        # Por ahora, retornamos un mock
+        # Nota: este cliente no firma HMAC en este módulo. Debe usarse sólo para simulación/validación.
+        # Si se requiere integración real, implementar firma HMAC aquí o usar el cliente oficial.
         return {
             "symbol": symbol,
             "orderId": int(time.time() * 1000),
