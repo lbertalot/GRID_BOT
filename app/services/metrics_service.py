@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from app.core.metrics import trading_metrics
 from app.core.metrics import portfolio_change_usdt
-from app.core.metrics import roi_daily_percent, profit_daily_usdt
+from app.core.metrics import roi_daily_percent, profit_daily_usdt, roi_total_percent, profit_total_usdt
 from binance.client import Client
 import os
 from dotenv import load_dotenv
@@ -104,6 +104,27 @@ class MetricsService:
             logger.error(f"Error calculando métricas del portafolio: {e}")
             trading_metrics.record_error("portfolio_calculation_error")
             return {}
+
+    async def update_binance_pnl_metrics(self) -> Dict:
+        """
+        Obtiene trades 'puros' de Binance, calcula PnL/ROI y publica métricas:
+        - profit_total_usdt{strategy}
+        - roi_total_percent{strategy}
+        """
+        try:
+            from app.services.binance_trades_pnl import compute_binance_pnl_and_roi
+            symbols = list(self._allowed_symbols)
+            total_profit, total_invested, roi_pct = compute_binance_pnl_and_roi(symbols)
+            # Publicar métricas totales
+            profit_total_usdt.labels(strategy="grid").set(float(total_profit))
+            roi_total_percent.labels(strategy="grid").set(float(roi_pct))
+            logger.info(
+                f"📈 PnL/ROI Binance publicados: profit={total_profit:.6f} USDT, invested={total_invested:.6f} USDT, roi={roi_pct:.4f}%"
+            )
+            return {"profit_total_usdt": total_profit, "invested_usdt": total_invested, "roi_total_percent": roi_pct}
+        except Exception as e:
+            logger.error(f"Error actualizando métricas PnL/ROI Binance: {e}")
+            return {"error": str(e)}
     
     async def _get_current_balances(self) -> Dict[str, float]:
         """

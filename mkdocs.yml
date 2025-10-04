@@ -1,0 +1,63 @@
+site_name: GridBot v2.5 Docs
+theme:
+  name: material
+  features:
+    - navigation.expand
+    - content.code.copy
+nav:
+  - Inicio: docs/index.md
+  - Introducción: docs/01-introduction.md
+  - Arquitectura: docs/02-architecture.md
+  - Instalación y Configuración: docs/03-setup-and-installation.md
+  - Conceptos Clave: docs/04-core-concepts.md
+  - Flujo de Desarrollo: docs/05-development-workflow.md
+  - Guías Prácticas: docs/07-how-to-guides.md
+  - Solución de Problemas: docs/06-troubleshooting.md
+  - Guías:
+    - ML Overview: docs/guides/ml_overview.md
+    - Hybrid ML Engine: docs/guides/hybrid_ml_engine.md
+    - ML Engine: docs/guides/ml_engine.md
+    - Componentes: docs/guides/components.md
+    - Backtesting: docs/guides/backtesting.md
+    - Observabilidad (Guía): docs/guides/observability.md
+    - Despliegue: docs/guides/DEPLOYMENT_GUIDE.md
+    - Configuración Binance: docs/guides/BINANCE_SETUP_GUIDE.md
+    - Comandos Rápidos: docs/guides/QUICK_COMMANDS.md
+    - Monitoreo: docs/guides/MONITORING_GUIDE.md
+  - Diagramas:
+    - Arquitectura: docs/diagrams/architecture.md
+    - Secuencia de Orden: docs/diagrams/sequence_order.md
+    - Breakers/Emergencia: docs/diagrams/dfd_emergency.md
+    - ERD: docs/diagrams/erd.md
+  - Operaciones:
+    - Retención/Limpieza: docs/operations/Retention_Automation.md
+  - Análisis:
+    - Discrepancias: docs/analysis/PORTFOLIO_DISCREPANCY_ANALYSIS.md
+    - Errores Binance: docs/analysis/BINANCE_API_ERRORS_ANALYSIS.md
+  - Auditorías:
+    - Telegram: docs/audits/TELEGRAM_SECURITY_AUDIT.md
+    - Telegram/Grafana: docs/audits/TELEGRAM_SECURITY_ANALYSIS.md
+  - Checklists:
+    - Producción: docs/checklists/PRODUCTION_CHECKLIST.md
+    - Reactivación: docs/checklists/Reactivation_Checklist_GridBot_v2.5.md
+  - Planes:
+    - Ajuste de Umbrales: docs/plans/ALERT_THRESHOLDS_ADJUSTMENT_PLAN.md
+    - Plan de Recuperación: docs/plans/PLAN_RECUPERACION_SISTEMA.md
+  - PRD: docs/PRD.md
+  - FSD: docs/FSD.md
+  - OpenAPI: docs/openapi.json
+  - Notas de versión: docs/release-notes.md
+  - Releases:
+    - Resumen Seguridad: docs/releases/RESUMEN_FINAL_ACTUALIZACION.md
+    - OptimizedGrid v2.5: docs/releases/PR_Summary_OptimizedGrid_v2.5.md
+  - Referencias:
+    - Índice documentación: docs/references/INDEX_DOCUMENTACION.md
+    - Verificación de tests: docs/references/VERIFICACION_TESTS_FINAL.md
+    - Resumen Ejecutivo: docs/references/Executive_Summary_GridBot_v2.5.md
+  - RFC: docs/rfc/RFC_GridBot_v2.5.md
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+

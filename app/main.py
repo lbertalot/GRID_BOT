@@ -19,6 +19,7 @@ from app.core.integrity_monitor import IntegrityMonitor
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.services.reconciliation_service import ReconciliationService
 from app.core.middleware.integrity_guard import IntegrityGuardMiddleware
+from app.core.middleware.prometheus_http import PrometheusHTTPMiddleware
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
@@ -102,6 +103,11 @@ async def lifespan(app: FastAPI):
                 while True:
                     try:
                         await metrics_service.calculate_portfolio_metrics()
+                        # Actualizar PnL/ROI "Binance-puro"
+                        try:
+                            await metrics_service.update_binance_pnl_metrics()
+                        except Exception:
+                            pass
                         # Publicar breakers activos
                         try:
                             from app.core.metrics import active_breakers_total
@@ -183,6 +189,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware de métricas HTTP (Prometheus)
+app.add_middleware(PrometheusHTTPMiddleware)
 
 app.add_middleware(
     TrustedHostMiddleware,
