@@ -26,6 +26,13 @@ roi_daily_percent = Gauge(
     ['strategy']
 )
 
+# ROI total en porcentaje
+roi_total_percent = Gauge(
+    'roi_total_percent',
+    'ROI total en porcentaje',
+    ['strategy']
+)
+
 # Ganancia diaria en USDT
 profit_daily_usdt = Gauge(
     'profit_daily_usdt',
