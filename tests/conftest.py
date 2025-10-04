@@ -192,6 +192,8 @@ def mock_binance_client_autouse(monkeypatch):
         mock_instance = MagicMock()
         mock_instance.get_account.return_value = {"balances": []}
         mock_instance.get_symbol_ticker.return_value = {"symbol": "BTCUSDT", "price": "50000.0"}
+        mock_instance.get_klines.return_value = []
+        mock_instance.create_order.return_value = {"orderId": 1, "status": "FILLED", "fills": []}
         mock_client_cls.return_value = mock_instance
         monkeypatch.setattr(_bc, "Client", mock_client_cls)
     except Exception:
