@@ -155,6 +155,7 @@ class StrategyManager:
 
 # Instancia global opcional (evitar efectos en exportación de OpenAPI/CI)
 import os as _os
+strategy_manager = None  # siempre definido para evitar ImportError
 if _os.getenv("EXPORT_OPENAPI", "0") != "1":
     strategy_manager = StrategyManager()
 
