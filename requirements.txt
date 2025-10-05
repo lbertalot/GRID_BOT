@@ -37,6 +37,7 @@ vectorbt==0.26.0
 
 # Monitoreo y métricas
 prometheus-client==0.19.0
+tenacity==8.2.3
 
 # Validación de datos
 pydantic==2.5.0
