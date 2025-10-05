@@ -50,6 +50,8 @@ jobs:
         run: |
           pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml || true
           [ -f coverage.xml ] || touch coverage.xml
+          echo "\n==== Coverage (term-missing, skip-covered) ===="
+          pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=term-missing:skip-covered || true
 
       - name: Export OpenAPI schema
         env:
