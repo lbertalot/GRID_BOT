@@ -84,6 +84,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Iniciando GridBot v2.5 con componentes de integridad")
     
     try:
+        # Si estamos exportando OpenAPI en CI, no inicializar componentes externos
+        if os.getenv("EXPORT_OPENAPI", "0") == "1":
+            logger.info("⚙️ EXPORT_OPENAPI=1: saltando inicialización de componentes de integridad")
+            yield
+            return
         # Inicializar componentes de integridad
         balance_validator = BalanceValidator()
         operation_tracker = OperationTracker()
