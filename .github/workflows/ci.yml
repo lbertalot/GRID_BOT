@@ -24,6 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pip-audit pyflakes pytest-mock
+          echo "If you need ML extras locally: pip install -r requirements-ml.txt"
 
       - name: Lint (basic)
         run: |

@@ -24,16 +24,15 @@ celery==5.3.4
 flower==2.0.1
 redis==5.0.1
 
-# Machine Learning y análisis (versiones compatibles con Alpine)
+# Machine Learning y análisis básicos (ligeros)
 numpy==1.24.3
 pandas==2.1.4
 scikit-learn==1.5.0
 scipy==1.11.4
 
-# Deep Learning y ML avanzado (versiones compatibles)
-tensorflow==2.17.0
-river==0.21.0
-vectorbt==0.26.0
+# ML pesado y backtesting se movieron a extras opcionales para evitar problemas de instalación
+# Instala sólo si lo necesitas y tu entorno es compatible (Python 3.10+/3.11+ en muchas plataformas):
+#   pip install -r requirements-ml.txt
 
 # Monitoreo y métricas
 prometheus-client==0.19.0
