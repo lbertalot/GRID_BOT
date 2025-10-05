@@ -5,8 +5,36 @@ from typing import Dict, Any, Optional, List
 import math
 from decimal import Decimal, ROUND_DOWN, getcontext
 
-from binance import Client
-from binance.exceptions import BinanceAPIException
+USE_REAL = os.getenv("USE_REAL_BINANCE", "0") == "1"
+if not USE_REAL:
+    class _DummyEx(Exception):
+        pass
+    class _DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        def get_account(self, *args, **kwargs):
+            return {"balances": []}
+        def get_asset_balance(self, asset: str):
+            return {"asset": asset, "free": "0", "locked": "0"}
+        def get_symbol_ticker(self, symbol: str):
+            return {"symbol": symbol, "price": "100.0"}
+        def get_exchange_info(self):
+            return {"symbols": []}
+        def order_market_buy(self, *args, **kwargs):
+            return {"orderId": 1, "status": "FILLED", "fills": []}
+        def order_market_sell(self, *args, **kwargs):
+            return {"orderId": 2, "status": "FILLED", "fills": []}
+        def order_limit_buy(self, *args, **kwargs):
+            return {"orderId": 3, "status": "NEW", "fills": []}
+        def order_limit_sell(self, *args, **kwargs):
+            return {"orderId": 4, "status": "NEW", "fills": []}
+        def cancel_order(self, *args, **kwargs):
+            return {"status": "CANCELED"}
+    Client = _DummyClient  # type: ignore
+    BinanceAPIException = _DummyEx  # type: ignore
+else:
+    from binance import Client
+    from binance.exceptions import BinanceAPIException
 import tenacity
 from app.core.config import settings
 from app.services.commission_manager import commission_manager

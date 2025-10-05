@@ -46,6 +46,7 @@ jobs:
           FORCE_REAL_MODE: "false"
           TRADING_ENABLED: "false"
           EMERGENCY_STOP: "true"
+          EXPORT_OPENAPI: "0"
         run: |
           pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml || true
           [ -f coverage.xml ] || touch coverage.xml
