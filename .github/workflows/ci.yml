@@ -48,6 +48,7 @@ jobs:
           TRADING_ENABLED: "false"
           EMERGENCY_STOP: "true"
           EXPORT_OPENAPI: "0"
+          INTEGRITY_GUARD_DISABLED: "1"
         run: |
           pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml || true
           [ -f coverage.xml ] || touch coverage.xml

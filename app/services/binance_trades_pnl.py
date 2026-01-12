@@ -9,10 +9,19 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 import logging
+import time
+from binance.exceptions import BinanceAPIException
 
 from app.services.binance_client_singleton import get_binance_client_singleton
 
 logger = logging.getLogger(__name__)
+
+# Circuit breaker para errores -2015 (IP no autorizada)
+_last_2015_error_ts: float = 0.0
+_2015_error_count: int = 0
+_2015_circuit_open_until: float = 0.0
+_2015_COOLDOWN_SECONDS = 300  # 5 minutos
+_2015_MAX_ERRORS = 3
 
 
 def _get_quote_asset(symbol: str) -> str:
@@ -100,20 +109,76 @@ def _fifo_realized_pnl_usdt(trades: List[dict], symbol: str) -> Tuple[float, flo
 
 
 def compute_binance_pnl_and_roi(allowed_symbols: List[str]) -> Tuple[float, float, float]:
-    """Obtiene trades de Binance y calcula (profit_total_usdt, invested_usdt, roi_total_pct)."""
+    """
+    Obtiene trades de Binance y calcula (profit_total_usdt, invested_usdt, roi_total_pct).
+    
+    Maneja errores -2015 (IP no autorizada) con circuit breaker para evitar spam de logs.
+    """
+    global _last_2015_error_ts, _2015_error_count, _2015_circuit_open_until
+    
     client = get_binance_client_singleton().client
     if client is None:
         return 0.0, 0.0, 0.0
+    
+    # Verificar circuit breaker para errores -2015
+    now = time.time()
+    if now < _2015_circuit_open_until:
+        # Circuit breaker abierto: no intentar llamadas
+        logger.debug(f"Circuit breaker activo para errores -2015 (hasta {_2015_circuit_open_until - now:.0f}s)")
+        return 0.0, 0.0, 0.0
+    
     total_profit = 0.0
     total_invested = 0.0
+    has_2015_error = False
+    
     for symbol in allowed_symbols:
         try:
             trades = client.get_my_trades(symbol=symbol)
             p, inv = _fifo_realized_pnl_usdt(trades, symbol)
             total_profit += p
             total_invested += inv
+        except BinanceAPIException as e:
+            # Manejar específicamente error -2015 (IP no autorizada)
+            if getattr(e, 'code', None) == -2015 or 'Invalid API-key, IP' in str(e):
+                has_2015_error = True
+                _2015_error_count += 1
+                _last_2015_error_ts = now
+                
+                # Log solo la primera vez o cada 5 minutos
+                if _2015_error_count == 1 or (now - _last_2015_error_ts) > 300:
+                    logger.warning(
+                        f"⚠️ Binance -2015 (IP no autorizada) para {symbol}. "
+                        f"Verifica whitelist de IP en Binance. "
+                        f"Circuit breaker activado por {_2015_COOLDOWN_SECONDS}s"
+                    )
+                    # Notificar usando el sistema del singleton
+                    try:
+                        from app.services.binance_client_singleton import _notify_invalid_ip
+                        _notify_invalid_ip(str(e))
+                    except Exception:
+                        pass
+                
+                # Activar circuit breaker después de N errores
+                if _2015_error_count >= _2015_MAX_ERRORS:
+                    _2015_circuit_open_until = now + _2015_COOLDOWN_SECONDS
+                    logger.warning(
+                        f"🔒 Circuit breaker activado para errores -2015. "
+                        f"No se intentarán más llamadas por {_2015_COOLDOWN_SECONDS}s"
+                    )
+                    break  # Salir del loop para evitar más intentos
+            else:
+                # Otros errores de API: log normal pero no activar circuit breaker
+                logger.warning(f"No se pudo obtener/calc PnL para {symbol}: {e}")
         except Exception as e:
+            # Errores no relacionados con API
             logger.warning(f"No se pudo obtener/calc PnL para {symbol}: {e}")
+    
+    # Resetear contador si no hubo errores -2015
+    if not has_2015_error and _2015_error_count > 0:
+        # Si pasaron más de 10 minutos sin errores, resetear contador
+        if now - _last_2015_error_ts > 600:
+            _2015_error_count = 0
+    
     roi_pct = (total_profit / total_invested * 100.0) if total_invested > 0 else 0.0
     return total_profit, total_invested, roi_pct
 

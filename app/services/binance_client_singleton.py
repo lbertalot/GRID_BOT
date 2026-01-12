@@ -353,6 +353,112 @@ class BinanceClientSingleton:
     def get_symbol_info(self, symbol: str):
         """Obtiene información de un símbolo"""
         return self.client.get_symbol_info(symbol)
+    
+    def get_exchange_info(self, use_cache: bool = True):
+        """
+        Obtiene información del exchange con cache opcional (TTL 1 hora)
+        
+        ✅ FIX: Cache implementado para reducir llamadas a API
+        exchange_info cambia raramente, cache por 1 hora es seguro
+        
+        Args:
+            use_cache: Si True, usa cache Redis (TTL 1 hora)
+            
+        Returns:
+            Dict con información del exchange
+        """
+        # Cache en memoria simple (fallback si Redis no está disponible)
+        if not hasattr(self, '_exchange_info_cache'):
+            self._exchange_info_cache = {}
+            self._exchange_info_cache_ts = 0
+        
+        cache_ttl = 3600  # 1 hora
+        
+        # Verificar cache en memoria primero
+        if use_cache and time.time() - self._exchange_info_cache_ts < cache_ttl:
+            if 'exchange_info' in self._exchange_info_cache:
+                logger.debug("📦 Exchange info obtenido desde cache en memoria")
+                return self._exchange_info_cache['exchange_info']
+        
+        # Intentar obtener desde Redis cache
+        if use_cache:
+            try:
+                import asyncio
+                from app.core.redis_cache import redis_cache
+                
+                # Intentar obtener desde cache Redis (sync wrapper)
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Si hay loop corriendo, necesitamos ejecutar async en thread
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(
+                                lambda: asyncio.run(redis_cache.get_exchange_info())
+                            )
+                            cached_info = future.result(timeout=2)
+                    else:
+                        cached_info = loop.run_until_complete(redis_cache.get_exchange_info())
+                    
+                    if cached_info:
+                        # Actualizar cache en memoria también
+                        self._exchange_info_cache['exchange_info'] = cached_info
+                        self._exchange_info_cache_ts = time.time()
+                        logger.debug("📦 Exchange info obtenido desde cache Redis")
+                        return cached_info
+                except RuntimeError:
+                    # No hay event loop, crear uno temporal
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        cached_info = loop.run_until_complete(redis_cache.get_exchange_info())
+                        if cached_info:
+                            self._exchange_info_cache['exchange_info'] = cached_info
+                            self._exchange_info_cache_ts = time.time()
+                            logger.debug("📦 Exchange info obtenido desde cache Redis")
+                            return cached_info
+                    finally:
+                        loop.close()
+            except Exception as e:
+                logger.debug(f"Cache Redis no disponible, obteniendo de Binance: {e}")
+        
+        # Obtener de Binance
+        try:
+            exchange_info = self.client.get_exchange_info()
+            
+            # Guardar en cache en memoria
+            self._exchange_info_cache['exchange_info'] = exchange_info
+            self._exchange_info_cache_ts = time.time()
+            
+            # Guardar en cache Redis (async, no bloqueante)
+            if use_cache:
+                try:
+                    import asyncio
+                    from app.core.redis_cache import redis_cache
+                    
+                    # Intentar guardar en Redis (no bloquear si falla)
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Crear task en background
+                            asyncio.create_task(redis_cache.set_exchange_info(exchange_info))
+                        else:
+                            loop.run_until_complete(redis_cache.set_exchange_info(exchange_info))
+                    except RuntimeError:
+                        # Crear loop temporal
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(redis_cache.set_exchange_info(exchange_info))
+                        finally:
+                            loop.close()
+                except Exception as cache_error:
+                    logger.debug(f"No se pudo guardar en cache Redis: {cache_error}")
+            
+            return exchange_info
+        except Exception as e:
+            logger.error(f"Error obteniendo exchange_info: {e}")
+            raise
 
 # Instancia global - inicialización lazy
 binance_client_singleton = None

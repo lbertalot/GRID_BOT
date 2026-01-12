@@ -646,5 +646,69 @@ class TradingMetrics:
         """
         self.portfolio_initial_value = value
 
+# ============================================================================
+# MÉTRICAS DE CONCURRENCIA (Bug #1 Fix)
+# ============================================================================
+
+# Conflictos de balance por optimistic locking
+balance_update_conflicts_total = Counter(
+    'balance_update_conflicts_total',
+    'Total de conflictos detectados en updates de balance',
+    ['asset']
+)
+
+# Métricas de locks distribuidos (Bug #2 fix)
+distributed_lock_acquired_total = Counter(
+    'distributed_lock_acquired_total',
+    'Total de locks distribuidos adquiridos exitosamente',
+    ['lock_name']
+)
+
+distributed_lock_skipped_total = Counter(
+    'distributed_lock_skipped_total',
+    'Total de ejecuciones omitidas por lock tomado',
+    ['lock_name', 'function']
+)
+
+distributed_lock_errors_total = Counter(
+    'distributed_lock_errors_total',
+    'Total de errores en locks distribuidos',
+    ['lock_name', 'error_type']
+)
+
+distributed_lock_duration_seconds = Histogram(
+    'distributed_lock_duration_seconds',
+    'Duración de locks distribuidos en segundos',
+    ['lock_name'],
+    buckets=[0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0]
+)
+
 # Instancia global para usar en toda la aplicación
 trading_metrics = TradingMetrics() 
+
+# ============================================================================
+# MÉTRICAS DE WEBSOCKET (User Data Stream - Bug #4)
+# ============================================================================
+
+ws_events_total = Counter(
+    'ws_events_total',
+    'Total de eventos recibidos por WebSocket user stream',
+    ['event']
+)
+
+ws_reconnects_total = Counter(
+    'ws_reconnects_total',
+    'Total de reconexiones realizadas en WebSocket user stream'
+)
+
+ws_errors_total = Counter(
+    'ws_errors_total',
+    'Total de errores en WebSocket user stream',
+    ['phase']
+)
+
+ws_fill_latency_seconds = Histogram(
+    'ws_fill_latency_seconds',
+    'Latencia de procesamiento de fills recibidos por WebSocket',
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5]
+)

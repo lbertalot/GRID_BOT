@@ -78,6 +78,8 @@ from app.core.auth import require_auth
 async def update_pnl_metrics(api_key: str = Depends(require_auth)):
     """Actualizar métricas de P&L en tiempo real (protegido)"""
     try:
+        import asyncio
+        
         # Cargar variables de entorno
         load_dotenv()
         api_key = os.getenv("BINANCE_API_KEY")
@@ -89,8 +91,8 @@ async def update_pnl_metrics(api_key: str = Depends(require_auth)):
         # Conectar a Binance
         client = Client(api_key, api_secret)
         
-        # Obtener información de la cuenta
-        account = client.get_account()
+        # ✅ FIX: Obtener información de la cuenta (non-blocking)
+        account = await asyncio.to_thread(client.get_account)
         
         # Calcular valor total del portfolio
         total_value_usdt = 0.0
@@ -108,9 +110,9 @@ async def update_pnl_metrics(api_key: str = Depends(require_auth)):
                 elif asset == 'BUSD':
                     value_usdt = total  # BUSD ≈ USDT
                 else:
-                    # Obtener precio en USDT
+                    # ✅ FIX: Obtener precio en USDT (non-blocking)
                     try:
-                        ticker = client.get_symbol_ticker(symbol=f"{asset}USDT")
+                        ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=f"{asset}USDT")
                         price_usdt = float(ticker['price'])
                         value_usdt = total * price_usdt
                     except:

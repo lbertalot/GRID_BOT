@@ -5,6 +5,7 @@ Asegura que las operaciones sean rentables después de comisiones
 """
 
 import logging
+from decimal import Decimal
 from typing import Dict, Optional, Tuple
 from app.services.commission import calculate_commission, validate_minimum_profit
 
@@ -37,20 +38,31 @@ class CommissionAwareTrading:
             (es_rentable, detalles)
         """
         try:
+            # ✅ FIX: Convertir a Decimal para compatibilidad con funciones actualizadas
+            buy_price_dec = Decimal(str(buy_price))
+            sell_price_dec = Decimal(str(sell_price))
+            quantity_dec = Decimal(str(quantity))
+            min_profit_dec = Decimal(str(self.min_profit_after_commission))
+            
             # Calcular ganancia con comisiones
             is_profitable, profit_data = validate_minimum_profit(
-                buy_price=buy_price,
-                sell_price=sell_price,
-                quantity=quantity,
-                min_profit_percentage=self.min_profit_after_commission
+                buy_price=buy_price_dec,
+                sell_price=sell_price_dec,
+                quantity=quantity_dec,
+                min_profit_percentage=min_profit_dec
             )
             
-            if is_profitable:
-                logger.info(f"✅ {symbol}: Operación rentable - Ganancia neta: ${profit_data['net_profit']:.4f}")
-            else:
-                logger.warning(f"⚠️ {symbol}: Operación no rentable - Pérdida neta: ${profit_data['net_profit']:.4f}")
+            # Convertir Decimal a float para logging (compatibilidad)
+            net_profit_float = float(profit_data['net_profit'])
             
-            return is_profitable, profit_data
+            if is_profitable:
+                logger.info(f"✅ {symbol}: Operación rentable - Ganancia neta: ${net_profit_float:.4f}")
+            else:
+                logger.warning(f"⚠️ {symbol}: Operación no rentable - Pérdida neta: ${net_profit_float:.4f}")
+            
+            # Convertir valores Decimal a float en el dict para compatibilidad
+            profit_data_float = {k: float(v) if isinstance(v, Decimal) else v for k, v in profit_data.items()}
+            return is_profitable, profit_data_float
             
         except Exception as e:
             logger.error(f"Error validando rentabilidad de {symbol}: {e}")
@@ -76,37 +88,43 @@ class CommissionAwareTrading:
             (cantidad_óptima, detalles)
         """
         try:
+            # ✅ FIX: Convertir a Decimal para cálculos precisos
+            available_usdt_dec = Decimal(str(available_usdt))
+            current_price_dec = Decimal(str(current_price))
+            min_notional_dec = Decimal(str(min_notional))
+            
             # Calcular cantidad máxima posible
-            max_quantity = available_usdt / current_price
+            max_quantity = available_usdt_dec / current_price_dec
             
             # Calcular comisión para esta cantidad
-            notional_value = max_quantity * current_price
+            notional_value = max_quantity * current_price_dec
             commission = calculate_commission(notional_value, "MARKET", symbol)
             
             # Ajustar cantidad para incluir comisión
-            adjusted_quantity = (available_usdt - commission.commission_usdt) / current_price
+            adjusted_quantity = (available_usdt_dec - commission.commission_usdt) / current_price_dec
             
             # Verificar mínimo notional
-            if adjusted_quantity * current_price < min_notional:
+            if adjusted_quantity * current_price_dec < min_notional_dec:
                 # Calcular cantidad mínima que cumple notional + comisión
-                min_quantity = min_notional / current_price
-                commission_for_min = calculate_commission(min_notional, "MARKET", symbol)
-                total_required = min_notional + commission_for_min.commission_usdt
+                min_quantity = min_notional_dec / current_price_dec
+                commission_for_min = calculate_commission(min_notional_dec, "MARKET", symbol)
+                total_required = min_notional_dec + commission_for_min.commission_usdt
                 
-                if total_required > available_usdt:
+                if total_required > available_usdt_dec:
                     return 0.0, {
                         "error": f"Saldo insuficiente para cumplir mínimo notional + comisión",
-                        "required": total_required,
-                        "available": available_usdt
+                        "required": float(total_required),
+                        "available": float(available_usdt_dec)
                     }
                 
                 adjusted_quantity = min_quantity
             
-            return adjusted_quantity, {
-                "original_quantity": max_quantity,
-                "adjusted_quantity": adjusted_quantity,
-                "commission": commission.commission_usdt,
-                "notional_value": adjusted_quantity * current_price
+            # Convertir Decimal a float para retorno (compatibilidad)
+            return float(adjusted_quantity), {
+                "original_quantity": float(max_quantity),
+                "adjusted_quantity": float(adjusted_quantity),
+                "commission": float(commission.commission_usdt),
+                "notional_value": float(adjusted_quantity * current_price_dec)
             }
             
         except Exception as e:

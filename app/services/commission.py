@@ -5,6 +5,7 @@ Siguiendo principios de programación funcional
 """
 
 import logging
+from decimal import Decimal
 from typing import Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from binance import Client
@@ -15,27 +16,27 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CommissionRates:
     """Tasas de comisión para un símbolo"""
-    maker: float
-    taker: float
+    maker: Decimal  # ✅ FIX: Decimal en lugar de float
+    taker: Decimal  # ✅ FIX: Decimal en lugar de float
     symbol: Optional[str] = None
 
 @dataclass
 class CommissionResult:
     """Resultado del cálculo de comisión"""
-    commission_usdt: float
-    commission_percentage: float
-    notional_value: float
+    commission_usdt: Decimal  # ✅ FIX: Decimal en lugar de float
+    commission_percentage: Decimal  # ✅ FIX: Decimal en lugar de float
+    notional_value: Decimal  # ✅ FIX: Decimal en lugar de float
     order_type: str
 
 def get_default_commission_rates() -> CommissionRates:
     """Obtiene tasas de comisión por defecto"""
     return CommissionRates(
-        maker=0.001,  # 0.1%
-        taker=0.001   # 0.1%
+        maker=Decimal('0.001'),  # 0.1% - ✅ FIX: Decimal
+        taker=Decimal('0.001')   # 0.1% - ✅ FIX: Decimal
     )
 
 def calculate_commission(
-    notional_value: float,
+    notional_value: Decimal,  # ✅ FIX: Decimal en lugar de float
     order_type: str = 'MARKET',
     commission_rates: Optional[CommissionRates] = None
 ) -> CommissionResult:
@@ -58,20 +59,20 @@ def calculate_commission(
     commission_usdt = notional_value * commission_rate
     
     return CommissionResult(
-        commission_usdt=round(commission_usdt, 8),
-        commission_percentage=commission_rate * 100,
+        commission_usdt=round(commission_usdt, 8),  # Decimal mantiene precisión
+        commission_percentage=commission_rate * Decimal('100'),  # ✅ FIX: Decimal
         notional_value=notional_value,
         order_type=order_type
     )
 
 def calculate_profit_with_commissions(
-    buy_price: float,
-    sell_price: float,
-    quantity: float,
+    buy_price: Decimal,  # ✅ FIX: Decimal en lugar de float
+    sell_price: Decimal,  # ✅ FIX: Decimal en lugar de float
+    quantity: Decimal,  # ✅ FIX: Decimal en lugar de float
     buy_order_type: str = 'MARKET',
     sell_order_type: str = 'MARKET',
     commission_rates: Optional[CommissionRates] = None
-) -> Dict[str, float]:
+) -> Dict[str, Decimal]:  # ✅ FIX: Decimal en lugar de float
     """
     Calcula ganancia/pérdida considerando comisiones (función pura)
     """
@@ -97,14 +98,14 @@ def calculate_profit_with_commissions(
         'sell_commission': sell_commission.commission_usdt,
         'total_commission': total_commission,
         'net_profit': net_profit,
-        'profit_percentage': (net_profit / buy_notional * 100) if buy_notional > 0 else 0
+        'profit_percentage': (net_profit / buy_notional * Decimal('100')) if buy_notional > 0 else Decimal('0')  # ✅ FIX: Decimal
     }
 
 def validate_minimum_profit(
-    buy_price: float,
-    sell_price: float,
-    quantity: float,
-    min_profit_percentage: float = 0.5,
+    buy_price: Decimal,  # ✅ FIX: Decimal en lugar de float
+    sell_price: Decimal,  # ✅ FIX: Decimal en lugar de float
+    quantity: Decimal,  # ✅ FIX: Decimal en lugar de float
+    min_profit_percentage: Decimal = Decimal('0.5'),  # ✅ FIX: Decimal
     buy_order_type: str = 'MARKET',
     sell_order_type: str = 'MARKET',
     commission_rates: Optional[CommissionRates] = None
@@ -129,11 +130,16 @@ async def update_commission_rates_from_binance(
     Actualiza tasas de comisión desde Binance (función pura)
     """
     try:
-        client = Client(api_key, api_secret)
-        account_info = client.get_account()
+        import asyncio
         
-        maker_commission = float(account_info.get('makerCommission', 15)) / 10000
-        taker_commission = float(account_info.get('takerCommission', 15)) / 10000
+        client = Client(api_key, api_secret)
+        
+        # ✅ FIX: Obtener account info (non-blocking)
+        account_info = await asyncio.to_thread(client.get_account)
+        
+        # ✅ FIX: Usar Decimal para precisión financiera
+        maker_commission = Decimal(str(account_info.get('makerCommission', 15))) / Decimal('10000')
+        taker_commission = Decimal(str(account_info.get('takerCommission', 15))) / Decimal('10000')
         
         return CommissionRates(
             maker=maker_commission,

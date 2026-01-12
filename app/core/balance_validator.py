@@ -19,6 +19,24 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ✅ FIX: Helper functions for async file I/O
+async def _read_json_async(filepath: str) -> dict:
+    """Read JSON file asynchronously"""
+    def _read():
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    return await asyncio.to_thread(_read)
+
+
+async def _write_json_async(filepath: str, data: dict) -> None:
+    """Write JSON file asynchronously"""
+    def _write():
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2, default=str)
+    await asyncio.to_thread(_write)
+
+
 class BalanceValidator:
     def __init__(self):
         self.config = settings
@@ -115,10 +133,8 @@ class BalanceValidator:
     async def get_system_total_balance(self) -> Decimal:
         """Obtener balance total del sistema desde configuración"""
         try:
-            # Cargar configuración desde archivo
-            import json
-            with open('grid_config_optimized.json', 'r') as f:
-                config = json.load(f)
+            # ✅ FIX: Cargar configuración desde archivo (non-blocking)
+            config = await _read_json_async('grid_config_optimized.json')
             
             # Buscar en metadata de configuración
             if '_safe_config_metadata' in config:
@@ -205,10 +221,8 @@ class BalanceValidator:
     async def get_real_binance_balance(self) -> Decimal:
         """Obtener balance real de Binance desde configuración actualizada"""
         try:
-            # Cargar configuración desde archivo
-            import json
-            with open('grid_config_optimized.json', 'r') as f:
-                config = json.load(f)
+            # ✅ FIX: Cargar configuración desde archivo (non-blocking)
+            config = await _read_json_async('grid_config_optimized.json')
             
             # Balance real proporcionado por el usuario: 320.03279417 USDT
             # Este debe ser actualizado cuando el usuario proporcione nuevos datos
@@ -328,10 +342,8 @@ class BalanceValidator:
         try:
             logger.info(f"🔧 Iniciando corrección del balance del sistema a {target_balance} USDT")
             
-            # Cargar configuración actual
-            import json
-            with open('grid_config_optimized.json', 'r') as f:
-                config = json.load(f)
+            # ✅ FIX: Cargar configuración actual (non-blocking)
+            config = await _read_json_async('grid_config_optimized.json')
             
             # Actualizar balance reportado por el sistema
             if '_safe_config_metadata' in config:
@@ -339,9 +351,8 @@ class BalanceValidator:
                 config['_safe_config_metadata']['balance_corrected_at'] = datetime.now().isoformat()
                 config['_safe_config_metadata']['balance_correction_reason'] = 'SYNC_WITH_BINANCE_REAL_BALANCE'
             
-            # Guardar configuración actualizada
-            with open('grid_config_optimized.json', 'w') as f:
-                json.dump(config, f, indent=2)
+            # ✅ FIX: Guardar configuración actualizada (non-blocking)
+            await _write_json_async('grid_config_optimized.json', config)
             
             logger.info(f"✅ Balance del sistema corregido a {target_balance} USDT")
             

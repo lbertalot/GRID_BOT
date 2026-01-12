@@ -51,7 +51,18 @@ class BinanceService:
         """Ejecuta __init__."""
         self.api_key = os.getenv("BINANCE_API_KEY", "")
         self.api_secret = os.getenv("BINANCE_SECRET_KEY", "")
-        self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
+        # ✅ FASE 4: Usar singleton en lugar de crear nuevo cliente
+        try:
+            from app.services.binance_client_singleton import get_binance_client_singleton
+            singleton = get_binance_client_singleton()
+            if singleton.is_ready():
+                self.client = singleton.client
+            else:
+                # Fallback si singleton no está listo
+                self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
+        except Exception as e:
+            logger.warning(f"No se pudo usar singleton, creando cliente directo: {e}")
+            self.client = Client(self.api_key, self.api_secret, testnet=settings.binance_testnet)
         
         # Cache para información de símbolos
         self._symbol_info_cache = {}

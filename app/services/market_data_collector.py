@@ -36,13 +36,31 @@ class MarketDataCollector:
         self.ttl_seconds = ttl_seconds
         self.cache = get_async_cache()
         self.binance = AsyncBinanceWrapper(ttl_seconds=ttl_seconds)
-        # Cliente sync solo para metadata/validación (usado en to_thread)
-        api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
-        api_secret = os.getenv("BINANCE_SECRET_KEY")
-        # Forzar testnet=false para producción - resolver errores -2015
-        self._client = Client(api_key, api_secret, testnet=False)  # (os.getenv("BINANCE_TESTNET", "false").lower() == "true"))
-        self._validator = OrderValidator(self._client)
+        # Cliente sync solo para metadata/validación (usado en to_thread) - inicialización lazy
+        self._client = None
+        self._validator = None
         self._db_url = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+    
+    async def _ensure_client(self):
+        """
+        Inicializa el cliente de Binance de forma lazy (solo cuando se necesita).
+        
+        ✅ Bug #3 Fix: Inicialización envuelta en asyncio.to_thread() para no bloquear event loop
+        """
+        if self._client is None:
+            def _init():
+                api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+                api_secret = os.getenv("BINANCE_SECRET_KEY")
+                # Forzar testnet=false para producción - resolver errores -2015
+                client = Client(api_key, api_secret, testnet=False)
+                validator = OrderValidator(client)
+                return client, validator
+            
+            # ✅ FIX: Ejecutar inicialización en thread separado
+            self._client, self._validator = await asyncio.to_thread(_init)
+            logger.debug("✅ Binance client inicializado (async)")
+        
+        return self._client
 
     async def get_price(self, symbol: str) -> float:
         """Obtiene precio con caché TTL 5s y backoff."""
@@ -53,8 +71,18 @@ class MarketDataCollector:
         return await self.binance.get_klines(symbol, interval, limit)
 
     async def validate_order(self, symbol: str, quantity: float, order_type: str = "MARKET", price: Optional[float] = None) -> Dict[str, Any]:
-        """Valida y ajusta cantidad/precio usando reglas de Binance (stepSize/tickSize/minNotional)."""
-        return self._validator.validate_order_parameters(symbol, quantity, side="BUY", order_type=order_type, price=price)  # side no afecta validación de cantidades
+        """
+        Valida y ajusta cantidad/precio usando reglas de Binance (stepSize/tickSize/minNotional).
+        
+        ✅ Bug #3 Fix: Validación envuelta en asyncio.to_thread()
+        """
+        await self._ensure_client()  # Inicializar cliente lazy si aún no existe (ahora es async)
+        
+        # ✅ FIX: Ejecutar validación en thread separado
+        return await asyncio.to_thread(
+            self._validator.validate_order_parameters,
+            symbol, quantity, "BUY", order_type, price
+        )  # side no afecta validación de cantidades
 
     async def save_klines_to_db(self, symbol: str, interval: str, klines: List[List[Any]]) -> int:
         """Guarda klines en tabla klines_data (crea si no existe). Retorna filas insertadas."""

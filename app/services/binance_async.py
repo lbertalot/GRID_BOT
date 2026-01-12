@@ -75,11 +75,18 @@ class AsyncBinanceWrapper:
     """
 
     def __init__(self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10):
+        # ✅ FASE 4: Usar singleton en lugar de crear nuevo cliente
         if USE_REAL:
-            api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
-            api_secret = os.getenv("BINANCE_SECRET_KEY")
-            testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
-            self.client = Client(api_key, api_secret, testnet=testnet)
+            from app.services.binance_client_singleton import get_binance_client_singleton
+            singleton = get_binance_client_singleton()
+            if singleton.is_ready():
+                self.client = singleton.client
+            else:
+                # Fallback si singleton no está listo
+                api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+                api_secret = os.getenv("BINANCE_SECRET_KEY")
+                testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+                self.client = Client(api_key, api_secret, testnet=testnet)
         else:
             self.client = Client()
         self.cache = get_async_cache()

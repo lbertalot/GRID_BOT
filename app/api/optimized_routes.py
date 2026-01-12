@@ -296,7 +296,7 @@ async def save_configuration(
 ):
     """Save current configuration to file"""
     try:
-        success = manager.save_configuration(filepath)
+        success = await manager.save_configuration(filepath)
         
         if success:
             return {

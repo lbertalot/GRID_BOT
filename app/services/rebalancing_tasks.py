@@ -1,12 +1,18 @@
 from app.core.celery_app import celery_app
+from app.core.distributed_lock import with_distributed_lock
 import logging
 import asyncio
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True)
+@with_distributed_lock("rebalancing", timeout=600, blocking=False)
 def check_and_rebalance(self):
-    """Verifica y ejecuta rebalanceo automático (llamando al AutoRebalancer)."""
+    """
+    Verifica y ejecuta rebalanceo automático (llamando al AutoRebalancer).
+    
+    Con lock distribuido para prevenir múltiples rebalanceos simultáneos.
+    """
     try:
         from app.services.auto_rebalancer import auto_rebalancer
         logger.info("Verificando necesidad de rebalanceo")

@@ -20,7 +20,15 @@ class OrderValidator:
         """Obtiene información detallada de un símbolo incluyendo stepSize y minQty"""
         try:
             if symbol not in self._symbol_info_cache:
-                exchange_info = self.client.get_exchange_info()
+                # ✅ FIX: Usar get_exchange_info() con cache si el cliente lo soporta
+                # Si el cliente es binance_client_singleton, usar su método con cache
+                if hasattr(self.client, 'get_exchange_info'):
+                    # Cliente tiene método get_exchange_info (probablemente singleton)
+                    exchange_info = self.client.get_exchange_info(use_cache=True)
+                else:
+                    # Cliente directo de binance, sin cache
+                    exchange_info = self.client.get_exchange_info()
+                
                 for s in exchange_info['symbols']:
                     if s['symbol'] == symbol.upper():
                         # Extraer filtros importantes

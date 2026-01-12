@@ -3,6 +3,7 @@ Servicio para integrar métricas de rentabilidad en el bot de trading
 """
 
 import time
+import asyncio
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
@@ -142,7 +143,7 @@ class MetricsService:
                         return balances
                 except Exception as e:
                     logger.warning(f"Retry balances ({i+1}/3) failed: {e}")
-                    time.sleep(0.5)
+                    await asyncio.sleep(0.5)  # ✅ FIX: asyncio.sleep en lugar de time.sleep
             cached = await self._cache.get('balances:last')
             if cached:
                 import ast
@@ -394,29 +395,43 @@ class MetricsService:
             db = SessionLocal()
             
             try:
+                # ✅ FASE 5: Optimización - Query combinada para todos los assets en una sola consulta
+                from sqlalchemy import func
+                
+                # Obtener símbolos de assets que tienen balance
+                symbols_to_query = [
+                    f"{asset}USDT" for asset in ['BTC', 'ETH', 'BNB']
+                    if asset in balances and balances[asset] > 0
+                ]
+                
+                if not symbols_to_query:
+                    return asset_metrics
+                
+                # Query combinada: obtener sumas de BUY y SELL por símbolo en una sola consulta
+                results = db.query(
+                    Trade.symbol,
+                    Trade.side,
+                    func.sum(Trade.quantity * Trade.entry_price).label('total_value')
+                ).filter(
+                    Trade.symbol.in_(symbols_to_query)
+                ).group_by(
+                    Trade.symbol, Trade.side
+                ).all()
+                
+                # Procesar resultados
+                asset_data = {}
+                for symbol, side, total_value in results:
+                    asset = symbol.replace('USDT', '')
+                    if asset not in asset_data:
+                        asset_data[asset] = {'buy': 0.0, 'sell': 0.0}
+                    asset_data[asset][side.lower()] = float(total_value or 0.0)
+                
+                # Calcular métricas para cada asset
                 for asset in ['BTC', 'ETH', 'BNB']:
                     if asset in balances and balances[asset] > 0:
-                        symbol = f"{asset}USDT"
-                        
-                        # Consulta optimizada: calcular métricas por activo en una sola consulta
-                        from sqlalchemy import func
-                        buy_trades = db.query(
-                            func.sum(Trade.quantity * Trade.entry_price)
-                        ).filter(
-                            Trade.symbol == symbol,
-                            Trade.side == 'BUY'
-                        ).scalar() or 0.0
-                        
-                        sell_trades = db.query(
-                            func.sum(Trade.quantity * Trade.entry_price)
-                        ).filter(
-                            Trade.symbol == symbol,
-                            Trade.side == 'SELL'
-                        ).scalar() or 0.0
-                        
-                        # Calcular métricas
-                        asset_investment = buy_trades
-                        asset_profit = sell_trades
+                        data = asset_data.get(asset, {'buy': 0.0, 'sell': 0.0})
+                        asset_investment = data['buy']
+                        asset_profit = data['sell']
                         net_profit = asset_profit - asset_investment
                         
                         # Calcular ROI del activo

@@ -15,7 +15,10 @@ from app.strategies.base import (
     TradingStrategy, StrategyConfig, StrategyType, 
     TradingResult, Order, OrderSide, OrderStatus
 )
-from app.services.binance_client import client as binance_client
+# ✅ FASE 4: Migrado a singleton
+from app.services.binance_client_singleton import get_binance_client_singleton
+_client_singleton = get_binance_client_singleton()
+binance_client = _client_singleton.client if _client_singleton.is_ready() else None
 from app.services.telegram_alert import send_telegram_alert
 
 logger = logging.getLogger(__name__)
@@ -66,7 +69,10 @@ class DCAStrategy(TradingStrategy):
             
             # Verificar que el símbolo existe en Binance
             try:
-                ticker = binance_client.get_symbol_ticker(symbol=self.config.symbol)
+                import asyncio
+                
+                # ✅ FIX: Verificar símbolo (non-blocking)
+                ticker = await asyncio.to_thread(binance_client.get_symbol_ticker, symbol=self.config.symbol)
                 if not ticker:
                     logger.error(f"Símbolo {self.config.symbol} no encontrado en Binance")
                     return False
@@ -189,8 +195,10 @@ class DCAStrategy(TradingStrategy):
     async def get_current_position(self) -> Dict[str, Any]:
         """Obtiene la posición actual para el símbolo"""
         try:
-            # Obtener balance del activo
-            account_info = binance_client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Obtener balance del activo (non-blocking)
+            account_info = await asyncio.to_thread(binance_client.get_account)
             asset = self.config.symbol.replace('USDT', '')
             
             for balance in account_info['balances']:
@@ -224,7 +232,10 @@ class DCAStrategy(TradingStrategy):
     async def _get_current_price(self) -> Optional[float]:
         """Obtiene el precio actual del activo"""
         try:
-            ticker = binance_client.get_symbol_ticker(symbol=self.config.symbol)
+            import asyncio
+            
+            # ✅ FIX: Obtener precio (non-blocking)
+            ticker = await asyncio.to_thread(binance_client.get_symbol_ticker, symbol=self.config.symbol)
             return float(ticker['price'])
         except Exception as e:
             logger.error(f"Error obteniendo precio de {self.config.symbol}: {e}")
@@ -233,7 +244,10 @@ class DCAStrategy(TradingStrategy):
     async def _check_balance(self, amount: float) -> bool:
         """Verifica si hay balance suficiente en USDT"""
         try:
-            account_info = binance_client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Verificar balance (non-blocking)
+            account_info = await asyncio.to_thread(binance_client.get_account)
             
             for balance in account_info['balances']:
                 if balance['asset'] == 'USDT':

@@ -25,6 +25,7 @@ from app.core.circuit_breakers import CircuitBreakers
 from app.core.strategy_blacklist import StrategyBlacklist
 from app.db.session import SessionLocal
 from app.models.trade import Trade
+from app.services.trade_executor import get_trade_executor
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,10 @@ class AutoRebalancerV2:
             Balance de USDT
         """
         try:
-            account_info = self.binance_client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Obtener account info (non-blocking)
+            account_info = await asyncio.to_thread(self.binance_client.get_account)
             
             for balance in account_info['balances']:
                 if balance['asset'] == 'USDT':
@@ -234,7 +238,10 @@ class AutoRebalancerV2:
             Dict con balances por activo
         """
         try:
-            account_info = self.binance_client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Obtener account info (non-blocking)
+            account_info = await asyncio.to_thread(self.binance_client.get_account)
             balances = {}
             
             for balance in account_info['balances']:
@@ -271,18 +278,74 @@ class AutoRebalancerV2:
         logger.info(f"📋 Lista de prioridades: {', '.join(self.asset_priority)}")
         logger.info(f"🛡️ Activos protegidos: {', '.join(self.protected_assets)}")
         
-        # Log de balances disponibles para liquidación
+        # ✅ FIX: Paralelizar obtención de precios para logging
         logger.info("💰 Balances disponibles para liquidación:")
+        price_tasks = []
+        assets_to_log = []
         for asset in self.asset_priority:
             if asset in balances and balances[asset] > 0:
-                try:
-                    symbol = f"{asset}USDT" if not asset.endswith('USDT') else asset
-                    ticker = self.binance_client.get_symbol_ticker(symbol=symbol)
-                    current_price = float(ticker['price'])
-                    current_value_usdt = balances[asset] * current_price
-                    logger.info(f"   {asset}: {balances[asset]:.6f} (~${current_value_usdt:.2f})")
-                except:
-                    logger.info(f"   {asset}: {balances[asset]:.6f} (precio no disponible)")
+                symbol = f"{asset}USDT" if not asset.endswith('USDT') else asset
+                assets_to_log.append((asset, symbol, balances[asset]))
+                # Envolver en asyncio.to_thread para paralelizar
+                price_tasks.append(
+                    asyncio.to_thread(self.binance_client.get_symbol_ticker, symbol=symbol)
+                )
+        
+        # Ejecutar todas las llamadas en paralelo
+        if price_tasks:
+            try:
+                tickers = await asyncio.gather(*price_tasks, return_exceptions=True)
+                for (asset, symbol, balance), ticker in zip(assets_to_log, tickers):
+                    if isinstance(ticker, Exception):
+                        logger.info(f"   {asset}: {balance:.6f} (precio no disponible)")
+                    else:
+                        try:
+                            current_price = float(ticker['price'])
+                            current_value_usdt = balance * current_price
+                            logger.info(f"   {asset}: {balance:.6f} (~${current_value_usdt:.2f})")
+                        except:
+                            logger.info(f"   {asset}: {balance:.6f} (precio no disponible)")
+            except Exception as e:
+                logger.warning(f"Error obteniendo precios en paralelo: {e}")
+                # Fallback: log sin precios
+                for asset, _, balance in assets_to_log:
+                    logger.info(f"   {asset}: {balance:.6f} (precio no disponible)")
+        
+        # ✅ FIX: Pre-obtener precios en paralelo para activos candidatos
+        candidate_assets = []
+        for asset in self.asset_priority:
+            if remaining_deficit <= 0:
+                break
+            
+            # Verificar filtros antes de obtener precio
+            if self.strategy_blacklist.is_symbol_blacklisted(asset):
+                continue
+            if asset in self.protected_assets or f"{asset}USDT" in self.protected_assets:
+                continue
+            if asset not in balances or balances[asset] <= 0:
+                continue
+            
+            symbol = f"{asset}USDT" if not asset.endswith('USDT') else asset
+            candidate_assets.append((asset, symbol, balances[asset]))
+        
+        # Obtener precios en paralelo para todos los candidatos
+        price_tasks = [
+            asyncio.to_thread(self.binance_client.get_symbol_ticker, symbol=symbol)
+            for _, symbol, _ in candidate_assets
+        ]
+        
+        prices = {}
+        if price_tasks:
+            try:
+                tickers = await asyncio.gather(*price_tasks, return_exceptions=True)
+                for (asset, symbol, _), ticker in zip(candidate_assets, tickers):
+                    if not isinstance(ticker, Exception):
+                        try:
+                            prices[asset] = float(ticker['price'])
+                        except:
+                            pass
+            except Exception as e:
+                logger.warning(f"Error obteniendo precios en paralelo: {e}")
         
         # Iterar por prioridades (de mayor a menor prioridad)
         for asset in self.asset_priority:
@@ -306,11 +369,18 @@ class AutoRebalancerV2:
                 logger.info(f"💰 {asset} sin balance - saltando")
                 continue
             
-            # Calcular valor en USDT
+            # Calcular valor en USDT usando precio obtenido en paralelo
             try:
                 symbol = f"{asset}USDT" if not asset.endswith('USDT') else asset
-                ticker = self.binance_client.get_symbol_ticker(symbol=symbol)
-                current_price = float(ticker['price'])
+                
+                # Usar precio obtenido en paralelo o obtener si no está disponible
+                if asset in prices:
+                    current_price = prices[asset]
+                else:
+                    # Fallback: obtener precio individualmente
+                    ticker = await asyncio.to_thread(self.binance_client.get_symbol_ticker, symbol=symbol)
+                    current_price = float(ticker['price'])
+                
                 current_value_usdt = balances[asset] * current_price
                 
                 logger.info(f"📊 {asset}: Balance={balances[asset]:.6f}, Precio=${current_price:.6f}, Valor=${current_value_usdt:.2f}")
@@ -455,15 +525,14 @@ class AutoRebalancerV2:
                 
                 logger.info(f"💸 Vendiendo {symbol} - Cantidad: {quantity:.8f}")
                 
-                # Ejecutar orden de venta
-                order = self.binance_client.create_order(
+                # Ejecutar orden de venta CON actualización automática de balances
+                trade_executor = get_trade_executor()
+                order = trade_executor.execute_market_sell(
                     symbol=symbol,
-                    side="SELL",
-                    type="MARKET",
-                    quantity=quantity
+                    quantity=str(quantity)
                 )
                 
-                # Guardar trade en base de datos
+                # Guardar trade en base de datos (el balance ya fue actualizado por TradeExecutor)
                 if order.get('status') == 'FILLED':
                     self._save_trade_to_db(
                         symbol=symbol,
@@ -496,7 +565,7 @@ class AutoRebalancerV2:
         
         return results
     
-    def _save_trade_to_db(self, symbol: str, side: str, quantity: float, price: float, order_id: str):
+    def _save_trade_to_db(self, symbol: str, side: str, quantity: float, price: float, order_id: str) -> None:
         """
         Guarda un trade en la base de datos.
         
