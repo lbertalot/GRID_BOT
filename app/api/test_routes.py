@@ -18,16 +18,20 @@ async def test_binance_connection():
                 "timestamp": datetime.now().isoformat()
             }
         from binance import Client
+        import asyncio
+        
         api_key = os.getenv("BINANCE_API_KEY", "")
         api_secret = os.getenv("BINANCE_SECRET_KEY", "")
-        if not api_key or not api_secret:
+        if not api_key or api_secret:
             return {
                 "status": "error",
                 "message": "API Keys de Binance no configuradas",
                 "timestamp": datetime.now().isoformat()
             }
         client = Client(api_key, api_secret)
-        account_info = client.get_account()
+        
+        # ✅ FIX: Get account info (non-blocking)
+        account_info = await asyncio.to_thread(client.get_account)
         if 'accountType' in account_info:
             return {
                 "status": "success",

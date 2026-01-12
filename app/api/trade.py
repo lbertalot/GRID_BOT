@@ -181,14 +181,19 @@ async def place_order(
         pass
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_SECRET_KEY", "")
-    client = Client(api_key_binance, api_secret)
+    
+    # ✅ Bug #3 Fix: Inicializar client en thread separado
+    # Usar testnet si está habilitado por entorno
+    use_testnet = os.getenv("BINANCE_TESTNET", "false").lower() in {"1", "true", "yes"}
+    client = await asyncio.to_thread(Client, api_key_binance, api_secret, None, use_testnet)
 
     # Validación previa unificada (PRECIO/LOT/MIN_NOTIONAL + balance) usando dependencia E2E
     try:
         symbol = order.symbol.upper()
         current_price = None
         try:
-            ticker = client.get_symbol_ticker(symbol=symbol)
+            # ✅ Bug #3 Fix: Obtener ticker en thread separado
+            ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=symbol)
             current_price = float(ticker["price"])
         except Exception:
             current_price = None

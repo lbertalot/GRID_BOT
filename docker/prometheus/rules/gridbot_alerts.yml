@@ -1,0 +1,42 @@
+groups:
+  - name: gridbot.general
+    interval: 30s
+    rules:
+      - alert: HighAPILatencyP99
+        expr: |
+          histogram_quantile(0.99, sum(rate(api_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta latencia P99 de API (>500ms)"
+          description: "La latencia P99 de API es {{ $value }}s en los últimos 5m"
+
+      - alert: HighLockSkipRate
+        expr: |
+          (sum(rate(distributed_lock_skipped_total[5m])) / clamp_min(sum(rate(distributed_lock_acquired_total[5m])) + sum(rate(distributed_lock_skipped_total[5m])), 1)) > 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa alta de locks omitidos (>10%)"
+          description: "Skip rate actual {{ $value | humanizePercentage }} en 15m"
+
+      - alert: BalanceConflicts
+        expr: sum(rate(balance_update_conflicts_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conflictos de actualización de balance elevados"
+          description: "Más de 1 conflicto/min en los últimos 10m"
+
+      - alert: WSReconnectStorm
+        expr: rate(ws_reconnects_total[5m]) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exceso de reconexiones de WebSocket (>3/5m)"
+          description: "WebSocket user stream inestable, revisar conectividad/credenciales"
+

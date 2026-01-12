@@ -14,7 +14,10 @@ from enum import Enum
 import numpy as np
 from pydantic import BaseModel, Field
 
-from app.services.binance_client import client as binance_client
+# ✅ FASE 4: Migrado a singleton
+from app.services.binance_client_singleton import get_binance_client_singleton
+_client_singleton = get_binance_client_singleton()
+binance_client = _client_singleton.client if _client_singleton.is_ready() else None
 from app.services.telegram_alert import send_telegram_alert
 
 logger = logging.getLogger(__name__)

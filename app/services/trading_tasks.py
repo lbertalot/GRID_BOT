@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from celery import shared_task
 from app.core.celery_app import celery_app
 import os
@@ -29,6 +29,8 @@ from app.core.risk_manager import RiskManager, PositionSizeParams
 from app.services.cache import get_async_cache
 from app.core.metrics import dust_assets_count, dust_value_usd, dust_swept_usd_total, last_dust_sweep_timestamp
 from app.services.auto_rebalancer_v2 import auto_rebalancer_v2
+from app.services.trade_executor import get_trade_executor
+from app.core.distributed_lock import with_distributed_lock
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,8 @@ CALIBRATION_MODE = os.getenv('CALIBRATION_MODE', 'false').lower() == 'true'
 BALANCES_CACHE_KEY = "balances:last"
 BALANCES_TTL = 300
 
-async def _get_cycle_state() -> Dict:
+async def _get_cycle_state() -> Dict[str, Any]:
+    """Obtiene el estado actual del ciclo desde cache"""
     raw = await _CACHE.get(_CYCLE_KEY)
     if not raw:
         return {"started_at": None, "decision": None}
@@ -57,13 +60,16 @@ async def _get_cycle_state() -> Dict:
     except Exception:
         return {"started_at": None, "decision": None}
 
-async def _set_cycle_state(state: Dict) -> None:
+async def _set_cycle_state(state: Dict[str, Any]) -> None:
+    """Guarda el estado del ciclo en cache"""
     await _CACHE.set(_CYCLE_KEY, state, ttl_seconds=_CYCLE_TTL)
 
 def _now_ts() -> float:
+    """Obtiene timestamp actual en UTC"""
     return datetime.utcnow().timestamp()
 
-async def _get_cached_balances() -> Optional[Dict]:
+async def _get_cached_balances() -> Optional[Dict[str, float]]:
+    """Obtiene balances desde cache"""
     raw = await _CACHE.get(BALANCES_CACHE_KEY)
     if not raw:
         return None
@@ -73,10 +79,15 @@ async def _get_cached_balances() -> Optional[Dict]:
     except Exception:
         return None
 
-async def _set_cached_balances(balances: Dict) -> None:
+async def _set_cached_balances(balances: Dict[str, float]) -> None:
+    """Guarda balances en cache"""
     await _CACHE.set(BALANCES_CACHE_KEY, balances, ttl_seconds=BALANCES_TTL)
 
-async def _fetch_balances_with_retry(manager, retries: int = 3, delay_seconds: float = 1.0) -> Dict:
+async def _fetch_balances_with_retry(
+    manager: Any,  # OptimizedGridManager
+    retries: int = 3, 
+    delay_seconds: float = 1.0
+) -> Dict[str, float]:
     last_err: Optional[Exception] = None
     for i in range(retries):
         try:
@@ -98,8 +109,14 @@ async def _fetch_balances_with_retry(manager, retries: int = 3, delay_seconds: f
     return {}
 
 @celery_app.task
-def trading_cycle_tick():
-    """Tick cada 60s que orquesta un ciclo de 5 minutos (4m evaluación, 1m ejecución)."""
+@with_distributed_lock("trading_cycle", timeout=300, blocking=False)
+def trading_cycle_tick() -> Dict[str, Any]:
+    """
+    Tick cada 60s que orquesta un ciclo de 5 minutos (4m evaluación, 1m ejecución).
+    
+    Con lock distribuido para prevenir ejecuciones concurrentes.
+    Si un ciclo anterior aún está corriendo, este ciclo se omite automáticamente.
+    """
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -285,7 +302,7 @@ def trading_cycle_tick():
         return {"status": "error", "message": str(e)}
 
 @shared_task
-def execute_trading_cycle():
+def execute_trading_cycle() -> Dict[str, Any]:
     """
     Ejecuta un ciclo completo de trading con validaciones mejoradas
     """
@@ -536,7 +553,7 @@ def execute_trading_cycle():
         return {"status": "error", "message": str(e)}
 
 @shared_task
-def assess_risk():
+def assess_risk() -> Dict[str, Any]:
     """
     Evalúa el riesgo del portafolio
     """
@@ -605,7 +622,7 @@ def assess_risk():
         return {"risk_level": "unknown", "error": str(e)}
 
 @shared_task
-def update_metrics():
+def update_metrics() -> Dict[str, Any]:
     """
     Actualiza todas las métricas del sistema
     """
@@ -629,7 +646,7 @@ def update_metrics():
         return {"status": "error", "message": str(e)}
 
 @shared_task
-def health_check():
+def health_check() -> Dict[str, Any]:
     """
     Verificación de salud del sistema
     """
@@ -681,8 +698,12 @@ def health_check():
 
 
 @shared_task
+@with_distributed_lock("dust_sweep", timeout=600, blocking=False)
 def dust_sweep(dry_run: bool = True) -> dict:
     """
+    Barrido de polvo (dust) - vende activos con saldos muy pequeños.
+    
+    Con lock distribuido para prevenir múltiples sweeps simultáneos.
     Barre saldos pequeños (< 1 USDT) según política:
     - Si existe par ASSETUSDT y supera MIN_NOTIONAL: vender MARKET a USDT
     - Si no, intentar Convert/Dust to BNB (no implementado por API pública): registrar recomendación
@@ -731,7 +752,9 @@ def dust_sweep(dry_run: bool = True) -> dict:
                     actions.append({**action, "executed": not dry_run})
                     if not dry_run:
                         try:
-                            client_singleton.create_order(symbol=symbol, side="SELL", order_type="MARKET", quantity=str(it["qty"]))
+                            # Usar TradeExecutor para mantener balances sincronizados
+                            trade_executor = get_trade_executor()
+                            trade_executor.execute_market_sell(symbol=symbol, quantity=str(it["qty"]))
                             swept_total += it["value"]
                         except Exception as e:
                             logger.warning(f"Dust sell fallo {symbol}: {e}")

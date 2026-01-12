@@ -1000,9 +1000,11 @@ class OptimizedGridManager:
             logger.error(f"Error calculating statistics: {e}")
             return {"error": str(e)}
     
-    def save_configuration(self, filepath: str) -> bool:
+    async def save_configuration(self, filepath: str) -> bool:
         """Save current configuration to file"""
         try:
+            import asyncio
+            
             config_data = {
                 "assets": {
                     symbol: {
@@ -1021,8 +1023,12 @@ class OptimizedGridManager:
                 "max_concurrent_orders": self.config.max_concurrent_orders
             }
             
-            with open(filepath, 'w') as f:
-                json.dump(config_data, f, indent=2)
+            # ✅ FIX: Guardar configuración (non-blocking)
+            def _write_config():
+                with open(filepath, 'w') as f:
+                    json.dump(config_data, f, indent=2)
+            
+            await asyncio.to_thread(_write_config)
             
             logger.info(f"Configuration saved to {filepath}")
             return True
@@ -1041,8 +1047,14 @@ async def create_optimized_grid_manager(config_file: str) -> Optional[OptimizedG
     Factory function to create and initialize an OptimizedGridManager
     """
     try:
-        with open(config_file, 'r') as f:
-            config_data = json.load(f)
+        import asyncio
+        
+        # ✅ FIX: Leer archivo de configuración (non-blocking)
+        def _read_config():
+            with open(config_file, 'r') as f:
+                return json.load(f)
+        
+        config_data = await asyncio.to_thread(_read_config)
         
         assets = {}
         required_fields = {"symbol", "min_price", "max_price", "grids", "quantity"}

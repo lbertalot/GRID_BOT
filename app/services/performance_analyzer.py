@@ -16,7 +16,11 @@ from datetime import datetime, timedelta
 import logging
 from dataclasses import dataclass
 
-from app.services.binance_client import client
+# ✅ FASE 4: Migrado a singleton
+from app.services.binance_client_singleton import get_binance_client_singleton
+# Compatibilidad: mantener variable 'client' para no romper código existente
+_client_singleton = get_binance_client_singleton()
+client = _client_singleton.client if _client_singleton.is_ready() else None
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +191,10 @@ class PerformanceAnalyzer:
             Valor total del portafolio en USDT
         """
         try:
-            account_info = client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Obtener account info (non-blocking)
+            account_info = await asyncio.to_thread(client.get_account)
             total_value = 0.0
             
             for balance in account_info['balances']:
@@ -198,10 +205,10 @@ class PerformanceAnalyzer:
                     if asset == 'USDT':
                         total_value += free_balance
                     else:
-                        # Obtener precio actual del activo
+                        # ✅ FIX: Obtener precio actual del activo (non-blocking)
                         try:
                             symbol = f"{asset}USDT"
-                            ticker = client.get_symbol_ticker(symbol=symbol)
+                            ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=symbol)
                             price = float(ticker['price'])
                             total_value += free_balance * price
                         except:
@@ -439,7 +446,10 @@ class PerformanceAnalyzer:
             Diccionario con distribución por activo
         """
         try:
-            account_info = client.get_account()
+            import asyncio
+            
+            # ✅ FIX: Obtener account info (non-blocking)
+            account_info = await asyncio.to_thread(client.get_account)
             allocation = {}
             total_value = 0.0
             
@@ -459,7 +469,8 @@ class PerformanceAnalyzer:
                     else:
                         try:
                             symbol = f"{asset}USDT"
-                            ticker = client.get_symbol_ticker(symbol=symbol)
+                            # ✅ FIX: Obtener precio (non-blocking)
+                            ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=symbol)
                             price = float(ticker['price'])
                             value = free_balance * price
                             

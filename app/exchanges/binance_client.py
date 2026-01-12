@@ -122,10 +122,23 @@ class TokenBucketRateLimiter:
 
 class BinanceClient:
     """
+    ⚠️ DEPRECATED: Este cliente está deprecado y no se usa en el código.
+    
+    Usa app.services.binance_client_singleton en su lugar.
+    Este módulo será eliminado en una versión futura.
+    
     Cliente Binance mejorado con validación de filtros, rate limiting y WebSocket.
     """
     
     def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
+        import warnings
+        warnings.warn(
+            "app.exchanges.binance_client.BinanceClient está deprecado y no se usa. "
+            "Usa app.services.binance_client_singleton en su lugar. "
+            "Este módulo será eliminado en una versión futura.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.api_key = api_key
         self.api_secret = api_secret
         self.base_url = "https://testnet.binance.vision" if testnet else "https://api.binance.com"

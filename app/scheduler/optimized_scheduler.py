@@ -256,6 +256,8 @@ class OptimizedGridScheduler:
 
     async def _obtener_precios_actuales(self) -> Dict:
         """Obtiene los precios actuales de los activos"""
+        import asyncio
+        
         activos = [
             "BNBUSDT", "ANIMEUSDT", "GPSUSDT", "GUNUSDT", 
             "SIGNUSDT", "SPKUSDT", "HOMEUSDT", "HUMAUSDT"
@@ -264,7 +266,11 @@ class OptimizedGridScheduler:
         precios = {}
         for activo in activos:
             try:
-                response = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={activo}")
+                # ✅ FIX: Obtener precio (non-blocking)
+                response = await asyncio.to_thread(
+                    requests.get,
+                    f"https://api.binance.com/api/v3/ticker/price?symbol={activo}"
+                )
                 if response.status_code == 200:
                     data = response.json()
                     precios[activo] = float(data['price'])
@@ -279,7 +285,13 @@ class OptimizedGridScheduler:
     async def _obtener_configuracion_actual(self) -> Dict:
         """Obtiene la configuración actual del sistema"""
         try:
-            response = requests.get("http://localhost:8000/api/trade/grid_config")
+            import asyncio
+            
+            # ✅ FIX: Obtener configuración (non-blocking)
+            response = await asyncio.to_thread(
+                requests.get,
+                "http://localhost:8000/api/trade/grid_config"
+            )
             if response.status_code == 200:
                 return response.json()
             else:

@@ -21,3 +21,19 @@ async def health_check():
     }
 
 
+@router.get("/health/liveness")
+async def liveness():
+    return {
+        "status": "alive",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@router.get("/health/readiness")
+async def readiness():
+    # Si se requiere, aquí se podrían agregar checks de DB/Redis de forma no bloqueante
+    return {
+        "status": "ready",
+        "timestamp": datetime.now().isoformat()
+    }
+

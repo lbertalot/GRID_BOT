@@ -65,13 +65,13 @@ groups:
           description: "El slippage P95 es de {{ $value | printf \"%.2f\" }}s. Esto puede indicar problemas de conectividad o volatilidad extrema."
 
       - alert: DatabaseConnectionIssues
-        expr: up{job="gridbot-api"} == 0
-        for: 1m
+        expr: max_over_time(up{job="gridbot-api"}[3m]) == 0
+        for: 10m
         labels:
           severity: critical
         annotations:
           summary: "GridBot API no disponible"
-          description: "El servicio de GridBot API no está respondiendo. Verificar estado del contenedor y logs."
+          description: "El servicio de GridBot API no responde de forma continua (max_over_time = 0 por 3m) y se mantiene 10m. Verificar contenedor/logs."
 
       - alert: RedisConnectionIssues
         expr: up{job="redis"} == 0

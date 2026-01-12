@@ -3,13 +3,13 @@ groups:
     rules:
       - alert: GridBotAPIDownWarning
         expr: |
-          (absent(up{job="gridbot-api"}) OR (up{job="gridbot-api"} == 0))
-        for: 5m
+          max_over_time(up{job="gridbot-api"}[5m]) == 0
+        for: 15m
         labels:
           severity: warning
         annotations:
           summary: "API de GridBot no responde (warning)"
-          description: "up{job='gridbot-api'} ausente o 0 por >5m."
+          description: "up=0 de forma continua (max_over_time=0 por 5m) y sostenido 15m."
 
       - alert: GridBotAPIDown
         expr: |

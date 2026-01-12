@@ -1,16 +1,17 @@
 from app.core.celery_app import celery_app
 import logging
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True)
-def analyze_performance(self):
+def analyze_performance(self) -> Dict[str, float]:
     """Analiza el rendimiento del sistema"""
     try:
         logger.info("Analizando rendimiento del sistema")
         
         # TODO: Implementar análisis de rendimiento real
-        analysis = {
+        analysis: Dict[str, float] = {
             "sharpe_ratio": 0.0,
             "max_drawdown": 0.0,
             "total_return": 0.0,
