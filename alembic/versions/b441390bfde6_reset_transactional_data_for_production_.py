@@ -77,16 +77,21 @@ def upgrade() -> None:
             print(f"⚠️  Table {table_name} does not exist, skipping...")
     
     # Reset system settings to default values
+    # Nota: La tabla se llama system_config, no system_settings
+    # Solo actualizamos si la tabla existe (puede no existir en nuevas instalaciones)
     op.execute("""
-        UPDATE system_settings 
-        SET value = '0.0' 
-        WHERE key = 'portfolio:baseline_value_usdt';
-    """)
-    
-    op.execute("""
-        UPDATE system_settings 
-        SET value = NOW()::text 
-        WHERE key = 'profit:baseline_iso';
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'system_config') THEN
+                UPDATE system_config 
+                SET value = '0.0' 
+                WHERE key = 'portfolio:baseline_value_usdt';
+                
+                UPDATE system_config 
+                SET value = NOW()::text 
+                WHERE key = 'profit:baseline_iso';
+            END IF;
+        END $$;
     """)
     
     print("✅ System settings reset to defaults")
