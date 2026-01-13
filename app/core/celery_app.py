@@ -2,11 +2,15 @@ from celery import Celery
 from celery.schedules import crontab
 import os
 
+# Priorizar REDIS_URL de Heroku si está disponible, luego CELERY_BROKER_URL
+redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+celery_result_backend = os.getenv("REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
 # Configuración de Celery
 celery_app = Celery(
     "gridbot",
-    broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-    backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+    broker=redis_url,
+    backend=celery_result_backend,
     include=[
         "app.services.trading_tasks",
         "app.services.rebalancing_tasks", 
