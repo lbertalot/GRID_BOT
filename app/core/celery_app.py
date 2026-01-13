@@ -1,10 +1,25 @@
 from celery import Celery
 from celery.schedules import crontab
 import os
+import ssl
 
 # Priorizar REDIS_URL de Heroku si está disponible, luego CELERY_BROKER_URL
 redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 celery_result_backend = os.getenv("REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+# Configuración de Celery con soporte para SSL (rediss://)
+broker_transport_options = {}
+result_backend_transport_options = {}
+
+# Si usa SSL (rediss://), configurar opciones SSL
+if redis_url.startswith("rediss://"):
+    broker_transport_options = {
+        'ssl_cert_reqs': ssl.CERT_NONE,  # Heroku Redis usa SSL pero sin verificación de certificado
+        'ssl_ca_certs': None,
+        'ssl_certfile': None,
+        'ssl_keyfile': None,
+    }
+    result_backend_transport_options = broker_transport_options.copy()
 
 # Configuración de Celery
 celery_app = Celery(
@@ -32,6 +47,8 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
     broker_connection_retry_on_startup=True,
+    broker_transport_options=broker_transport_options,
+    result_backend_transport_options=result_backend_transport_options,
 )
 
 # Tareas programadas
