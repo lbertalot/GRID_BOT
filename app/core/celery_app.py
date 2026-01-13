@@ -13,13 +13,13 @@ result_backend_transport_options = {}
 
 # Si usa SSL (rediss://), configurar opciones SSL
 if redis_url.startswith("rediss://"):
+    # Para Celery con Redis SSL, necesitamos pasar las opciones SSL
     broker_transport_options = {
         'ssl_cert_reqs': ssl.CERT_NONE,  # Heroku Redis usa SSL pero sin verificación de certificado
-        'ssl_ca_certs': None,
-        'ssl_certfile': None,
-        'ssl_keyfile': None,
     }
-    result_backend_transport_options = broker_transport_options.copy()
+    result_backend_transport_options = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+    }
 
 # Configuración de Celery
 celery_app = Celery(
@@ -35,21 +35,27 @@ celery_app = Celery(
 )
 
 # Configuración de Celery
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_time_limit=int(os.getenv("CELERY_TASK_HARD_TIMEOUT", str(30 * 60))),
-    task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIMEOUT", str(25 * 60))),
-    worker_prefetch_multiplier=1,
-    worker_max_tasks_per_child=1000,
-    broker_connection_retry_on_startup=True,
-    broker_transport_options=broker_transport_options,
-    result_backend_transport_options=result_backend_transport_options,
-)
+conf_dict = {
+    'task_serializer': 'json',
+    'accept_content': ['json'],
+    'result_serializer': 'json',
+    'timezone': 'UTC',
+    'enable_utc': True,
+    'task_track_started': True,
+    'task_time_limit': int(os.getenv("CELERY_TASK_HARD_TIMEOUT", str(30 * 60))),
+    'task_soft_time_limit': int(os.getenv("CELERY_TASK_SOFT_TIMEOUT", str(25 * 60))),
+    'worker_prefetch_multiplier': 1,
+    'worker_max_tasks_per_child': 1000,
+    'broker_connection_retry_on_startup': True,
+}
+
+# Añadir opciones SSL si es necesario
+if broker_transport_options:
+    conf_dict['broker_transport_options'] = broker_transport_options
+if result_backend_transport_options:
+    conf_dict['result_backend_transport_options'] = result_backend_transport_options
+
+celery_app.conf.update(**conf_dict)
 
 # Tareas programadas
 celery_app.conf.beat_schedule = {
