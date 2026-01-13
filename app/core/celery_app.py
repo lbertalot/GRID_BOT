@@ -8,16 +8,16 @@ redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL", "redis://lo
 celery_result_backend = os.getenv("REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
 # Configuración de Celery con soporte para SSL (rediss://)
-broker_transport_options = {}
-result_backend_transport_options = {}
+broker_use_ssl = {}
+redis_backend_use_ssl = {}
 
 # Si usa SSL (rediss://), configurar opciones SSL
 if redis_url.startswith("rediss://"):
-    # Para Celery con Redis SSL, necesitamos pasar las opciones SSL
-    broker_transport_options = {
+    # Para Celery con Redis SSL, usar broker_use_ssl
+    broker_use_ssl = {
         'ssl_cert_reqs': ssl.CERT_NONE,  # Heroku Redis usa SSL pero sin verificación de certificado
     }
-    result_backend_transport_options = {
+    redis_backend_use_ssl = {
         'ssl_cert_reqs': ssl.CERT_NONE,
     }
 
@@ -50,10 +50,10 @@ conf_dict = {
 }
 
 # Añadir opciones SSL si es necesario
-if broker_transport_options:
-    conf_dict['broker_transport_options'] = broker_transport_options
-if result_backend_transport_options:
-    conf_dict['result_backend_transport_options'] = result_backend_transport_options
+if broker_use_ssl:
+    conf_dict['broker_use_ssl'] = broker_use_ssl
+if redis_backend_use_ssl:
+    conf_dict['redis_backend_use_ssl'] = redis_backend_use_ssl
 
 celery_app.conf.update(**conf_dict)
 
