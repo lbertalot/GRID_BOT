@@ -75,18 +75,24 @@ class BinanceUserStreamHandler:
         async with self.session.post(f"{self.api_base}/api/v3/userDataStream", headers=headers) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                # Manejar específicamente error -2015 (IP no autorizada)
-                if resp.status == 401 and ("-2015" in text or "Invalid API-key, IP" in text):
+                # Manejar específicamente errores de IP/ubicación (401 -2015, 451 restricted location)
+                is_ip_error = (
+                    (resp.status == 401 and ("-2015" in text or "Invalid API-key, IP" in text))
+                    or resp.status == 451
+                    or "restricted location" in text.lower()
+                    or "Eligibility" in text
+                )
+                if is_ip_error:
                     error_msg = (
-                        f"⚠️ Binance -2015 (IP no autorizada) al crear listenKey. "
-                        f"Verifica whitelist de IP en Binance. "
+                        f"⚠️ Binance error de IP/ubicación (status {resp.status}) al crear listenKey. "
+                        f"Verifica whitelist de IP o restricciones geográficas en Binance. "
                         f"WebSocket deshabilitado temporalmente."
                     )
                     logger.error(error_msg)
                     # Notificar usando el sistema del singleton
                     try:
                         from app.services.binance_client_singleton import _notify_invalid_ip
-                        _notify_invalid_ip("Error creando listenKey: " + text)
+                        _notify_invalid_ip(f"Error creando listenKey (status {resp.status}): {text}")
                     except Exception:
                         pass
                 raise RuntimeError(f"Error creando listenKey: {resp.status} {text}")
@@ -139,10 +145,22 @@ class BinanceUserStreamHandler:
                 break
             except Exception as e:
                 error_str = str(e)
-                is_2015_error = "-2015" in error_str or "Invalid API-key, IP" in error_str
+                is_2015_error = (
+                    "-2015" in error_str 
+                    or "Invalid API-key, IP" in error_str
+                    or "451" in error_str
+                    or "restricted location" in error_str.lower()
+                    or "Eligibility" in error_str
+                )
                 
-                # Para errores -2015, usar cooldown más largo y log menos frecuente
+                # Para errores de IP/ubicación, usar cooldown más largo y log menos frecuente
                 if is_2015_error:
+                    # Notificar si es error de IP/ubicación
+                    try:
+                        from app.services.binance_client_singleton import _notify_invalid_ip
+                        _notify_invalid_ip(error_str)
+                    except Exception:
+                        pass
                     now = time.time()
                     if now - _last_2015_log_ts > 300:  # Log cada 5 minutos máximo
                         logger.error(
