@@ -318,6 +318,47 @@ async def breakers_summary():
         logger.error(f"❌ Error obteniendo resumen de breakers: {e}")
         raise HTTPException(status_code=500, detail="Error interno")
 
+@app.get("/ip")
+async def get_server_ip():
+    """Obtener la IP pública actual del servidor"""
+    import urllib.request
+    import json
+    
+    ip_addresses = {}
+    errors = []
+    
+    # Intentar obtener IP desde múltiples fuentes
+    services = [
+        ("api.ipify.org", "https://api.ipify.org"),
+        ("ifconfig.me", "https://ifconfig.me"),
+        ("icanhazip.com", "https://icanhazip.com"),
+    ]
+    
+    for service_name, url in services:
+        try:
+            response = urllib.request.urlopen(url, timeout=3)
+            ip = response.read().decode("utf-8").strip()
+            if ip:
+                ip_addresses[service_name] = ip
+        except Exception as e:
+            errors.append(f"{service_name}: {str(e)}")
+    
+    # IP principal (usar la primera disponible)
+    primary_ip = None
+    if ip_addresses:
+        primary_ip = list(ip_addresses.values())[0]
+    
+    return {
+        "ip": primary_ip or "desconocida",
+        "all_ips": ip_addresses,
+        "errors": errors if errors else None,
+        "message": (
+            "⚠️ Esta IP puede cambiar en Heroku (IPs dinámicas). "
+            "Para IP estática, considera usar Fixie addon o Heroku Private Spaces."
+        ) if primary_ip else "No se pudo determinar la IP pública",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 @app.get("/integrity/status")
 async def get_integrity_status():
     """Obtener estado de integridad del sistema"""

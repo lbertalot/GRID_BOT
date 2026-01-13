@@ -22,6 +22,7 @@ _fail_threshold: int = int(os.getenv("BINANCE_PRIVATE_FAIL_THRESHOLD", "3"))
 _circuit_open_seconds: int = int(os.getenv("BINANCE_PRIVATE_CIRCUIT_OPEN_SECONDS", "300"))  # 5m
 
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
+    """Notifica por Telegram cuando hay un problema de IP con Binance"""
     global _last_ip_alert_ts
     now = time.time()
     # Cooldown 30 minutos
@@ -30,24 +31,52 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
     _last_ip_alert_ts = now
     public_ip = "desconocida"
     try:
-        public_ip = urllib.request.urlopen("https://api.ipify.org", timeout=3).read().decode("utf-8")
+        # Intentar obtener IP desde múltiples fuentes
+        for url in ["https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"]:
+            try:
+                public_ip = urllib.request.urlopen(url, timeout=3).read().decode("utf-8").strip()
+                if public_ip:
+                    break
+            except Exception:
+                continue
     except Exception:
         pass
+    
+    # Determinar el tipo de error
+    is_451_error = "451" in reason or "restricted location" in reason.lower() or "Eligibility" in reason
+    error_type = "451 (Ubicación restringida)" if is_451_error else "-2015 (IP no autorizada)"
+    
     try:
         from app.services.telegram_alert import send_telegram_alert
         msg = (
-            "⚠️ Binance -2015 (IP no autorizada)\n"
-            f"Motivo: {reason}\n"
-            f"IP pública detectada: {public_ip}\n"
-            "Acción: agrega esta IP en la whitelist de Binance o desactiva la restricción en la API Key."
+            f"⚠️ Binance {error_type}\n\n"
+            f"📋 Motivo: {reason}\n"
+            f"🌐 IP pública actual: {public_ip}\n\n"
+            f"🔧 Acción requerida:\n"
         )
+        if is_451_error:
+            msg += (
+                "• Binance bloquea conexiones desde esta región del servidor\n"
+                "• Opciones:\n"
+                "  1. Usar un servidor/VPS en región permitida\n"
+                "  2. Configurar Fixie addon en Heroku para IP estática\n"
+                "  3. Contactar a Binance para verificar elegibilidad\n"
+                f"• IP actual: {public_ip}\n"
+            )
+        else:
+            msg += (
+                f"• Agrega la IP {public_ip} en la whitelist de Binance\n"
+                "• O desactiva la restricción de IP en la configuración de la API Key\n"
+            )
+        msg += f"\n📡 Endpoint para consultar IP: /ip"
         send_telegram_alert(msg)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"No se pudo enviar alerta Telegram: {e}")
     # Registrar métrica si es posible
     try:
         from app.core.metrics import external_auth_failures
-        external_auth_failures.labels(provider="binance", reason="invalid_ip").inc()
+        reason_label = "restricted_location" if is_451_error else "invalid_ip"
+        external_auth_failures.labels(provider="binance", reason=reason_label).inc()
     except Exception:
         pass
 
@@ -109,8 +138,16 @@ class BinanceClientSingleton:
                 account_info = self._client.get_account()
                 logger.info(f"✅ Conexión verificada - Balances disponibles: {len(account_info['balances'])}")
             except BinanceAPIException as auth_err:
-                if getattr(auth_err, 'code', None) == -2015 or 'Invalid API-key, IP' in str(auth_err):
-                    _notify_invalid_ip(str(auth_err))
+                auth_err_str = str(auth_err)
+                is_ip_error = (
+                    getattr(auth_err, 'code', None) == -2015 
+                    or getattr(auth_err, 'code', None) == 451
+                    or 'Invalid API-key, IP' in auth_err_str
+                    or 'restricted location' in auth_err_str.lower()
+                    or 'Eligibility' in auth_err_str
+                )
+                if is_ip_error:
+                    _notify_invalid_ip(auth_err_str)
                 try:
                     from app.core.metrics import binance_api_errors_total
                     binance_api_errors_total.labels(code=str(getattr(auth_err, 'code', 'unknown')), phase='init').inc()
@@ -167,8 +204,16 @@ class BinanceClientSingleton:
             client.get_account()
             result["auth_ok"] = True
         except BinanceAPIException as e:
-            if getattr(e, 'code', None) == -2015 or 'Invalid API-key, IP' in str(e):
-                _notify_invalid_ip(str(e))
+            error_str = str(e)
+            is_ip_error = (
+                getattr(e, 'code', None) == -2015 
+                or 'Invalid API-key, IP' in error_str
+                or getattr(e, 'code', None) == 451
+                or 'restricted location' in error_str.lower()
+                or 'Eligibility' in error_str
+            )
+            if is_ip_error:
+                _notify_invalid_ip(error_str)
             try:
                 from app.core.metrics import binance_api_errors_total
                 binance_api_errors_total.labels(code=str(getattr(e, 'code', 'unknown')), phase='validate').inc()
@@ -212,8 +257,16 @@ class BinanceClientSingleton:
         except BinanceAPIException as e:
             # Declaración global ya realizada arriba de este bloque
             _private_fail_count += 1
-            if getattr(e, 'code', None) == -2015 or 'Invalid API-key, IP' in str(e):
-                _notify_invalid_ip(str(e))
+            e_str = str(e)
+            is_ip_error = (
+                getattr(e, 'code', None) == -2015
+                or getattr(e, 'code', None) == 451
+                or 'Invalid API-key, IP' in e_str
+                or 'restricted location' in e_str.lower()
+                or 'Eligibility' in e_str
+            )
+            if is_ip_error:
+                _notify_invalid_ip(e_str)
             if _private_fail_count >= _fail_threshold:
                 _circuit_open_until_ts = time.time() + _circuit_open_seconds
                 logger.warning(f"Circuito privado abierto { _circuit_open_seconds }s por fallos consecutivos ({_private_fail_count})")
