@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Configuración de la base de datos
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
 
+# Convertir formato postgres:// a postgresql:// (Heroku usa postgres://)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # SQL manual removido: ahora se usa Alembic como única fuente de verdad para el esquema
 CREATE_TABLES_SQL = """-- handled by Alembic migrations"""
 

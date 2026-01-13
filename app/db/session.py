@@ -9,6 +9,10 @@ load_dotenv()
 # Usar SIEMPRE la configuración centralizada, no el archivo .env
 DATABASE_URL = settings.database_url
 
+# Convertir formato postgres:// a postgresql:// (Heroku usa postgres://)
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # Convertir URL asíncrona a síncrona si es necesario
 if DATABASE_URL and "+asyncpg" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
