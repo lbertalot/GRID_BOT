@@ -91,17 +91,32 @@ async def lifespan(app: FastAPI):
             yield
             return
         # Inicializar componentes de integridad
-        balance_validator = BalanceValidator()
-        operation_tracker = OperationTracker()
-        integrity_monitor = IntegrityMonitor()
-        
-        # Conectar componentes entre sí
-        integrity_monitor.set_components(balance_validator, operation_tracker)
-        
-        # Iniciar monitoreo de integridad en background
-        asyncio.create_task(balance_validator.start_validation_loop())
-        asyncio.create_task(operation_tracker.start_periodic_cleanup())
-        asyncio.create_task(integrity_monitor.start_monitoring())
+        try:
+            logger.info("🔧 Inicializando BalanceValidator...")
+            balance_validator = BalanceValidator()
+            logger.info("✅ BalanceValidator inicializado")
+            
+            logger.info("🔧 Inicializando OperationTracker...")
+            operation_tracker = OperationTracker()
+            logger.info("✅ OperationTracker inicializado")
+            
+            logger.info("🔧 Inicializando IntegrityMonitor...")
+            integrity_monitor = IntegrityMonitor()
+            logger.info("✅ IntegrityMonitor inicializado")
+            
+            # Conectar componentes entre sí
+            integrity_monitor.set_components(balance_validator, operation_tracker)
+            
+            # Iniciar monitoreo de integridad en background
+            asyncio.create_task(balance_validator.start_validation_loop())
+            asyncio.create_task(operation_tracker.start_periodic_cleanup())
+            asyncio.create_task(integrity_monitor.start_monitoring())
+        except Exception as e:
+            logger.error(f"❌ Error inicializando componentes de integridad: {e}", exc_info=True)
+            # Continuar sin componentes de integridad si fallan
+            balance_validator = None
+            operation_tracker = None
+            integrity_monitor = None
         # Job periódico de actualización de métricas para Grafana
         try:
             from app.services.metrics_service import metrics_service
