@@ -35,6 +35,14 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+# Usar DATABASE_URL del entorno si está disponible (Heroku, etc.)
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    # Heroku proporciona DATABASE_URL en formato postgres://, convertir a postgresql://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    config.set_main_option("sqlalchemy.url", database_url)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

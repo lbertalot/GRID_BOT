@@ -31,19 +31,33 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Detectar si estamos en Docker o ejecutándose localmente
-        is_docker = os.getenv("DOCKER_ENV") == "true" or os.path.exists("/.dockerenv")
-        
-        if is_docker:
-            # Configuración para Docker
-            self.postgres_host = "db"
-            self.redis_url = "redis://redis:6379/0"
-            self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        # Priorizar DATABASE_URL del entorno si está disponible (Heroku, etc.)
+        env_database_url = os.getenv("DATABASE_URL")
+        if env_database_url:
+            # Heroku proporciona DATABASE_URL en formato postgres://, convertir a postgresql://
+            if env_database_url.startswith("postgres://"):
+                self.database_url = env_database_url.replace("postgres://", "postgresql://", 1)
+            else:
+                self.database_url = env_database_url
         else:
-            # Configuración para desarrollo local
-            self.postgres_host = "localhost"
-            self.redis_url = "redis://localhost:6379/0"
-            self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            # Detectar si estamos en Docker o ejecutándose localmente
+            is_docker = os.getenv("DOCKER_ENV") == "true" or os.path.exists("/.dockerenv")
+            
+            if is_docker:
+                # Configuración para Docker
+                self.postgres_host = "db"
+                self.redis_url = "redis://redis:6379/0"
+                self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            else:
+                # Configuración para desarrollo local
+                self.postgres_host = "localhost"
+                self.redis_url = "redis://localhost:6379/0"
+                self.database_url = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        
+        # Priorizar REDIS_URL del entorno si está disponible (Heroku, etc.)
+        env_redis_url = os.getenv("REDIS_URL")
+        if env_redis_url:
+            self.redis_url = env_redis_url
 
         # Flags de trading
         self.paper_trading = bool(os.getenv("PAPER_TRADING", "false").lower() == "true")
