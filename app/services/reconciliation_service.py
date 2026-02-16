@@ -78,7 +78,9 @@ class ReconciliationService:
             # Calcular discrepancia basada en portfolio total, no solo USDT
             # Esto evita falsos positivos por diferencias en balances individuales
             discrepancy = 0.0  # Sin discrepancia ya que usamos el mismo cálculo
-            
+            int_usdt = ext_usdt  # Sin contabilidad interna separada, usamos mismo valor
+            has_internal_accounting = False  # No usamos contabilidad interna separada aquí
+
             balance_discrepancy_usd.set(discrepancy)
             unaccounted_pnl_usd.set(0.0)
 
