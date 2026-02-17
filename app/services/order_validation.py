@@ -56,9 +56,9 @@ class OrderValidator:
         """Obtiene info de un símbolo con filtros parseados como Decimal."""
         try:
             if symbol not in self._symbol_info_cache:
-                if hasattr(self.client, "get_exchange_info"):
+                try:
                     exchange_info = self.client.get_exchange_info(use_cache=True)
-                else:
+                except TypeError:
                     exchange_info = self.client.get_exchange_info()
 
                 for s in exchange_info.get("symbols", []):
@@ -97,19 +97,29 @@ class OrderValidator:
     # Redondeo a step/tick
     # ------------------------------------------------------------------
 
-    def _round_to_step(self, value: Decimal, step: Decimal) -> Decimal:
-        """Redondea hacia abajo al múltiplo más cercano de step (INV-001)."""
-        if step <= 0:
-            return value
-        units = (value / step).to_integral_value(rounding=ROUND_DOWN)
-        return units * step
+    def _round_to_step(self, value: Any, step: Any) -> Decimal:
+        """Redondea hacia abajo al múltiplo más cercano de step (INV-001).
 
-    def _round_to_tick(self, price: Decimal, tick: Decimal) -> Decimal:
-        """Redondea precio hacia abajo al múltiplo más cercano de tick (INV-001)."""
-        if tick <= 0:
-            return price
-        units = (price / tick).to_integral_value(rounding=ROUND_DOWN)
-        return units * tick
+        Acepta float o Decimal como entrada; retorna siempre Decimal.
+        """
+        v = _to_decimal(value)
+        s = _to_decimal(step)
+        if s <= 0:
+            return v
+        units = (v / s).to_integral_value(rounding=ROUND_DOWN)
+        return units * s
+
+    def _round_to_tick(self, price: Any, tick: Any) -> Decimal:
+        """Redondea precio hacia abajo al múltiplo más cercano de tick (INV-001).
+
+        Acepta float o Decimal como entrada; retorna siempre Decimal.
+        """
+        p = _to_decimal(price)
+        t = _to_decimal(tick)
+        if t <= 0:
+            return p
+        units = (p / t).to_integral_value(rounding=ROUND_DOWN)
+        return units * t
 
     # ------------------------------------------------------------------
     # Ajuste de cantidad

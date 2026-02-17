@@ -202,18 +202,18 @@ class TestPriceFilterValidation:
         )
 
     def test_zero_tick_size_returns_original(self):
-        """Con tickSize=0, debe retornar el precio original."""
+        """Con tickSize=0, debe retornar el precio original (como Decimal)."""
         client = _make_mock_client()
         validator = OrderValidator(client)
         result = validator._round_to_tick(50000.123, 0.0)
-        assert result == 50000.123
+        assert result == Decimal("50000.123")
 
     def test_negative_tick_size_returns_original(self):
-        """Con tickSize negativo, debe retornar el precio original."""
+        """Con tickSize negativo, debe retornar el precio original (como Decimal)."""
         client = _make_mock_client()
         validator = OrderValidator(client)
         result = validator._round_to_tick(50000.123, -0.01)
-        assert result == 50000.123
+        assert result == Decimal("50000.123")
 
 
 # ===========================================================================
@@ -513,11 +513,12 @@ class TestFloatUsageAudit:
         )
 
     def test_round_to_step_preserves_precision(self):
-        """_round_to_step debe preservar la precisión de Decimal."""
+        """_round_to_step debe preservar la precisión de Decimal (retorna Decimal)."""
         client = _make_mock_client()
         validator = OrderValidator(client)
         result = validator._round_to_step(0.123456789, 0.00001)
         expected_decimal = (Decimal("0.123456789") / Decimal("0.00001")).to_integral_value(rounding=ROUND_DOWN) * Decimal("0.00001")
-        assert abs(result - float(expected_decimal)) < 1e-10, (
-            f"Precisión perdida en _round_to_step: {result} vs {float(expected_decimal)}"
+        assert isinstance(result, Decimal), f"_round_to_step debe retornar Decimal, retornó {type(result)}"
+        assert result == expected_decimal, (
+            f"Precisión perdida en _round_to_step: {result} vs {expected_decimal}"
         )
