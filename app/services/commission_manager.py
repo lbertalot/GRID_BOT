@@ -9,6 +9,8 @@ from decimal import Decimal, ROUND_DOWN
 from binance import Client
 from binance.exceptions import BinanceAPIException
 
+from app.core.binance_proxy import get_binance_proxies
+
 logger = logging.getLogger(__name__)
 
 class CommissionManager:
@@ -29,10 +31,14 @@ class CommissionManager:
         self.default_maker_commission = 0.001  # 0.1%
         self.default_taker_commission = 0.001  # 0.1%
         
-        # Inicializar cliente si hay credenciales
+        # Inicializar cliente si hay credenciales (con proxy QuotaGuard si está configurado)
         if self.api_key and self.api_secret:
             try:
-                self.client = Client(self.api_key, self.api_secret)
+                request_kw: Dict[str, Any] = {}
+                proxies = get_binance_proxies()
+                if proxies:
+                    request_kw["requests_params"] = {"proxies": proxies}
+                self.client = Client(self.api_key, self.api_secret, **request_kw)
                 self._update_commission_rates()
             except Exception as e:
                 logger.warning(f"No se pudo inicializar cliente Binance para comisiones: {e}")
