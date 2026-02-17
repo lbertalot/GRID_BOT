@@ -107,19 +107,15 @@ async def lifespan(app: FastAPI):
             # Conectar componentes entre sí
             integrity_monitor.set_components(balance_validator, operation_tracker)
             
-            # Iniciar monitoreo de integridad en background (con delay para no bloquear el event loop al arranque)
-            async def _deferred_integrity():
-                await asyncio.sleep(15)
-                await balance_validator.start_validation_loop()
-            asyncio.create_task(_deferred_integrity())
-            async def _deferred_tracker():
-                await asyncio.sleep(15)
-                await operation_tracker.start_periodic_cleanup()
-            asyncio.create_task(_deferred_tracker())
-            async def _deferred_monitor():
-                await asyncio.sleep(15)
-                await integrity_monitor.start_monitoring()
-            asyncio.create_task(_deferred_monitor())
+            # NOTA: Los loops de integridad (balance_validator, integrity_monitor)
+            # hacen llamadas síncronas bloqueantes a Binance API (get_account_info,
+            # get_symbol_price) que bloquean el event loop de Uvicorn. Se mantienen
+            # los objetos disponibles para consultas on-demand vía endpoints, pero
+            # los loops periódicos se desactivan en favor de la reconciliación vía
+            # Celery/ReconciliationService (que ya corre cada 60s en background).
+            # El periodic_cleanup del tracker sí es seguro (no hace I/O de red).
+            asyncio.create_task(operation_tracker.start_periodic_cleanup())
+            logger.warning("ℹ️ Integrity components initialized (periodic loops disabled to prevent event loop blocking)")
         except Exception as e:
             logger.error(f"❌ Error inicializando componentes de integridad: {e}", exc_info=True)
             # Continuar sin componentes de integridad si fallan
@@ -127,52 +123,51 @@ async def lifespan(app: FastAPI):
             operation_tracker = None
             integrity_monitor = None
         # Job periódico de actualización de métricas para Grafana
-        try:
-            from app.services.metrics_service import metrics_service
-            async def _periodic_metrics():
-                await asyncio.sleep(20)
-                while True:
-                    try:
-                        await metrics_service.calculate_portfolio_metrics()
-                        # Actualizar PnL/ROI "Binance-puro"
-                        try:
-                            await metrics_service.update_binance_pnl_metrics()
-                        except Exception:
-                            pass
-                        # Publicar breakers activos
-                        try:
-                            from app.core.metrics import active_breakers_total
-                            summary = app_breakers.get_all_breakers_status()
-                            active_breakers_total.set(float(summary.get("total_active", 0)))
-                        except Exception:
-                            pass
-                        # Publicar heartbeat de ciclo para Prometheus (evita alertas de "Tick 5m detenido")
-                        try:
-                            # Importar de forma perezosa para evitar ciclos de importación
-                            from app.services.trading_tasks import _get_cycle_state  # type: ignore
-                            state = await _get_cycle_state()
-                            started_iso = state.get("started_at")
-                            if started_iso:
-                                from datetime import datetime
-                                import time as _time
-                                try:
-                                    started_at = datetime.fromisoformat(started_iso)
-                                    elapsed = (datetime.utcnow() - started_at).total_seconds()
-                                    phase = "evaluation" if elapsed < 240 else ("execution" if elapsed < 300 else "evaluation")
-                                    cycle_phase.labels(phase=phase).set(_time.time())
-                                except Exception:
-                                    # En caso de error de parseo, emitir evaluación como fallback
-                                    import time as _t
-                                    cycle_phase.labels(phase="evaluation").set(_t.time())
-                        except Exception:
-                            # No bloquear el lazo de métricas si Redis o el estado no están disponibles
-                            pass
-                    except Exception:
-                        pass
-                    await asyncio.sleep(60)
-            asyncio.create_task(_periodic_metrics())
-        except Exception:
-            pass
+        # Ejecutado en thread dedicado porque metrics_service hace llamadas síncronas a Binance
+        def _metrics_thread_target():
+            import time as _time
+            _time.sleep(20)
+            while True:
+                try:
+                    from app.services.metrics_service import metrics_service
+                    asyncio.run(metrics_service.calculate_portfolio_metrics())
+                except Exception:
+                    pass
+                try:
+                    from app.services.metrics_service import metrics_service
+                    asyncio.run(metrics_service.update_binance_pnl_metrics())
+                except Exception:
+                    pass
+                try:
+                    from app.core.metrics import active_breakers_total
+                    summary = app_breakers.get_all_breakers_status()
+                    active_breakers_total.set(float(summary.get("total_active", 0)))
+                except Exception:
+                    pass
+                _time.sleep(60)
+
+        import threading
+        metrics_thread = threading.Thread(target=_metrics_thread_target, daemon=True, name="metrics-updater")
+        metrics_thread.start()
+
+        # Heartbeat del ciclo de trading (solo lee Redis, no bloquea significativamente)
+        async def _heartbeat_metrics():
+            await asyncio.sleep(30)
+            while True:
+                try:
+                    from app.services.trading_tasks import _get_cycle_state
+                    state = await _get_cycle_state()
+                    started_iso = state.get("started_at")
+                    if started_iso:
+                        import time as _t
+                        started_at = datetime.fromisoformat(started_iso)
+                        elapsed = (datetime.utcnow() - started_at).total_seconds()
+                        phase = "evaluation" if elapsed < 240 else ("execution" if elapsed < 300 else "evaluation")
+                        cycle_phase.labels(phase=phase).set(_t.time())
+                except Exception:
+                    pass
+                await asyncio.sleep(60)
+        asyncio.create_task(_heartbeat_metrics())
         
         # Validar credenciales/conectividad de Binance al arranque (en background para no bloquear)
         async def _validate_binance():
