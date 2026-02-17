@@ -205,24 +205,22 @@ async def lifespan(app: FastAPI):
 
         # Keep-alive: prevenir idle/cold-start en Heroku (cada 10 min se hace GET /ping)
         async def _keep_alive_loop():
-            import httpx
             app_url = os.getenv("APP_URL", "")
             if not app_url:
-                logger.info("ℹ️ APP_URL no configurada; keep-alive desactivado")
                 return
             ping_url = f"{app_url.rstrip('/')}/ping"
-            logger.info(f"🏓 Keep-alive activo → {ping_url} cada 10 min")
+            logger.warning(f"🏓 Keep-alive activo → {ping_url} cada 10 min")
             while True:
                 await asyncio.sleep(600)
                 try:
-                    async with httpx.AsyncClient(timeout=15) as client:
-                        resp = await client.get(ping_url)
-                        logger.debug(f"[keep-alive] GET {ping_url} → {resp.status_code}")
+                    import httpx
+                    async with httpx.AsyncClient(timeout=15) as hc:
+                        await hc.get(ping_url)
                 except Exception as exc:
                     logger.warning(f"[keep-alive] Fallo ping: {exc}")
         asyncio.create_task(_keep_alive_loop())
 
-        logger.info("✅ Componentes de integridad iniciados correctamente")
+        logger.warning("✅ Lifespan completado, servidor listo para aceptar requests")
         
         yield
         
