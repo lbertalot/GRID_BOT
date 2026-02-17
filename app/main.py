@@ -167,8 +167,7 @@ async def lifespan(app: FastAPI):
         # Validar credenciales/conectividad de Binance al arranque (en background para no bloquear)
         async def _validate_binance():
             try:
-                client_singleton = get_binance_client_singleton()
-                # Ejecutar en thread separado para no bloquear el event loop
+                client_singleton = await asyncio.to_thread(get_binance_client_singleton)
                 check = await asyncio.to_thread(client_singleton.validate_credentials_and_connectivity)
                 if not check.get("net_ok", False):
                     logger.error("❌ Conectividad con Binance fallida - activando modo protegido")
@@ -181,26 +180,28 @@ async def lifespan(app: FastAPI):
                 logger.error(f"❌ Error validando Binance: {e}")
         asyncio.create_task(_validate_binance())
         
-        # Reconciliación periódica
-        try:
-            client_singleton = get_binance_client_singleton()
-            recon = ReconciliationService(client_singleton.client, app_breakers)
-            asyncio.create_task(recon.start(interval_seconds=60))
-        except Exception as e:
-            logger.warning(f"⚠️ No se pudo iniciar reconciliación: {e}")
+        # Reconciliación periódica y User Data Stream — en background para no bloquear lifespan
+        async def _start_reconciliation_and_stream():
+            try:
+                client_singleton = await asyncio.to_thread(get_binance_client_singleton)
+                recon = ReconciliationService(client_singleton.client, app_breakers)
+                asyncio.create_task(recon.start(interval_seconds=60))
+                logger.warning("✅ Reconciliación periódica iniciada")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo iniciar reconciliación: {e}")
 
-        # Iniciar User Data Stream (WebSocket) para fills si hay API key
-        try:
-            from app.services.binance_user_stream import BinanceUserStreamHandler, default_on_fill
-            api_key = os.getenv("BINANCE_API_KEY", "")
-            if api_key:
-                user_stream = BinanceUserStreamHandler(api_key=api_key)
-                asyncio.create_task(user_stream.start(on_fill=default_on_fill))
-                logger.info("🔌 User Data Stream inicializado")
-            else:
-                logger.info("ℹ️ BINANCE_API_KEY no configurada; User Data Stream no iniciado")
-        except Exception as e:
-            logger.warning(f"⚠️ No se pudo iniciar User Data Stream: {e}")
+            try:
+                from app.services.binance_user_stream import BinanceUserStreamHandler, default_on_fill
+                api_key = os.getenv("BINANCE_API_KEY", "")
+                if api_key:
+                    user_stream = BinanceUserStreamHandler(api_key=api_key)
+                    asyncio.create_task(user_stream.start(on_fill=default_on_fill))
+                    logger.warning("🔌 User Data Stream inicializado")
+                else:
+                    logger.warning("ℹ️ BINANCE_API_KEY no configurada; User Data Stream no iniciado")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo iniciar User Data Stream: {e}")
+        asyncio.create_task(_start_reconciliation_and_stream())
 
         # Keep-alive: prevenir idle/cold-start en Heroku (cada 10 min se hace GET /ping)
         async def _keep_alive_loop():
