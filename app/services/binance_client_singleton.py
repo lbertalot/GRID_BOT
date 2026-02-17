@@ -116,11 +116,9 @@ class BinanceClientSingleton:
                 raise ValueError("Credenciales de Binance no configuradas")
             
             logger.info(f"🔧 Inicializando cliente Binance Singleton - API Key: {api_key[:10]}..., Testnet: {testnet}")
+            from app.core.binance_proxy import log_proxy_status
+            log_proxy_status()
             proxies = get_binance_proxies()
-            has_proxy_env = bool(os.getenv("QUOTAGUARDSHIELD_URL", "").strip())
-            logger.warning(f"🔗 QUOTAGUARDSHIELD_URL presente en env: {has_proxy_env}")
-            if proxies:
-                logger.warning("🔗 Proxy QuotaGuard Shield activo para Binance")
             request_kw: Dict = {}
             if proxies:
                 request_kw["requests_params"] = {"proxies": proxies}
