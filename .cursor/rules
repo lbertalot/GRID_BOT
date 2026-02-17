@@ -1,0 +1,152 @@
+# GridBot v2.5 — Reglas Ejecutables para Cursor IDE
+# Última sincronización: 2026-02-17
+# Estas reglas son verificables automáticamente por el IDE.
+
+---
+
+## PROHIBICIONES ABSOLUTAS
+
+### P01: Prohibido float para dinero
+- NUNCA usar `float` para cálculos de precio, cantidad o notional.
+- SIEMPRE usar `Decimal` de la librería estándar `decimal`.
+- Verificar en: `order_validation.py`, `trade_executor.py`, `risk_manager.py`, cualquier nuevo código de trading.
+- Excepción: métricas Prometheus (aceptan float).
+
+### P02: Prohibido enviar orden sin validación
+- NUNCA llamar a `client.order_market_buy()`, `client.order_market_sell()`, `client.create_order()` sin pasar primero por `OrderValidator.validate_order_parameters()`.
+- SIEMPRE verificar: stepSize, minQty, maxQty, tickSize, minNotional.
+
+### P03: Prohibido operar sin consultar breakers
+- NUNCA ejecutar una orden de trading sin verificar `CircuitBreakers.is_trading_halted()`.
+- Si retorna `True`, la operación DEBE abortarse.
+
+### P04: Prohibido hardcodear secretos
+- NUNCA incluir API keys, secrets, tokens o passwords en el código fuente.
+- SIEMPRE usar variables de entorno (`os.getenv()`).
+- Verificar que `.env` esté en `.gitignore`.
+
+### P05: Prohibido bloquear el event loop
+- NUNCA usar llamadas síncronas a I/O (DB, Redis, Binance, HTTP) dentro de funciones `async`.
+- SIEMPRE usar `await` o `asyncio.to_thread()` para operaciones bloqueantes.
+
+### P06: Prohibido ignorar errores en operaciones financieras
+- NUNCA usar `except: pass` en rutas de ejecución de órdenes.
+- SIEMPRE loguear errores con contexto (symbol, side, quantity, error code).
+- SIEMPRE registrar en métricas Prometheus (`bot_errors_total`, `trades_failed_total`).
+
+---
+
+## OBLIGACIONES
+
+### O01: Decimal para cálculos financieros
+- Toda operación aritmética con precios, cantidades y notional DEBE usar `Decimal`.
+- Pattern: `Decimal(str(value))` para convertir desde float.
+
+### O02: Validación de exchange filters
+- Todo nuevo endpoint de trading DEBE validar contra exchange_info:
+  - PRICE_FILTER (tickSize, minPrice, maxPrice)
+  - LOT_SIZE (stepSize, minQty, maxQty)
+  - MIN_NOTIONAL (minNotional)
+
+### O03: Instrumentación Prometheus
+- Todo nuevo flujo crítico DEBE tener:
+  - Counter para eventos (éxitos, fallos).
+  - Histogram para latencia si es operación temporal.
+  - Gauge para estado si es métrica continua.
+- Prefijo: `gridbot_` para métricas principales.
+- Actualizar `Docs/08-metrics-catalog.md` si existe.
+
+### O04: Tests para cambios críticos
+- Todo cambio en `order_validation.py` → test en `test_qaa_binance_filters.py`.
+- Todo cambio en `circuit_breakers.py` → test en `test_qaa_circuit_breakers.py`.
+- Todo cambio en `risk_manager.py` → test en `test_qaa_kelly_sizing.py`.
+- Todo cambio en `strategy_selector.py` → test en `test_qaa_strategy_selector_ml.py`.
+- Todo cambio en `reconciliation_service.py` → test en `test_qaa_reconciliation_idempotency.py`.
+
+### O05: Tipo de retorno documentado
+- Toda función pública en `app/services/` y `app/core/` DEBE tener type hints completos.
+- Incluir return type annotation.
+
+### O06: Guard clauses al inicio
+- Toda función que reciba parámetros externos DEBE validar inputs al inicio con early returns.
+- Ejemplo: verificar que symbol no esté vacío, quantity > 0, etc.
+
+### O07: Pydantic v2 para I/O de API
+- Todo endpoint FastAPI DEBE usar schemas Pydantic v2 para request y response.
+- Schemas en `app/schemas/`.
+
+### O08: Rutas delgadas
+- Los routers en `app/api/` DEBEN ser delgados.
+- La lógica de negocio DEBE estar en `app/services/`.
+- Las rutas solo: validan input → llaman servicio → retornan resultado.
+
+### O09: Async para todo I/O
+- Toda función que interactúe con DB, Redis, Binance o HTTP DEBE ser `async def`.
+- Si se necesita llamar código síncrono, usar `asyncio.to_thread()`.
+
+### O10: Idempotencia con client_order_id
+- Toda orden enviada al exchange DEBE incluir `newClientOrderId` único para garantizar idempotencia.
+
+---
+
+## REGLAS DE ESTILO
+
+### E01: Snake case para archivos y directorios
+- `lowercase_snake_case` para todos los archivos y directorios Python.
+
+### E02: Nombres descriptivos
+- Nombres largos > abreviaciones crípticas.
+- `calculate_dynamic_position_size` > `calc_dps`.
+
+### E03: Conventional commits
+- `feat:` nueva funcionalidad
+- `fix:` corrección de bug
+- `docs:` documentación
+- `refactor:` sin cambios funcionales
+- `test:` tests
+- `chore:` tareas varias
+
+### E04: Ediciones focalizadas
+- Preferir ediciones pequeñas y focalizadas.
+- No reformatear código no relacionado.
+
+---
+
+## REGLAS DE SEGURIDAD FINANCIERA
+
+### SF01: Verificar balance antes de operar
+- SIEMPRE verificar que el balance disponible sea suficiente ANTES de enviar la orden.
+- Parámetro mínimo actual: `SAFE_MIN_USDT = 15.0`.
+
+### SF02: Caps de sizing
+- Kelly fraccional default: 25% del Kelly puro.
+- Cap por símbolo: 20% del equity.
+- Cap por equity: 80% del total.
+- Cap diario de pérdida: 5%.
+
+### SF03: Emergency stop
+- `EMERGENCY_STOP=true` DEBE detener TODA actividad de trading.
+- `RiskManager.trigger_emergency_stop()` es irreversible hasta `reset_emergency_stop()`.
+
+### SF04: Paper trading por defecto en desarrollo
+- SIEMPRE usar `PAPER_TRADING=true` en entornos de desarrollo y testing.
+- NUNCA operar con fondos reales sin verificación explícita de configuración.
+
+### SF05: Reconciliación activa
+- La reconciliación DEBE ejecutarse cada ≤ 60 segundos en producción.
+- Si falla, loguear warning pero no detener el sistema.
+
+---
+
+## CHECKLIST PARA NUEVOS ARCHIVOS
+
+Al crear un nuevo archivo en el proyecto:
+
+1. [ ] ¿Usa `Decimal` para cálculos financieros?
+2. [ ] ¿Tiene type hints completos?
+3. [ ] ¿Tiene test correspondiente en `tests/`?
+4. [ ] ¿Está instrumentado con métricas Prometheus?
+5. [ ] ¿Respeta circuit breakers si es flujo de trading?
+6. [ ] ¿Usa `async def` para I/O?
+7. [ ] ¿Está documentado en CONTEXT.md y CONTRACTS.md?
+8. [ ] ¿Cumple con las reglas de estilo (snake_case, nombres descriptivos)?
