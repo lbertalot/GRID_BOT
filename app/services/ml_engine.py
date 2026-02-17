@@ -21,7 +21,10 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from app.core.risk_manager import RegimePrediction as RiskRegimePrediction
 
 try:
     from river import compose as rv_compose
@@ -197,5 +200,22 @@ class MLEngine:
         except Exception as e:
             logger.warning(f"Predicción fallida: {e}")
             return RegimePrediction(label=0, proba=0.5)
+
+
+def ml_prediction_to_regime_prediction(ml_pred: RegimePrediction) -> "RiskRegimePrediction":
+    """Convierte la salida de MLEngine.predict_regime a RegimePrediction del risk_manager.
+    label 0 -> RANGE, label 1 -> BULL_TREND; proba se usa como confianza.
+    """
+    from app.core.risk_manager import MarketRegime, RegimePrediction as RiskRegimePrediction
+
+    long_regime = MarketRegime.RANGE if ml_pred.label == 0 else MarketRegime.BULL_TREND
+    short_regime = long_regime
+    conf = max(0.0, min(1.0, float(ml_pred.proba)))
+    return RiskRegimePrediction(
+        long_regime=long_regime,
+        short_regime=short_regime,
+        long_conf=conf,
+        short_conf=conf,
+    )
 
 

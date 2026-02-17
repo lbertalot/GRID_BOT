@@ -165,3 +165,92 @@ def test_execution_skipped_when_breakers_active(setup_tick, monkeypatch):
     assert called["delay"] == 0
 
 
+class _MockCounter:
+    """Counter mock que registra cada .labels(...).inc() para aserciones."""
+
+    def __init__(self):
+        self.calls: list = []
+
+    def labels(self, **kwargs):
+        self._last = kwargs
+        return self
+
+    def inc(self):
+        self.calls.append(dict(self._last))
+
+
+def test_ml_disabled_uses_fallback(setup_tick, monkeypatch):
+    """Con ML_ENABLED=false el ciclo usa fallback y registra métrica reason=disabled."""
+    import app.services.trading_tasks as tt
+
+    monkeypatch.setenv("ML_ENABLED", "false")
+    used = _MockCounter()
+    fallback = _MockCounter()
+    monkeypatch.setattr(tt, "ml_regime_used_in_cycle_total", used, raising=True)
+    monkeypatch.setattr(tt, "ml_regime_fallback_total", fallback, raising=True)
+
+    strategy_blacklist = type("FakeBlacklist", (), {"should_block_trading": lambda s, strat: (False, "")})()
+    monkeypatch.setattr(tt, "strategy_blacklist", strategy_blacklist, raising=True)
+
+    start = datetime.utcnow() - timedelta(seconds=10)
+    _set_cycle_state(setup_tick[1], start)
+    tt.trading_cycle_tick()
+
+    assert len(used.calls) == 0
+    assert len(fallback.calls) >= 1
+    assert any(c.get("reason") == "disabled" for c in fallback.calls)
+
+
+def test_ml_enabled_uses_prediction_when_available(setup_tick, monkeypatch):
+    """Con ML_ENABLED=true y predict_regime OK se usa predicción y métrica used."""
+    import app.services.trading_tasks as tt
+    from app.services.ml_engine import MLEngine, RegimePrediction as MLRegimePrediction
+
+    monkeypatch.setenv("ML_ENABLED", "true")
+    used = _MockCounter()
+    fallback = _MockCounter()
+    monkeypatch.setattr(tt, "ml_regime_used_in_cycle_total", used, raising=True)
+    monkeypatch.setattr(tt, "ml_regime_fallback_total", fallback, raising=True)
+
+    async def fake_predict_regime(symbol: str, interval: str = "1m", limit: int = 60):
+        return MLRegimePrediction(label=1, proba=0.8)
+
+    monkeypatch.setattr(MLEngine, "predict_regime", fake_predict_regime, raising=True)
+    strategy_blacklist = type("FakeBlacklist", (), {"should_block_trading": lambda s, strat: (False, "")})()
+    monkeypatch.setattr(tt, "strategy_blacklist", strategy_blacklist, raising=True)
+
+    start = datetime.utcnow() - timedelta(seconds=10)
+    _set_cycle_state(setup_tick[1], start)
+    tt.trading_cycle_tick()
+
+    assert len(used.calls) >= 1
+    assert any(c.get("symbol") == "ETHUSDT" for c in used.calls)
+
+
+def test_ml_enabled_fallback_on_predict_error(setup_tick, monkeypatch):
+    """Con ML_ENABLED=true y predict_regime lanzando, se usa fallback con reason=error."""
+    import app.services.trading_tasks as tt
+    from app.services.ml_engine import MLEngine
+
+    monkeypatch.setenv("ML_ENABLED", "true")
+    used = _MockCounter()
+    fallback = _MockCounter()
+    monkeypatch.setattr(tt, "ml_regime_used_in_cycle_total", used, raising=True)
+    monkeypatch.setattr(tt, "ml_regime_fallback_total", fallback, raising=True)
+
+    async def fake_predict_raise(symbol: str, interval: str = "1m", limit: int = 60):
+        raise RuntimeError("mock ML failure")
+
+    monkeypatch.setattr(MLEngine, "predict_regime", fake_predict_raise, raising=True)
+    strategy_blacklist = type("FakeBlacklist", (), {"should_block_trading": lambda s, strat: (False, "")})()
+    monkeypatch.setattr(tt, "strategy_blacklist", strategy_blacklist, raising=True)
+
+    start = datetime.utcnow() - timedelta(seconds=10)
+    _set_cycle_state(setup_tick[1], start)
+    tt.trading_cycle_tick()
+
+    assert len(used.calls) == 0
+    assert len(fallback.calls) >= 1
+    assert any(c.get("reason") == "error" for c in fallback.calls)
+
+

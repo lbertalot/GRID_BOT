@@ -202,6 +202,25 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️ No se pudo iniciar User Data Stream: {e}")
 
+        # Keep-alive: prevenir idle/cold-start en Heroku (cada 10 min se hace GET /ping)
+        async def _keep_alive_loop():
+            import httpx
+            app_url = os.getenv("APP_URL", "")
+            if not app_url:
+                logger.info("ℹ️ APP_URL no configurada; keep-alive desactivado")
+                return
+            ping_url = f"{app_url.rstrip('/')}/ping"
+            logger.info(f"🏓 Keep-alive activo → {ping_url} cada 10 min")
+            while True:
+                await asyncio.sleep(600)
+                try:
+                    async with httpx.AsyncClient(timeout=15) as client:
+                        resp = await client.get(ping_url)
+                        logger.debug(f"[keep-alive] GET {ping_url} → {resp.status_code}")
+                except Exception as exc:
+                    logger.warning(f"[keep-alive] Fallo ping: {exc}")
+        asyncio.create_task(_keep_alive_loop())
+
         logger.info("✅ Componentes de integridad iniciados correctamente")
         
         yield
@@ -463,6 +482,11 @@ async def get_partial_fills():
     except Exception as e:
         logger.error(f"❌ Error obteniendo partial fills: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+# Endpoint ultra-ligero: no toca DB, Redis ni Binance; responde 200 inmediato
+@app.get("/ping")
+async def ping():
+    return {"pong": True}
 
 # Endpoint de salud simple para healthcheck de Docker y sondas
 @app.get("/health")
