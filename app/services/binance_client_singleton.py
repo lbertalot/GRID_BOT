@@ -118,9 +118,9 @@ class BinanceClientSingleton:
             logger.info(f"🔧 Inicializando cliente Binance Singleton - API Key: {api_key[:10]}..., Testnet: {testnet}")
             proxies = get_binance_proxies()
             has_proxy_env = bool(os.getenv("QUOTAGUARDSHIELD_URL", "").strip())
-            logger.info(f"🔗 QUOTAGUARDSHIELD_URL presente en env: {has_proxy_env}")
+            logger.warning(f"🔗 QUOTAGUARDSHIELD_URL presente en env: {has_proxy_env}")
             if proxies:
-                logger.info("🔗 Proxy QuotaGuard Shield activo para Binance")
+                logger.warning("🔗 Proxy QuotaGuard Shield activo para Binance")
             request_kw: Dict = {}
             if proxies:
                 request_kw["requests_params"] = {"proxies": proxies}
