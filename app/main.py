@@ -495,22 +495,41 @@ async def get_balance_discrepancies():
 
 @app.post("/integrity/update-binance-balance")
 async def update_binance_balance(
-    balance: float,
-    pnl: float = None,
-    pnl_pct: float = None
+    balance: str,
+    pnl: str = None,
+    pnl_pct: str = None
 ):
-    """Actualizar balance real de Binance proporcionado por el usuario"""
+    """Actualizar balance real de Binance proporcionado por el usuario.
+    
+    INV-001: Se aceptan strings para evitar pérdida de precisión por float.
+    """
     try:
         if not balance_validator:
             raise HTTPException(status_code=503, detail="BalanceValidator no inicializado")
         
-        from decimal import Decimal
+        from decimal import Decimal, InvalidOperation
+        
+        try:
+            balance_dec = Decimal(balance)
+        except (InvalidOperation, ValueError):
+            raise HTTPException(status_code=400, detail=f"Balance inválido: {balance}")
+        
+        pnl_dec = None
+        pnl_pct_dec = None
+        if pnl is not None:
+            try:
+                pnl_dec = Decimal(pnl)
+            except (InvalidOperation, ValueError):
+                raise HTTPException(status_code=400, detail=f"PnL inválido: {pnl}")
+        if pnl_pct is not None:
+            try:
+                pnl_pct_dec = Decimal(pnl_pct)
+            except (InvalidOperation, ValueError):
+                raise HTTPException(status_code=400, detail=f"PnL % inválido: {pnl_pct}")
         
         # Actualizar balance real de Binance
         success = await balance_validator.update_real_binance_balance(
-            Decimal(str(balance)),
-            Decimal(str(pnl)) if pnl is not None else None,
-            Decimal(str(pnl_pct)) if pnl_pct is not None else None
+            balance_dec, pnl_dec, pnl_pct_dec
         )
         
         if success:
@@ -526,6 +545,8 @@ async def update_binance_balance(
         else:
             raise HTTPException(status_code=500, detail="Error actualizando balance de Binance")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Error actualizando balance de Binance: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
@@ -587,25 +608,26 @@ async def reconciliation_summary():
     """
     Resumen simple de última reconciliación (consulta directa a Binance).
     
-    ✅ Bug #3 Fix: Todas las llamadas bloqueantes envueltas en asyncio.to_thread()
+    INV-001: Cálculos de balance con Decimal, conversión a float solo en respuesta JSON.
     """
+    from decimal import Decimal
+
     try:
         client_singleton = get_binance_client_singleton()
         
-        # ✅ FIX: Ejecutar get_account en thread separado para no bloquear event loop
         acct = await asyncio.to_thread(client_singleton.client.get_account)
         
-        # Usar total (free + locked) para alinear con balance estimado de Binance
-        balances = {}
+        # Parsear balances con Decimal (INV-001)
+        balances: dict[str, Decimal] = {}
         for b in acct.get('balances', []):
             asset = b.get('asset')
-            free = float(b.get('free', 0) or 0)
-            locked = float(b.get('locked', 0) or 0)
+            free = Decimal(str(b.get('free', 0) or 0))
+            locked = Decimal(str(b.get('locked', 0) or 0))
             total = free + locked
             if total > 0:
                 balances[asset] = total
 
-        cash_usdt = float(balances.get('USDT', 0.0))
+        cash_usdt = balances.get('USDT', Decimal('0'))
         portfolio_total = cash_usdt
         valued = 0
         unvalued = 0
@@ -614,22 +636,21 @@ async def reconciliation_summary():
             if asset == 'USDT':
                 continue
             
-            # ✅ FIX: Ejecutar get_symbol_price en thread separado
             price = await asyncio.to_thread(
                 client_singleton.get_symbol_price,
                 f"{asset}USDT"
             )
             
             if price and price > 0:
-                portfolio_total += qty * price
+                portfolio_total += qty * Decimal(str(price))
                 valued += 1
             else:
                 unvalued += 1
 
         return {
             'status': 'ok',
-            'cash_usdt': round(cash_usdt, 8),
-            'portfolio_total_usdt': round(portfolio_total, 2),
+            'cash_usdt': float(cash_usdt),
+            'portfolio_total_usdt': float(round(portfolio_total, 2)),
             'valued_count': valued,
             'unvalued_count': unvalued,
             'timestamp': datetime.now().isoformat(),

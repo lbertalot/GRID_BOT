@@ -1,313 +1,362 @@
-import math
-from decimal import Decimal, ROUND_DOWN, getcontext
+"""
+OrderValidator — Validación estricta de órdenes contra filtros del exchange.
+
+Contrato: CTR-001
+Invariantes: INV-001 (Decimal obligatorio), INV-002 (filtros pre-orden)
+
+Todos los valores monetarios (precios, cantidades, notional, filtros) son Decimal.
+"""
+
+from decimal import Decimal, ROUND_DOWN, getcontext, InvalidOperation
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 
 from binance import Client
 from binance.exceptions import BinanceAPIException
 
 logger = logging.getLogger(__name__)
 
+# Contexto de precisión global para cálculos monetarios
+getcontext().prec = 28
+
+
+def _to_decimal(value: Any) -> Decimal:
+    """Convierte un valor a Decimal de forma segura, pasando por str para evitar imprecisión de float."""
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
+
+
+def _step_precision(step: Decimal) -> int:
+    """Calcula la cantidad de decimales de un step (e.g., 0.0001 -> 4)."""
+    if step <= 0:
+        return 0
+    sign, digits, exponent = step.normalize().as_tuple()
+    return max(0, -exponent)
+
+
 class OrderValidator:
-    """Clase para validar y ajustar parámetros de órdenes de trading"""
-    
+    """Valida y ajusta parámetros de órdenes contra filtros del exchange (PRICE_FILTER, LOT_SIZE, MIN_NOTIONAL).
+
+    Todos los valores internos y retornados son Decimal (INV-001).
+    """
+
     def __init__(self, client: Client):
-        """Ejecuta __init__."""
         self.client = client
-        self._symbol_info_cache = {}
-    
+        self._symbol_info_cache: Dict[str, Dict[str, Any]] = {}
+
+    # ------------------------------------------------------------------
+    # Cache de symbol info
+    # ------------------------------------------------------------------
+
     def get_symbol_info(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Obtiene información detallada de un símbolo incluyendo stepSize y minQty"""
+        """Obtiene info de un símbolo con filtros parseados como Decimal."""
         try:
             if symbol not in self._symbol_info_cache:
-                # ✅ FIX: Usar get_exchange_info() con cache si el cliente lo soporta
-                # Si el cliente es binance_client_singleton, usar su método con cache
-                if hasattr(self.client, 'get_exchange_info'):
-                    # Cliente tiene método get_exchange_info (probablemente singleton)
+                if hasattr(self.client, "get_exchange_info"):
                     exchange_info = self.client.get_exchange_info(use_cache=True)
                 else:
-                    # Cliente directo de binance, sin cache
                     exchange_info = self.client.get_exchange_info()
-                
-                for s in exchange_info['symbols']:
-                    if s['symbol'] == symbol.upper():
-                        # Extraer filtros importantes
-                        filters = {f['filterType']: f for f in s['filters']}
+
+                for s in exchange_info.get("symbols", []):
+                    if s["symbol"] == symbol.upper():
+                        filters = {f["filterType"]: f for f in s.get("filters", [])}
+
+                        lot = filters.get("LOT_SIZE", {})
+                        price_filter = filters.get("PRICE_FILTER", {})
+
+                        # Usar notional filter (puede ser NOTIONAL o MIN_NOTIONAL según versión de API)
+                        notional_filter = filters.get("NOTIONAL", filters.get("MIN_NOTIONAL", {}))
+
                         self._symbol_info_cache[symbol] = {
-                            'symbol': s['symbol'],
-                            'baseAsset': s['baseAsset'],
-                            'quoteAsset': s['quoteAsset'],
-                            'stepSize': float(filters.get('LOT_SIZE', {}).get('stepSize', '0.001')),
-                            'minQty': float(filters.get('LOT_SIZE', {}).get('minQty', '0.001')),
-                            'maxQty': float(filters.get('LOT_SIZE', {}).get('maxQty', '1000000.0')),
-                            'minNotional': float(filters.get('MIN_NOTIONAL', {}).get('minNotional', '5.0')),
-                            'tickSize': float(filters.get('PRICE_FILTER', {}).get('tickSize', '0.01')),
-                            'minPrice': float(filters.get('PRICE_FILTER', {}).get('minPrice', '0.0')),
-                            'maxPrice': float(filters.get('PRICE_FILTER', {}).get('maxPrice', '0.0')),
-                            'pricePrecision': s['quotePrecision'],
-                            'quantityPrecision': s['baseAssetPrecision']
+                            "symbol": s["symbol"],
+                            "baseAsset": s.get("baseAsset", ""),
+                            "quoteAsset": s.get("quoteAsset", ""),
+                            "stepSize": _to_decimal(lot.get("stepSize", "0.001")),
+                            "minQty": _to_decimal(lot.get("minQty", "0.001")),
+                            "maxQty": _to_decimal(lot.get("maxQty", "1000000")),
+                            "minNotional": _to_decimal(
+                                notional_filter.get("minNotional", "5")
+                            ),
+                            "tickSize": _to_decimal(price_filter.get("tickSize", "0.01")),
+                            "minPrice": _to_decimal(price_filter.get("minPrice", "0")),
+                            "maxPrice": _to_decimal(price_filter.get("maxPrice", "0")),
+                            "pricePrecision": s.get("quotePrecision", 8),
+                            "quantityPrecision": s.get("baseAssetPrecision", 8),
                         }
                         break
             return self._symbol_info_cache.get(symbol)
         except Exception as e:
             logger.error(f"Error obteniendo información del símbolo {symbol}: {e}")
             return None
-    
-    def _round_to_step(self, value: float, step: float) -> float:
+
+    # ------------------------------------------------------------------
+    # Redondeo a step/tick
+    # ------------------------------------------------------------------
+
+    def _round_to_step(self, value: Decimal, step: Decimal) -> Decimal:
+        """Redondea hacia abajo al múltiplo más cercano de step (INV-001)."""
         if step <= 0:
             return value
-        getcontext().prec = 28
-        v = Decimal(str(value))
-        s = Decimal(str(step))
-        units = (v / s).to_integral_value(rounding=ROUND_DOWN)
-        return float(units * s)
+        units = (value / step).to_integral_value(rounding=ROUND_DOWN)
+        return units * step
 
-    def _round_to_tick(self, price: float, tick: float) -> float:
+    def _round_to_tick(self, price: Decimal, tick: Decimal) -> Decimal:
+        """Redondea precio hacia abajo al múltiplo más cercano de tick (INV-001)."""
         if tick <= 0:
             return price
-        getcontext().prec = 28
-        p = Decimal(str(price))
-        t = Decimal(str(tick))
-        units = (p / t).to_integral_value(rounding=ROUND_DOWN)
-        return float(units * t)
+        units = (price / tick).to_integral_value(rounding=ROUND_DOWN)
+        return units * tick
 
-    def adjust_quantity_precision(self, quantity: float, symbol: str) -> Dict[str, Any]:
-        """Ajusta la cantidad a la precisión requerida por Binance y retorna información detallada"""
+    # ------------------------------------------------------------------
+    # Ajuste de cantidad
+    # ------------------------------------------------------------------
+
+    def adjust_quantity_precision(self, quantity: Any, symbol: str) -> Dict[str, Any]:
+        """Ajusta cantidad a la precisión del exchange. Retorna todo en Decimal."""
         try:
+            qty = _to_decimal(quantity)
             symbol_info = self.get_symbol_info(symbol)
+
             if not symbol_info:
-                # Fallback a valores por defecto
-                step_size = 0.001
-                min_qty = 0.001
-                max_qty = 1000000.0
-                min_notional = 5.0
+                step_size = Decimal("0.001")
+                min_qty = Decimal("0.001")
+                max_qty = Decimal("1000000")
+                min_notional = Decimal("5")
             else:
-                step_size = symbol_info['stepSize']
-                min_qty = symbol_info['minQty']
-                max_qty = symbol_info.get('maxQty', 1000000.0)
-                min_notional = symbol_info['minNotional']
-            
-            # Ajustar a la precisión requerida
-            adjusted_quantity = self._round_to_step(quantity, step_size)
-            
-            # Asegurar que no sea menor que el mínimo
-            if adjusted_quantity < min_qty:
-                adjusted_quantity = min_qty
-            # Limitar al máximo si aplica
-            if adjusted_quantity > max_qty:
-                adjusted_quantity = max_qty
-            
-            # Redondear a la precisión correcta
-            precision = int(-math.log10(step_size))
-            adjusted_quantity = round(adjusted_quantity, precision)
-            
+                step_size = symbol_info["stepSize"]
+                min_qty = symbol_info["minQty"]
+                max_qty = symbol_info.get("maxQty", Decimal("1000000"))
+                min_notional = symbol_info["minNotional"]
+
+            adjusted = self._round_to_step(qty, step_size)
+
+            if adjusted < min_qty:
+                adjusted = min_qty
+            if adjusted > max_qty:
+                adjusted = max_qty
+
+            precision = _step_precision(step_size)
+            adjusted = adjusted.quantize(Decimal(10) ** -precision, rounding=ROUND_DOWN)
+
             return {
-                'original_quantity': quantity,
-                'adjusted_quantity': adjusted_quantity,
-                'step_size': step_size,
-                'min_qty': min_qty,
-                'max_qty': max_qty,
-                'min_notional': min_notional,
-                'precision': precision,
-                'symbol_info': symbol_info
+                "original_quantity": qty,
+                "adjusted_quantity": adjusted,
+                "step_size": step_size,
+                "min_qty": min_qty,
+                "max_qty": max_qty,
+                "min_notional": min_notional,
+                "precision": precision,
+                "symbol_info": symbol_info,
             }
         except Exception as e:
             logger.error(f"Error ajustando precisión de cantidad: {e}")
+            qty_fallback = _to_decimal(quantity)
             return {
-                'original_quantity': quantity,
-                'adjusted_quantity': quantity,
-                'step_size': 0.001,
-                'min_qty': 0.001,
-                'max_qty': 1000000.0,
-                'min_notional': 5.0,
-                'precision': 3,
-                'symbol_info': None,
-                'error': str(e)
+                "original_quantity": qty_fallback,
+                "adjusted_quantity": qty_fallback,
+                "step_size": Decimal("0.001"),
+                "min_qty": Decimal("0.001"),
+                "max_qty": Decimal("1000000"),
+                "min_notional": Decimal("5"),
+                "precision": 3,
+                "symbol_info": None,
+                "error": str(e),
             }
-    
-    def validate_order_parameters(self, symbol: str, quantity: float, side: str, order_type: str = 'MARKET', price: Optional[float] = None) -> Dict[str, Any]:
-        """Valida los parámetros de una orden antes de ejecutarla.
-        - Ajusta cantidad a `stepSize`
-        - Ajusta precio (si LIMIT) a `tickSize` y valida rangos de precio
-        - Valida `minQty`/`maxQty` y `minNotional`
+
+    # ------------------------------------------------------------------
+    # Validación completa de parámetros
+    # ------------------------------------------------------------------
+
+    def validate_order_parameters(
+        self,
+        symbol: str,
+        quantity: Any,
+        side: str,
+        order_type: str = "MARKET",
+        price: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Valida parámetros de una orden (CTR-001).
+
+        - Ajusta cantidad a stepSize.
+        - Ajusta precio (LIMIT) a tickSize y valida rangos.
+        - Valida minQty/maxQty y minNotional.
+        - Todos los campos monetarios son Decimal (INV-001).
         """
         try:
-            # Ajustar cantidad
             quantity_info = self.adjust_quantity_precision(quantity, symbol)
-            
-            # Obtener precio actual para validaciones
+
+            # Obtener precio actual del mercado
             ticker = self.client.get_symbol_ticker(symbol=symbol.upper())
-            current_price = float(ticker["price"])
+            current_price = _to_decimal(ticker["price"])
 
-            # Calcular precio considerado para notional/validación
-            symbol_info = quantity_info['symbol_info'] or {}
-            tick_size = float(symbol_info.get('tickSize', 0.01) or 0.01)
-            min_price = float(symbol_info.get('minPrice', 0.0) or 0.0)
-            max_price = float(symbol_info.get('maxPrice', 0.0) or 0.0)
+            # Información del símbolo
+            symbol_info = quantity_info["symbol_info"] or {}
+            tick_size = _to_decimal(symbol_info.get("tickSize", "0.01") or "0.01")
+            min_price = _to_decimal(symbol_info.get("minPrice", "0") or "0")
+            max_price = _to_decimal(symbol_info.get("maxPrice", "0") or "0")
 
-            adjusted_price = None
-            if order_type.upper() == 'LIMIT':
+            adjusted_price: Optional[Decimal] = None
+
+            if order_type.upper() == "LIMIT":
                 if price is None:
                     raise ValueError("Precio requerido para órdenes LIMIT")
-                adjusted_price = self._round_to_tick(price, tick_size)
-                # Validar rango de precio si min/max definidos
+                raw_price = _to_decimal(price)
+                adjusted_price = self._round_to_tick(raw_price, tick_size)
                 if min_price > 0 and adjusted_price < min_price:
-                    raise ValueError(f"Precio {adjusted_price} es menor que el mínimo permitido {min_price}")
+                    raise ValueError(
+                        f"Precio {adjusted_price} menor que mínimo permitido {min_price}"
+                    )
                 if max_price > 0 and adjusted_price > max_price:
-                    raise ValueError(f"Precio {adjusted_price} es mayor que el máximo permitido {max_price}")
+                    raise ValueError(
+                        f"Precio {adjusted_price} mayor que máximo permitido {max_price}"
+                    )
             else:
                 adjusted_price = current_price
-            
-            # Calcular valor notional
-            # Notional con Decimal
-            notional_value = float(Decimal(str(quantity_info['adjusted_quantity'])) * Decimal(str(adjusted_price)))
-            
-            # Validaciones
-            errors = []
-            warnings = []
-            
-            if quantity_info['adjusted_quantity'] < quantity_info['min_qty']:
-                errors.append(f"Cantidad {quantity_info['adjusted_quantity']} es menor al mínimo {quantity_info['min_qty']}")
-            if quantity_info['adjusted_quantity'] > quantity_info['max_qty']:
-                errors.append(f"Cantidad {quantity_info['adjusted_quantity']} supera el máximo {quantity_info['max_qty']}")
-            
-            if notional_value < quantity_info['min_notional']:
-                errors.append(f"Valor notional ${notional_value:.2f} es menor al mínimo ${quantity_info['min_notional']}")
-            
-            if quantity_info['original_quantity'] != quantity_info['adjusted_quantity']:
-                warnings.append(f"Cantidad ajustada de {quantity_info['original_quantity']} a {quantity_info['adjusted_quantity']} por precisión")
-            if order_type.upper() == 'LIMIT' and adjusted_price != price:
-                warnings.append(f"Precio ajustado de {price} a {adjusted_price} por tickSize {tick_size}")
-            
+
+            # Calcular notional con Decimal (INV-001)
+            notional_value = quantity_info["adjusted_quantity"] * adjusted_price
+
+            errors: list[str] = []
+            warnings: list[str] = []
+
+            if quantity_info["adjusted_quantity"] < quantity_info["min_qty"]:
+                errors.append(
+                    f"Cantidad {quantity_info['adjusted_quantity']} menor al mínimo {quantity_info['min_qty']}"
+                )
+            if quantity_info["adjusted_quantity"] > quantity_info["max_qty"]:
+                errors.append(
+                    f"Cantidad {quantity_info['adjusted_quantity']} supera el máximo {quantity_info['max_qty']}"
+                )
+            # INV-002: validar minNotional DESPUÉS del redondeo
+            if notional_value < quantity_info["min_notional"]:
+                errors.append(
+                    f"Valor notional {notional_value} menor al mínimo {quantity_info['min_notional']}"
+                )
+
+            if quantity_info["original_quantity"] != quantity_info["adjusted_quantity"]:
+                warnings.append(
+                    f"Cantidad ajustada de {quantity_info['original_quantity']} a {quantity_info['adjusted_quantity']} por stepSize"
+                )
+            if order_type.upper() == "LIMIT" and adjusted_price != _to_decimal(price):
+                warnings.append(
+                    f"Precio ajustado de {_to_decimal(price)} a {adjusted_price} por tickSize {tick_size}"
+                )
+
             return {
-                'is_valid': len(errors) == 0,
-                'errors': errors,
-                'warnings': warnings,
-                'quantity_info': quantity_info,
-                'current_price': current_price,
-                'adjusted_price': adjusted_price,
-                'notional_value': notional_value,
-                'recommended_quantity': quantity_info['adjusted_quantity']
+                "is_valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings,
+                "quantity_info": quantity_info,
+                "current_price": current_price,
+                "adjusted_price": adjusted_price,
+                "notional_value": notional_value,
+                "recommended_quantity": quantity_info["adjusted_quantity"],
             }
         except Exception as e:
             logger.error(f"Error validando parámetros de orden: {e}")
             return {
-                'is_valid': False,
-                'errors': [f"Error en validación: {e}"],
-                'warnings': [],
-                'quantity_info': None,
-                'current_price': None,
-                'adjusted_price': None,
-                'notional_value': None,
-                'recommended_quantity': None
+                "is_valid": False,
+                "errors": [f"Error en validación: {e}"],
+                "warnings": [],
+                "quantity_info": None,
+                "current_price": None,
+                "adjusted_price": None,
+                "notional_value": None,
+                "recommended_quantity": None,
             }
-    
-    def place_market_order_with_validation(self, symbol: str, side: str, quantity: float) -> Dict[str, Any]:
-        """Coloca una orden de mercado con validación previa completa"""
+
+    # ------------------------------------------------------------------
+    # Orden de mercado con validación integrada
+    # ------------------------------------------------------------------
+
+    def place_market_order_with_validation(
+        self, symbol: str, side: str, quantity: Any
+    ) -> Dict[str, Any]:
+        """Coloca orden de mercado solo si pasa validación completa (INV-002)."""
         try:
-            # Validar parámetros
-            validation = self.validate_order_parameters(symbol, quantity, side, 'MARKET')
-            
-            if not validation['is_valid']:
-                error_msg = f"❌ Parámetros de orden inválidos para {side} {quantity} {symbol}\n"
-                for error in validation['errors']:
-                    error_msg += f"🔴 {error}\n"
-                if validation['warnings']:
-                    error_msg += "\n⚠️ Advertencias:\n"
-                    for warning in validation['warnings']:
-                        error_msg += f"🟡 {warning}\n"
-                error_msg += f"💡 Cantidad recomendada: {validation['recommended_quantity']}"
+            qty = _to_decimal(quantity)
+            validation = self.validate_order_parameters(symbol, qty, side, "MARKET")
+
+            if not validation["is_valid"]:
+                error_msg = f"Parámetros inválidos para {side} {qty} {symbol}: "
+                error_msg += "; ".join(validation["errors"])
                 raise ValueError(error_msg)
-            
-            # Usar cantidad ajustada
-            adjusted_quantity = validation['quantity_info']['adjusted_quantity']
-            
-            # Ejecutar orden
-            if side.upper() == 'BUY':
-                result = self.client.order_market_buy(symbol=symbol.upper(), quantity=adjusted_quantity)
-            elif side.upper() == 'SELL':
-                result = self.client.order_market_sell(symbol=symbol.upper(), quantity=adjusted_quantity)
+
+            adjusted_quantity = validation["quantity_info"]["adjusted_quantity"]
+
+            # Convertir a float solo para la API de Binance (punto final de salida)
+            qty_for_api = float(adjusted_quantity)
+
+            if side.upper() == "BUY":
+                result = self.client.order_market_buy(
+                    symbol=symbol.upper(), quantity=qty_for_api
+                )
+            elif side.upper() == "SELL":
+                result = self.client.order_market_sell(
+                    symbol=symbol.upper(), quantity=qty_for_api
+                )
             else:
                 raise ValueError(f"Lado de orden inválido: {side}")
-            
+
             return {
-                'order': result,
-                'validation': validation,
-                'executed_quantity': adjusted_quantity,
-                'action_details': {
-                    'symbol': symbol.upper(),
-                    'side': side.upper(),
-                    'original_quantity': quantity,
-                    'adjusted_quantity': adjusted_quantity,
-                    'current_price': validation['current_price'],
-                    'notional_value': validation['notional_value']
-                }
+                "order": result,
+                "validation": validation,
+                "executed_quantity": adjusted_quantity,
+                "action_details": {
+                    "symbol": symbol.upper(),
+                    "side": side.upper(),
+                    "original_quantity": qty,
+                    "adjusted_quantity": adjusted_quantity,
+                    "current_price": validation["current_price"],
+                    "notional_value": validation["notional_value"],
+                },
             }
-            
+
         except BinanceAPIException as e:
-            # Manejo específico de errores de Binance
-            error_details = self._format_binance_error(e, symbol, side, quantity)
+            error_details = self._format_binance_error(e, symbol, side, qty)
             raise ValueError(error_details)
         except Exception as e:
             logger.error(f"Error colocando orden de mercado: {e}")
             raise
-    
-    def _format_binance_error(self, e: BinanceAPIException, symbol: str, side: str, quantity: float) -> str:
-        """Formatea errores de Binance con información detallada"""
-        error_code = getattr(e, 'code', 'N/A')
-        error_message = getattr(e, 'message', str(e))
-        
-        # Errores específicos de precisión
+
+    # ------------------------------------------------------------------
+    # Formato de errores de Binance
+    # ------------------------------------------------------------------
+
+    def _format_binance_error(
+        self, e: BinanceAPIException, symbol: str, side: str, quantity: Any
+    ) -> str:
+        """Formatea errores de Binance con sugerencias."""
+        error_code = getattr(e, "code", "N/A")
+        error_message = getattr(e, "message", str(e))
+
         if error_code == -1111:
-            # Obtener información del símbolo para sugerir cantidad correcta
             symbol_info = self.get_symbol_info(symbol)
             if symbol_info:
-                step_size = symbol_info['stepSize']
-                min_qty = symbol_info['minQty']
-                recommended_qty = math.floor(quantity / step_size) * step_size
+                step_size = symbol_info["stepSize"]
+                min_qty = symbol_info["minQty"]
+                qty = _to_decimal(quantity)
+                recommended_qty = self._round_to_step(qty, step_size)
                 if recommended_qty < min_qty:
                     recommended_qty = min_qty
-                
-                error_msg = f"❌ Error de Precisión en Cantidad\n" \
-                           f"📊 Símbolo: {symbol.upper()}\n" \
-                           f"🔄 Acción: {side.upper()}\n" \
-                           f"💰 Cantidad original: {quantity}\n" \
-                           f"🔢 Step Size: {step_size}\n" \
-                           f"📏 Cantidad mínima: {min_qty}\n" \
-                           f"💡 Cantidad recomendada: {recommended_qty}\n" \
-                           f"🔍 Código de error: {error_code}\n" \
-                           f"📝 Mensaje: {error_message}"
-            else:
-                error_msg = f"❌ Error de Precisión en Cantidad\n" \
-                           f"📊 Símbolo: {symbol.upper()}\n" \
-                           f"🔄 Acción: {side.upper()}\n" \
-                           f"💰 Cantidad: {quantity}\n" \
-                           f"🔍 Código de error: {error_code}\n" \
-                           f"📝 Mensaje: {error_message}\n" \
-                           f"💡 Sugerencia: Reducir la cantidad o verificar la precisión del símbolo"
-        
-        elif error_code == -2010:
-            error_msg = f"❌ Balance Insuficiente\n" \
-                       f"📊 Símbolo: {symbol.upper()}\n" \
-                       f"🔄 Acción: {side.upper()}\n" \
-                       f"💰 Cantidad: {quantity}\n" \
-                       f"🔍 Código de error: {error_code}\n" \
-                       f"📝 Mensaje: {error_message}"
-        
-        elif error_code == -2011:
-            error_msg = f"❌ Error de Precio\n" \
-                       f"📊 Símbolo: {symbol.upper()}\n" \
-                       f"🔄 Acción: {side.upper()}\n" \
-                       f"💰 Cantidad: {quantity}\n" \
-                       f"🔍 Código de error: {error_code}\n" \
-                       f"📝 Mensaje: {error_message}"
-        
-        else:
-            error_msg = f"❌ Error de Binance API\n" \
-                       f"📊 Símbolo: {symbol.upper()}\n" \
-                       f"🔄 Acción: {side.upper()}\n" \
-                       f"💰 Cantidad: {quantity}\n" \
-                       f"🔍 Código de error: {error_code}\n" \
-                       f"📝 Mensaje: {error_message}"
-        
-        return error_msg 
+
+                return (
+                    f"Error de precisión: {symbol.upper()} {side.upper()} qty={quantity} | "
+                    f"stepSize={step_size} minQty={min_qty} recomendado={recommended_qty} | "
+                    f"code={error_code}: {error_message}"
+                )
+
+        error_labels = {
+            -2010: "Balance insuficiente",
+            -2011: "Error de precio",
+        }
+        label = error_labels.get(error_code, "Error de Binance API")
+
+        return (
+            f"{label}: {symbol.upper()} {side.upper()} qty={quantity} | "
+            f"code={error_code}: {error_message}"
+        )
