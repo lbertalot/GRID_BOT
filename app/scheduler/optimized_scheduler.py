@@ -14,6 +14,7 @@ import requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.core.binance_proxy import get_binance_proxies
 from app.core.optimized_grid_manager import OptimizedGridManager, create_optimized_grid_manager
 from app.services.telegram_alert import send_telegram_alert, send_telegram_alert_async
 from app.services.min_qty_updater import update_min_qty_in_db_and_config, create_asset_min_qty_table
@@ -264,12 +265,17 @@ class OptimizedGridScheduler:
         ]
         
         precios = {}
+        proxies = get_binance_proxies()
+        req_kw: Dict = {"timeout": 10}
+        if proxies:
+            req_kw["proxies"] = proxies
         for activo in activos:
             try:
-                # ✅ FIX: Obtener precio (non-blocking)
+                # ✅ FIX: Obtener precio (non-blocking); proxy QuotaGuard si está configurado
                 response = await asyncio.to_thread(
                     requests.get,
-                    f"https://api.binance.com/api/v3/ticker/price?symbol={activo}"
+                    f"https://api.binance.com/api/v3/ticker/price?symbol={activo}",
+                    **req_kw
                 )
                 if response.status_code == 200:
                     data = response.json()
