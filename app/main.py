@@ -107,10 +107,19 @@ async def lifespan(app: FastAPI):
             # Conectar componentes entre sí
             integrity_monitor.set_components(balance_validator, operation_tracker)
             
-            # Iniciar monitoreo de integridad en background
-            asyncio.create_task(balance_validator.start_validation_loop())
-            asyncio.create_task(operation_tracker.start_periodic_cleanup())
-            asyncio.create_task(integrity_monitor.start_monitoring())
+            # Iniciar monitoreo de integridad en background (con delay para no bloquear el event loop al arranque)
+            async def _deferred_integrity():
+                await asyncio.sleep(15)
+                await balance_validator.start_validation_loop()
+            asyncio.create_task(_deferred_integrity())
+            async def _deferred_tracker():
+                await asyncio.sleep(15)
+                await operation_tracker.start_periodic_cleanup()
+            asyncio.create_task(_deferred_tracker())
+            async def _deferred_monitor():
+                await asyncio.sleep(15)
+                await integrity_monitor.start_monitoring()
+            asyncio.create_task(_deferred_monitor())
         except Exception as e:
             logger.error(f"❌ Error inicializando componentes de integridad: {e}", exc_info=True)
             # Continuar sin componentes de integridad si fallan
@@ -121,6 +130,7 @@ async def lifespan(app: FastAPI):
         try:
             from app.services.metrics_service import metrics_service
             async def _periodic_metrics():
+                await asyncio.sleep(20)
                 while True:
                     try:
                         await metrics_service.calculate_portfolio_metrics()
