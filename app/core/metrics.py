@@ -290,6 +290,20 @@ cycle_order_executed = Gauge(
     ['symbol', 'status']
 )
 
+# Régimen ML usado en ciclo (ML_ENABLED=true y predicción OK)
+ml_regime_used_in_cycle_total = Counter(
+    'gridbot_ml_regime_used_in_cycle_total',
+    'Veces que el ciclo de trading usó predicción de régimen del ML',
+    ['symbol']
+)
+
+# Fallback a régimen estático (ML desactivado o error)
+ml_regime_fallback_total = Counter(
+    'gridbot_ml_regime_fallback_total',
+    'Veces que el ciclo usó fallback estático (RANGE) en lugar de ML',
+    ['symbol', 'reason']
+)
+
 # ============================================================================
 # MÉTRICAS DE API
 # ============================================================================

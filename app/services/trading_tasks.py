@@ -21,9 +21,15 @@ from app.services.binance_client_singleton import get_binance_client_singleton
 from app.core.circuit_breakers import CircuitBreakers
 from app.core.auto_circuit_breaker import auto_circuit_breaker
 from app.core.strategy_blacklist import strategy_blacklist
-from app.core.metrics import cycle_phase, cycle_decision_ready, cycle_order_executed
+from app.core.metrics import (
+    cycle_phase,
+    cycle_decision_ready,
+    cycle_order_executed,
+    ml_regime_used_in_cycle_total,
+    ml_regime_fallback_total,
+)
 from app.services.market_data_collector import MarketDataCollector
-from app.services.ml_engine import MLEngine
+from app.services.ml_engine import MLEngine, ml_prediction_to_regime_prediction
 from app.services.strategy_selector import StrategySelector, AccountState
 from app.core.risk_manager import RiskManager, PositionSizeParams
 from app.services.cache import get_async_cache
@@ -200,29 +206,55 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 except Exception:
                     pass
 
+                ml_enabled = os.getenv("ML_ENABLED", "false").lower() == "true"
+                risk = RiskManager()
+                selector = StrategySelector(risk)
+                from app.core.risk_manager import RegimePrediction, MarketRegime
+
                 for sym in symbols:
                     try:
                         price = await mdc.get_price(sym)
                         kl = await mdc.get_klines(sym, interval="1m", limit=60)
-                        features = {"price": float(price), "vol": float(kl[-1][5]) if kl else 0.0}
-                        # Predicción corta (mock con ml_engine si disponible)
-                        # Aquí podríamos usar ml.predict_regime real; mantenemos compatibilidad
-                        regime = await ml.compute_features_from_klines(kl) if hasattr(ml, 'compute_features_from_klines') else {"rsi": 50.0}
-                        # Selección de estrategia (solo registrar)
-                        risk = RiskManager()
-                        selector = StrategySelector(risk)
+                        # Predicción de régimen: ML si ML_ENABLED y disponible, si no fallback RANGE
+                        rp: RegimePrediction
+                        if ml_enabled:
+                            try:
+                                ml_pred = await ml.predict_regime(sym, "1m", 60)
+                                rp = ml_prediction_to_regime_prediction(ml_pred)
+                                ml_regime_used_in_cycle_total.labels(symbol=sym).inc()
+                                logger.debug(
+                                    "[Cycle] ML regime used",
+                                    extra={"symbol": sym, "regime": rp.long_regime.value},
+                                )
+                            except Exception as ml_err:
+                                logger.warning(
+                                    f"[Cycle] ML prediction failed for {sym}, using fallback: {ml_err}",
+                                    extra={"symbol": sym},
+                                )
+                                rp = RegimePrediction(
+                                    long_regime=MarketRegime.RANGE,
+                                    short_regime=MarketRegime.RANGE,
+                                    long_conf=0.6,
+                                    short_conf=0.6,
+                                )
+                                ml_regime_fallback_total.labels(symbol=sym, reason="error").inc()
+                        else:
+                            rp = RegimePrediction(
+                                long_regime=MarketRegime.RANGE,
+                                short_regime=MarketRegime.RANGE,
+                                long_conf=0.6,
+                                short_conf=0.6,
+                            )
+                            ml_regime_fallback_total.labels(symbol=sym, reason="disabled").inc()
+
                         account = AccountState(
                             total_equity=total_equity or 300.0,
                             available_balance=available_balance or 50.0,
                             total_exposure=total_exposure if total_equity > 0 else 250.0,
                             daily_pnl=0.0,
                             max_drawdown=0.0,
-                            risk_score=0.1
+                            risk_score=0.1,
                         )
-                        # Usamos un wrapper simple si ml_engine real no da RegimePrediction
-                        from app.core.risk_manager import RegimePrediction, MarketRegime
-                        rp = RegimePrediction(long_regime=MarketRegime.RANGE, short_regime=MarketRegime.RANGE,
-                                              long_conf=0.6, short_conf=0.6)
                         spec = selector.select_strategy(rp, sym, account)
                         conf = float(getattr(spec, 'confidence', 0.6))
                         # Requisitos de readiness: confianza, liquidez mínima y breakers inactivos
