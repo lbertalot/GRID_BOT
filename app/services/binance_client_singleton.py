@@ -13,6 +13,8 @@ from binance.exceptions import BinanceAPIException
 import ccxt  # Fallback para validación privada
 from dotenv import load_dotenv
 
+from app.core.binance_proxy import get_binance_proxies
+
 logger = logging.getLogger(__name__)
 
 _last_ip_alert_ts: float = 0.0
@@ -114,13 +116,18 @@ class BinanceClientSingleton:
                 raise ValueError("Credenciales de Binance no configuradas")
             
             logger.info(f"🔧 Inicializando cliente Binance Singleton - API Key: {api_key[:10]}..., Testnet: {testnet}")
-            
+            proxies = get_binance_proxies()
+            if proxies:
+                logger.info("🔗 Proxy QuotaGuard Shield activo para Binance")
+            request_kw: Dict = {}
+            if proxies:
+                request_kw["requests_params"] = {"proxies": proxies}
             # Crear cliente
             if testnet:
-                self._client = Client(api_key, api_secret, testnet=True)
+                self._client = Client(api_key, api_secret, testnet=True, **request_kw)
                 logger.info("🔗 Cliente de Binance Testnet creado")
             else:
-                self._client = Client(api_key, api_secret)
+                self._client = Client(api_key, api_secret, **request_kw)
                 logger.info("🔗 Cliente de Binance Mainnet creado")
             
             # Asignar credenciales explícitamente

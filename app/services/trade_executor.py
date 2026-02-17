@@ -9,6 +9,7 @@ import requests
 from decimal import Decimal
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+from app.core.binance_proxy import get_binance_proxies
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.services.balance_service import BalanceService
 from app.db.session import SessionLocal
@@ -76,14 +77,22 @@ class TradeExecutor:
                             loop = asyncio.get_running_loop()
                             # Si hay loop corriendo, usar asyncio.to_thread
                             import concurrent.futures
+                            _proxies = get_binance_proxies()
+                            _kw: Dict[str, Any] = {"timeout": 3}
+                            if _proxies:
+                                _kw["proxies"] = _proxies
                             with concurrent.futures.ThreadPoolExecutor() as executor:
                                 future = executor.submit(
-                                    lambda: requests.get("https://api.binance.com/api/v3/time", timeout=3).json()["serverTime"]
+                                    lambda: requests.get("https://api.binance.com/api/v3/time", **_kw).json()["serverTime"]
                                 )
                                 srv_time = future.result()
                         except RuntimeError:
                             # No hay event loop, ejecutar directamente (contexto sync)
-                            srv_time = requests.get("https://api.binance.com/api/v3/time", timeout=3).json()["serverTime"]
+                            _proxies = get_binance_proxies()
+                            _kw = {"timeout": 3}
+                            if _proxies:
+                                _kw["proxies"] = _proxies
+                            srv_time = requests.get("https://api.binance.com/api/v3/time", **_kw).json()["serverTime"]
                         
                         now_ms = int(time.time() * 1000)
                         drift = abs(now_ms - int(srv_time))

@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, Callable
 
 import aiohttp
 
+from app.core.binance_proxy import get_binance_proxy_url
 from app.services.balance_service import BalanceService
 from app.db.session import SessionLocal
 
@@ -37,6 +38,7 @@ class BinanceUserStreamHandler:
         self._keepalive_task: Optional[asyncio.Task] = None
         self._conn_task: Optional[asyncio.Task] = None
         self._on_fill: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._proxy_url: Optional[str] = get_binance_proxy_url()
         # permitir inyección opcional (fallback a env)
         if api_key:
             os.environ.setdefault("BINANCE_API_KEY", api_key)
@@ -72,7 +74,10 @@ class BinanceUserStreamHandler:
 
     async def _create_listen_key(self) -> str:
         headers = {"X-MBX-APIKEY": os.getenv("BINANCE_API_KEY", "")}
-        async with self.session.post(f"{self.api_base}/api/v3/userDataStream", headers=headers) as resp:
+        kw: Dict[str, Any] = {}
+        if self._proxy_url:
+            kw["proxy"] = self._proxy_url
+        async with self.session.post(f"{self.api_base}/api/v3/userDataStream", headers=headers, **kw) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 # Manejar específicamente errores de IP/ubicación (401 -2015, 451 restricted location)
@@ -107,8 +112,11 @@ class BinanceUserStreamHandler:
             return
         headers = {"X-MBX-APIKEY": os.getenv("BINANCE_API_KEY", "")}
         params = {"listenKey": self.listen_key}
+        kw: Dict[str, Any] = {}
+        if self._proxy_url:
+            kw["proxy"] = self._proxy_url
         try:
-            async with self.session.put(f"{self.api_base}/api/v3/userDataStream", headers=headers, params=params) as resp:
+            async with self.session.put(f"{self.api_base}/api/v3/userDataStream", headers=headers, params=params, **kw) as resp:
                 if resp.status != 200:
                     logger.warning(f"⚠️ No se pudo extender listenKey: status={resp.status}")
         except Exception as e:
@@ -136,7 +144,10 @@ class BinanceUserStreamHandler:
                 self.listen_key = await self._create_listen_key()
                 ws_url = f"{self.ws_base}/{self.listen_key}"
                 logger.info(f"🔗 Conectando a WS userStream...")
-                self.ws = await self.session.ws_connect(ws_url, heartbeat=15)
+                ws_kw: Dict[str, Any] = {"heartbeat": 15}
+                if self._proxy_url:
+                    ws_kw["proxy"] = self._proxy_url
+                self.ws = await self.session.ws_connect(ws_url, **ws_kw)
                 logger.info("✅ WS userStream conectado")
                 backoff = 1
                 _last_2015_log_ts = 0.0  # Resetear si conexión exitosa
