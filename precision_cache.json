@@ -3,5 +3,10 @@
     "quantity": 5,
     "price": 2,
     "step_size": 1e-05
+  },
+  "ETHUSDT": {
+    "quantity": 4,
+    "price": 2,
+    "step_size": 0.0001
   }
 }
