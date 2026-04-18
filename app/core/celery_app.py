@@ -28,9 +28,10 @@ celery_app = Celery(
     backend=celery_result_backend,
     include=[
         "app.services.trading_tasks",
-        "app.services.rebalancing_tasks", 
+        "app.services.rebalancing_tasks",
         "app.services.ml_tasks",
-        "app.services.alert_tasks"
+        "app.services.alert_tasks",
+        "app.services.portfolio_snapshot_service",  # portfolio-snapshot-agent
     ]
 )
 
@@ -58,6 +59,14 @@ if redis_backend_use_ssl:
 celery_app.conf.update(**conf_dict)
 
 # Tareas programadas
+# observability-tracing-agent: instalar signals de OTel en los workers
+try:
+    from app.core.celery_tracing import install_celery_tracing
+    install_celery_tracing()
+except Exception:
+    pass
+
+# Tareas programadas
 celery_app.conf.beat_schedule = {
     "trading-cycle-tick": {
         "task": "app.services.trading_tasks.trading_cycle_tick",
@@ -80,5 +89,10 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=0, hour=3, day_of_week='sun'),  # Domingos 03:00 UTC
         "options": {"queue": "low"},
         "args": (True,),  # dry_run por defecto
+    },
+    # portfolio-snapshot-agent: captura valor real del portafolio cada 15 min
+    "portfolio-snapshot": {
+        "task": "app.services.portfolio_snapshot_service.capture_portfolio_snapshot",
+        "schedule": 900.0,  # 15 minutos
     },
 } 

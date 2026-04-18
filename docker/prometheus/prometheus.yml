@@ -36,20 +36,26 @@ scrape_configs:
     scrape_timeout: 5s
     scheme: http
 
-  # Redis (comentado hasta que se configure redis_exporter)
-  # - job_name: 'redis'
-  #   static_configs:
-  #     - targets: ['redis:6379']
-  #   scrape_interval: 30s
+  # Redis — expuesto por oliver006/redis_exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
 
-  # PostgreSQL (comentado hasta que se configure postgres_exporter)
-  # - job_name: 'postgres'
-  #   static_configs:
-  #     - targets: ['db:5432']
-  #   scrape_interval: 30s
+  # PostgreSQL — expuesto por prometheuscommunity/postgres-exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
 
-  # Node Exporter (comentado hasta que se configure)
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
-  #   scrape_interval: 30s 
+  # cAdvisor — métricas por contenedor (CPU, RAM, red, disco)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 15s

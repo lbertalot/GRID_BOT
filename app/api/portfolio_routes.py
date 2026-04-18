@@ -1,21 +1,56 @@
 """
-Router para endpoints de portfolio y posiciones
+Router para endpoints de portfolio y posiciones.
+performance-analyzer-realdata-agent: añade endpoints de snapshot histórico
+para dashboards y Grafana.
 """
 
 import logging
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Depends, Query
 from decimal import Decimal
+from pydantic import BaseModel
 
 from app.models.portfolio_schemas import PortfolioSummary, AssetSummary, PositionsResponse, Position
 from app.services.binance_service import BinanceService
 from app.db.session import SessionLocal
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+
+from app.services.portfolio_snapshot_service import (
+    get_portfolio_value_history,
+    get_latest_snapshot,
+    get_snapshot_count,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+# ---------------------------------------------------------------------------
+# Schemas de respuesta para endpoints de snapshot
+# ---------------------------------------------------------------------------
+
+class SnapshotPoint(BaseModel):
+    """Punto de dato de valor del portafolio"""
+    timestamp: datetime
+    total_value_usdt: float
+    usdt_free: float
+    btc_value_usdt: float
+    other_assets_usdt: float
+    btc_price: Optional[float] = None
+
+
+class PortfolioHistoryResponse(BaseModel):
+    """Respuesta del historial del portafolio"""
+    days: int
+    snapshot_count: int
+    total_snapshots_stored: int
+    values: List[float]
+    timestamps: List[datetime]
+    latest_value_usdt: Optional[float] = None
+    data_available: bool
 
 
 async def get_binance_service() -> BinanceService:
@@ -149,3 +184,83 @@ async def get_positions_direct() -> PositionsResponse:
     Redirige a get_portfolio_positions.
     """
     return await get_portfolio_positions()
+
+
+# ---------------------------------------------------------------------------
+# performance-analyzer-realdata-agent: endpoints de historial real
+# ---------------------------------------------------------------------------
+
+@router.get("/history", response_model=PortfolioHistoryResponse)
+async def get_portfolio_history(
+    days: int = Query(default=30, ge=1, le=365, description="Días de historial"),
+) -> PortfolioHistoryResponse:
+    """
+    Retorna el historial real de valores del portafolio desde PostgreSQL.
+
+    Los datos provienen de la tabla portfolio_snapshots (captura cada 15 min).
+    Útil para dashboards de Grafana y análisis de rendimiento.
+    """
+    db = SessionLocal()
+    try:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        from app.models.portfolio_snapshot import PortfolioSnapshot
+
+        rows = (
+            db.query(PortfolioSnapshot)
+            .filter(PortfolioSnapshot.captured_at >= since)
+            .order_by(PortfolioSnapshot.captured_at.asc())
+            .all()
+        )
+
+        total_stored = get_snapshot_count(db)
+        latest = get_latest_snapshot(db)
+
+        values = [float(r.total_value_usdt) for r in rows]
+        timestamps = [r.captured_at for r in rows]
+
+        return PortfolioHistoryResponse(
+            days=days,
+            snapshot_count=len(rows),
+            total_snapshots_stored=total_stored,
+            values=values,
+            timestamps=timestamps,
+            latest_value_usdt=float(latest.total_value_usdt) if latest else None,
+            data_available=len(rows) >= 2,
+        )
+    except Exception as exc:
+        logger.error("[portfolio/history] Error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        db.close()
+
+
+@router.get("/snapshot/latest", response_model=SnapshotPoint)
+async def get_latest_portfolio_snapshot() -> SnapshotPoint:
+    """
+    Retorna el snapshot más reciente del portafolio.
+    Si no hay snapshots disponibles retorna 404.
+    """
+    db = SessionLocal()
+    try:
+        snapshot = get_latest_snapshot(db)
+        if snapshot is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No hay snapshots disponibles. "
+                       "Espere que capture_portfolio_snapshot se ejecute (cada 15 min).",
+            )
+        return SnapshotPoint(
+            timestamp=snapshot.captured_at,
+            total_value_usdt=float(snapshot.total_value_usdt),
+            usdt_free=float(snapshot.usdt_free),
+            btc_value_usdt=float(snapshot.btc_value_usdt),
+            other_assets_usdt=float(snapshot.other_assets_usdt),
+            btc_price=float(snapshot.btc_price) if snapshot.btc_price else None,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[portfolio/snapshot/latest] Error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        db.close()

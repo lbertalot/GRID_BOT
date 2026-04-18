@@ -1,7 +1,7 @@
 """Reset transactional data for production rebuild
 
 Revision ID: b441390bfde6
-Revises: 20250813_add_perf_alerts_sysconfig
+Revises: add_perf_alerts_cfg
 Create Date: 2025-09-18 22:32:09.596644
 
 ⚠️  WARNING: This migration will DELETE ALL TRANSACTIONAL DATA
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'b441390bfde6'
-down_revision: Union[str, None] = '20250813_add_perf_alerts_sysconfig'
+down_revision: Union[str, None] = 'add_perf_alerts_cfg'
 
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
