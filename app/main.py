@@ -212,6 +212,7 @@ async def lifespan(app: FastAPI):
                 ed25519_key = os.getenv("BINANCE_ED25519_API_KEY", "").strip()
                 if ed25519_key:
                     user_stream = BinanceUserStreamHandler(api_key=ed25519_key)
+                    app.state.binance_user_stream = user_stream
                     asyncio.create_task(user_stream.start(on_fill=default_on_fill))
                     logger.warning("🔌 User Data Stream inicializado (WS API v3 + Ed25519)")
                 else:
@@ -243,6 +244,15 @@ async def lifespan(app: FastAPI):
         logger.warning("✅ Lifespan completado, servidor listo para aceptar requests")
         
         yield
+
+        # Apagar User Data Stream (cierra aiohttp.ClientSession; evita "Unclosed client session")
+        try:
+            handler = getattr(app.state, "binance_user_stream", None)
+            if handler is not None:
+                await handler.stop()
+                app.state.binance_user_stream = None
+        except Exception as e:
+            logger.warning("⚠️ Error al detener Binance User Stream: %s", e)
         
     except Exception as e:
         logger.error(f"❌ Error iniciando componentes de integridad: {e}")

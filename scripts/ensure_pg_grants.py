@@ -35,6 +35,8 @@ def main() -> int:
 
     print("🔐 Asegurando permisos en schema public para griduser…")
 
+    pg_pass = os.environ.get("POSTGRES_PASSWORD", "gridpass")
+
     stmts = [
         "ALTER SCHEMA public OWNER TO griduser",
         "GRANT ALL ON SCHEMA public TO griduser",
@@ -58,6 +60,34 @@ def main() -> int:
                     # No abortamos: lo normal es que algunos ya existan o
                     # requieran privilegios superiores (ignorables en dev).
                     print(f"⚠️  {stmt}: {e}")
+
+            # Rol de login `gridbot` (alias) — idempotente; griduser es superuser en Docker
+            try:
+                cur.execute("SELECT 1 FROM pg_roles WHERE rolname = 'gridbot'")
+                if cur.fetchone() is None:
+                    cur.execute(
+                        "CREATE ROLE gridbot WITH LOGIN PASSWORD %s INHERIT",
+                        (pg_pass,),
+                    )
+                    print("✅ Rol gridbot creado (alias de permisos vía griduser)")
+            except Exception as e:
+                print(f"⚠️  Rol gridbot: {e}")
+
+            try:
+                cur.execute(
+                    """
+                    SELECT 1 FROM pg_auth_members am
+                    JOIN pg_roles r ON r.oid = am.roleid
+                    JOIN pg_roles m ON m.oid = am.member
+                    WHERE r.rolname = 'griduser' AND m.rolname = 'gridbot'
+                    """
+                )
+                if cur.fetchone() is None:
+                    cur.execute("GRANT griduser TO gridbot")
+                    print("✅ GRANT griduser TO gridbot aplicado")
+            except Exception as e:
+                print(f"⚠️  GRANT griduser TO gridbot: {e}")
+
         conn.close()
     except Exception as e:
         print(f"❌ Error conectando a Postgres: {e}", file=sys.stderr)
