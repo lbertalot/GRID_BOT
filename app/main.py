@@ -20,6 +20,11 @@ from app.services.binance_client_singleton import get_binance_client_singleton
 from app.services.reconciliation_service import ReconciliationService
 from app.core.middleware.integrity_guard import IntegrityGuardMiddleware
 from app.core.middleware.prometheus_http import PrometheusHTTPMiddleware
+from app.core.middleware.security_hardening import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    InputSanitizationMiddleware,
+)
 
 # Importar routers existentes
 from app.api import trade, strategies, metrics, alert_routes, simulations
@@ -28,6 +33,7 @@ from app.api import config_routes
 from app.api import prometheus as prometheus_routes
 from app.core.circuit_breakers import CircuitBreakers
 from app.core.metrics import cycle_phase
+from app.core.tracing import setup_tracing
 
 # Configuración de logging (controlada por env)
 def _configure_logging() -> logging.Logger:
@@ -83,7 +89,10 @@ async def lifespan(app: FastAPI):
     global balance_validator, operation_tracker, integrity_monitor
     
     logger.info("🚀 Iniciando GridBot v2.5 con componentes de integridad")
-    
+
+    # Distributed tracing (OpenTelemetry — no-op si las dependencias no están instaladas)
+    setup_tracing(app)
+
     try:
         # Si estamos exportando OpenAPI en CI, no inicializar componentes externos
         if os.getenv("EXPORT_OPENAPI", "0") == "1":
@@ -197,13 +206,19 @@ async def lifespan(app: FastAPI):
 
             try:
                 from app.services.binance_user_stream import BinanceUserStreamHandler, default_on_fill
-                api_key = os.getenv("BINANCE_API_KEY", "")
-                if api_key:
-                    user_stream = BinanceUserStreamHandler(api_key=api_key)
+                # WS API v3 requiere la API key Ed25519 (no la HMAC legacy).
+                # Pasar la HMAC aquí provoca -1022 "Signature for this request is not valid"
+                # porque la firma Ed25519 no coincide con la clave pública asociada a la HMAC.
+                ed25519_key = os.getenv("BINANCE_ED25519_API_KEY", "").strip()
+                if ed25519_key:
+                    user_stream = BinanceUserStreamHandler(api_key=ed25519_key)
                     asyncio.create_task(user_stream.start(on_fill=default_on_fill))
-                    logger.warning("🔌 User Data Stream inicializado")
+                    logger.warning("🔌 User Data Stream inicializado (WS API v3 + Ed25519)")
                 else:
-                    logger.warning("ℹ️ BINANCE_API_KEY no configurada; User Data Stream no iniciado")
+                    logger.warning(
+                        "ℹ️ BINANCE_ED25519_API_KEY no configurada; "
+                        "User Data Stream no iniciado (WS API v3 requiere Ed25519)"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo iniciar User Data Stream: {e}")
         asyncio.create_task(_start_reconciliation_and_stream())
@@ -263,6 +278,13 @@ app.add_middleware(
 # Middleware Integrity Guard (desactivable en tests)
 if os.getenv("INTEGRITY_GUARD_DISABLED", "0") != "1":
     app.add_middleware(IntegrityGuardMiddleware)
+
+# api-security-hardening-agent: security headers, rate limiting, input sanitization
+# Desactivable en tests para evitar interferencias: SECURITY_HARDENING_DISABLED=1
+if os.getenv("SECURITY_HARDENING_DISABLED", "0") != "1":
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(InputSanitizationMiddleware)
 
 # Exponer breakers en app.state para middleware
 app.state.breakers = app_breakers

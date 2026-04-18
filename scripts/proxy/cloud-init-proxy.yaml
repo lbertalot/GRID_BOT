@@ -1,0 +1,133 @@
+#cloud-config
+# GridBot — Squid proxy para Binance en Oracle Cloud Free Tier
+# Pegar este contenido en "Cloud Init > Paste cloud-init script" al crear la VM.
+# Al arrancar, la VM instala Squid, genera credenciales y abre el puerto 3128.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - squid
+  - apache2-utils
+  - ufw
+
+write_files:
+  - path: /opt/gridbot-proxy/setup.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      PROXY_USER="gridbot"
+      PROXY_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
+      PROXY_PORT=3128
+
+      echo "============================================"
+      echo " GridBot Squid Proxy — Setup automático"
+      echo "============================================"
+
+      # Crear archivo de contraseñas
+      htpasswd -cb /etc/squid/htpasswd "$PROXY_USER" "$PROXY_PASS"
+      chmod 640 /etc/squid/htpasswd
+      chown proxy:proxy /etc/squid/htpasswd
+
+      # Backup config original
+      cp /etc/squid/squid.conf /etc/squid/squid.conf.bak
+
+      # Configuración de Squid: solo Binance, con autenticación
+      cat > /etc/squid/squid.conf << 'SQUID_EOF'
+      # === GridBot Proxy — Solo tráfico a Binance ===
+
+      # Puerto de escucha
+      http_port 3128
+
+      # Autenticación básica
+      auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/htpasswd
+      auth_param basic realm GridBot-Proxy
+      auth_param basic credentialsttl 8 hours
+
+      # ACLs
+      acl authenticated proxy_auth REQUIRED
+      acl SSL_ports port 443
+      acl Safe_ports port 443
+      acl CONNECT method CONNECT
+
+      # Solo permitir dominios de Binance
+      acl binance_domains dstdomain .binance.com
+      acl binance_domains dstdomain .binance.me
+      acl binance_domains dstdomain .binance.cloud
+
+      # Reglas de acceso
+      http_access deny !Safe_ports
+      http_access deny CONNECT !SSL_ports
+      http_access allow authenticated binance_domains
+      http_access deny all
+
+      # No revelar IP interna del cliente (Heroku)
+      forwarded_for delete
+      via off
+      request_header_access X-Forwarded-For deny all
+
+      # Limitar tamaño de logs
+      access_log daemon:/var/log/squid/access.log squid
+      logfile_rotate 3
+      cache deny all
+      SQUID_EOF
+
+      # Quitar espacios de indentación del heredoc
+      sed -i 's/^      //' /etc/squid/squid.conf
+
+      # Firewall: permitir SSH y proxy
+      ufw --force reset
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow 22/tcp comment "SSH"
+      ufw allow ${PROXY_PORT}/tcp comment "Squid Proxy"
+      ufw --force enable
+
+      # Abrir puerto en iptables también (Oracle Cloud usa iptables internamente)
+      iptables -I INPUT 6 -m state --state NEW -p tcp --dport ${PROXY_PORT} -j ACCEPT
+      netfilter-persistent save 2>/dev/null || true
+
+      # Reiniciar Squid
+      systemctl enable squid
+      systemctl restart squid
+
+      # Guardar credenciales en archivo protegido
+      cat > /opt/gridbot-proxy/credentials.txt << CRED_EOF
+      ============================================
+       GridBot Proxy — Credenciales
+      ============================================
+       Usuario:  ${PROXY_USER}
+       Password: ${PROXY_PASS}
+       Puerto:   ${PROXY_PORT}
+
+       URL del proxy (poner en Heroku):
+       http://${PROXY_USER}:${PROXY_PASS}@<TU_IP_PUBLICA>:${PROXY_PORT}
+
+       IP para whitelist en Binance:
+       <TU_IP_PUBLICA>
+      ============================================
+      CRED_EOF
+
+      chmod 600 /opt/gridbot-proxy/credentials.txt
+
+      echo ""
+      echo "============================================"
+      echo " SETUP COMPLETADO"
+      echo "============================================"
+      echo " Usuario:  ${PROXY_USER}"
+      echo " Password: ${PROXY_PASS}"
+      echo " Puerto:   ${PROXY_PORT}"
+      echo ""
+      echo " Credenciales guardadas en:"
+      echo " /opt/gridbot-proxy/credentials.txt"
+      echo ""
+      echo " Próximos pasos:"
+      echo " 1. Anota la IP pública de esta VM"
+      echo " 2. En Binance: whitelistea esa IP"
+      echo " 3. En Heroku: heroku config:set BINANCE_PROXY_URL=http://${PROXY_USER}:${PROXY_PASS}@<IP>:${PROXY_PORT}"
+      echo "============================================"
+
+runcmd:
+  - bash /opt/gridbot-proxy/setup.sh 2>&1 | tee /opt/gridbot-proxy/setup.log

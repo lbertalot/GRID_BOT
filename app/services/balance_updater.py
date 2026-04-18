@@ -1,76 +1,110 @@
-import os
-import asyncpg
+"""
+balance-race-condition-fixer: sincronización de balances desde Binance a PostgreSQL.
+
+Correcciones respecto a la versión anterior:
+- Eliminado el raw asyncpg con INSERT ... ON CONFLICT DO UPDATE sin versión.
+- Ahora usa BalanceService.upsert_from_exchange() que es un UPSERT SQL atómico
+  con incremento de version, evitando que dos workers concurrentes se pisen.
+- Un solo commit al final para atomicidad de toda la sincronización.
+- Logging estructurado con contadores.
+"""
 import asyncio
 import logging
+import os
+from decimal import Decimal
+from typing import Dict
+
 from binance import Client
 from dotenv import load_dotenv
 
+from app.db.session import SessionLocal
+from app.services.balance_service import BalanceService
+
 logger = logging.getLogger(__name__)
 
-async def update_balances_in_db():
+
+async def update_balances_in_db() -> Dict[str, int]:
     """
-    Obtiene los balances de Binance y los actualiza en la base de datos.
-    Se ejecuta durante el evento de inicio de la aplicación FastAPI.
+    Obtiene los balances de Binance y los sincroniza en PostgreSQL usando
+    operaciones atómicas con optimistic locking (UPSERT + version++).
+
+    Retorna dict con contadores: updated, skipped, errors.
     """
     load_dotenv()
-    logger.info("Iniciando actualización de balances desde Binance...")
+    logger.info("[BalanceUpdater] Iniciando sincronización de balances desde Binance...")
 
     api_key = os.getenv("BINANCE_API_KEY")
     api_secret = os.getenv("BINANCE_SECRET_KEY")
-    
-    db_user = os.getenv("POSTGRES_USER")
-    db_pass = os.getenv("POSTGRES_PASSWORD")
-    db_name = os.getenv("POSTGRES_DB")
-    db_host = os.getenv("POSTGRES_HOST", "db")
 
-    if not all([api_key, api_secret, db_user, db_pass, db_name]):
-        logger.error("Faltan variables de entorno para la actualización de balances. Verifique el archivo .env.")
-        return
+    if not api_key or not api_secret:
+        logger.error("[BalanceUpdater] BINANCE_API_KEY / BINANCE_SECRET_KEY no configuradas")
+        return {"updated": 0, "skipped": 0, "errors": 1}
 
-    # Conexión a Binance
+    # Obtener balances de Binance (síncrono en thread para no bloquear event loop)
     try:
-        client = Client(api_key, api_secret)
-        account_info = client.get_account()
-        balances = account_info.get("balances", [])
-        logger.info(f"Se obtuvieron {len(balances)} balances desde Binance.")
-    except Exception as e:
-        logger.error(f"Error al conectar con Binance API: {e}")
-        return
+        client = await asyncio.to_thread(_get_binance_balances, api_key, api_secret)
+    except Exception as exc:
+        logger.error("[BalanceUpdater] Error al conectar con Binance API: %s", exc)
+        return {"updated": 0, "skipped": 0, "errors": 1}
 
-    # Conexión a la base de datos
-    conn = None
+    if not client:
+        return {"updated": 0, "skipped": 0, "errors": 1}
+
+    # Persistir en PostgreSQL con UPSERT atómico
+    result = await asyncio.to_thread(_persist_balances, client)
+    logger.info(
+        "[BalanceUpdater] Sincronización completa: updated=%d skipped=%d errors=%d",
+        result["updated"], result["skipped"], result["errors"],
+    )
+    return result
+
+
+def _get_binance_balances(api_key: str, api_secret: str) -> list:
+    """Obtiene la lista de balances desde Binance (síncrono, llama desde thread)."""
+    client = Client(api_key, api_secret)
+    account_info = client.get_account()
+    return account_info.get("balances", [])
+
+
+def _persist_balances(balances: list) -> Dict[str, int]:
+    """
+    Persiste todos los balances con saldo usando UPSERT atómico en un solo commit.
+    El session-per-sync garantiza que concurrent calls no compartan transacción.
+    """
+    db = SessionLocal()
+    updated = 0
+    skipped = 0
+    errors = 0
+
     try:
-        conn = await asyncpg.connect(user=db_user, password=db_pass, database=db_name, host=db_host)
-        
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS balances (
-                asset VARCHAR(20) PRIMARY KEY,
-                free NUMERIC,
-                locked NUMERIC,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-        ''')
-
-        updated_count = 0
         for balance in balances:
-            asset = balance['asset']
-            free = float(balance['free'])
-            locked = float(balance['locked'])
-            
-            if free > 0 or locked > 0:
-                await conn.execute('''
-                    INSERT INTO balances (asset, free, locked) 
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (asset) DO UPDATE
-                    SET free = $2, locked = $3, updated_at = NOW();
-                ''', asset, free, locked)
-                updated_count += 1
-        
-        logger.info(f"{updated_count} balances con saldo fueron actualizados en la base de datos.")
+            asset: str = balance["asset"]
+            free = Decimal(str(balance["free"]))
+            locked = Decimal(str(balance["locked"]))
+            total = free + locked
 
-    except Exception as e:
-        logger.error(f"Error al actualizar balances en la base de datos: {e}")
+            if total <= Decimal("0"):
+                skipped += 1
+                continue
+
+            try:
+                # UPSERT atómico con version++ — no hay race condition
+                BalanceService.upsert_from_exchange(db, asset=asset, amount=total)
+                updated += 1
+            except Exception as exc:
+                logger.warning(
+                    "[BalanceUpdater] Error en upsert de %s: %s", asset, exc
+                )
+                errors += 1
+
+        # Un único commit para toda la sincronización
+        db.commit()
+
+    except Exception as exc:
+        db.rollback()
+        logger.error("[BalanceUpdater] Error crítico en persistencia: %s", exc)
+        errors += 1
     finally:
-        if conn:
-            await conn.close()
-            logger.info("Conexión con la base de datos cerrada.") 
+        db.close()
+
+    return {"updated": updated, "skipped": skipped, "errors": errors}

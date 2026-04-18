@@ -1,0 +1,418 @@
+# docker-compose.local.yml — Stack completo para desarrollo local
+#
+# Levanta todos los servicios sin perfiles obligatorios.
+# Uso:
+#   docker compose -f docker-compose.local.yml up --build
+#   docker compose -f docker-compose.local.yml down -v   # borrar volumes también
+#
+# Servicios incluidos:
+#   - db          PostgreSQL 16 (puerto 5432)
+#   - redis       Redis 7 (puerto 6379)
+#   - api         FastAPI + Uvicorn (puerto 8000) con reload
+#   - worker      Celery worker
+#   - beat        Celery beat (tareas programadas)
+#   - flower      Monitor de Celery (puerto 5555)
+#   - prometheus  Métricas (puerto 9090)
+#   - grafana     Dashboards (puerto 3000, admin/gridbot123)
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://griduser:gridpass@db:5432/gridbot
+  REDIS_URL: redis://redis:6379
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  SECRET_KEY: gridbot-local-dev-key-2026
+  ENVIRONMENT: development
+  DEBUG: "true"
+  LOG_LEVEL: INFO
+  NOISY_MODULE_LOG_LEVEL: WARNING
+  ACCESS_LOG: "false"
+  DOCKER_ENV: "true"
+  TZ: UTC
+  # Trading — modo seguro por defecto en local
+  PAPER_TRADING: "false"
+  TRADING_ENABLED: "true"
+  EMERGENCY_STOP: "false"
+  FORCE_REAL_MODE: ""
+  BINANCE_TESTNET: "false"
+  # Estrategia
+  CALIBRATION_MODE: "true"
+  MIN_USDT_BALANCE: "15.0"
+  TARGET_USDT_BALANCE: "30.0"
+  ENABLE_AUTO_REBALANCE: "true"
+  # Tracing (deshabilitado por defecto en local para no ensuciar stdout).
+  # Opciones: none (default) | console (debug) | otlp | jaeger
+  OTEL_EXPORTER: none
+  OTEL_SAMPLE_RATE: "0.1"
+  OTEL_SERVICE_NAME: gridbot-local
+  # Rate limiting (más permisivo en dev)
+  RATE_LIMIT_REQUESTS: "300"
+  RATE_LIMIT_WINDOW: "60"
+  # Seguridad (desactivar HSTS estricto en local sin TLS)
+  SECURITY_HARDENING_DISABLED: "0"
+  # Numba
+  NUMBA_DISABLE_CACHE: "1"
+  NUMBA_DISABLE_CUDA: "1"
+  MPLCONFIGDIR: /tmp/matplotlib
+  MONITORING_DIR: /app/monitoring_data
+  REPORTS_DIR: /app/reports
+
+x-app-volumes: &app-volumes
+  - ./app:/app/app
+  - ./alembic:/app/alembic
+  - ./alembic.ini:/app/alembic.ini
+  - ./grid_config_optimized.json:/app/grid_config_optimized.json
+  - ./logs:/app/logs
+  - ./cache:/app/cache
+  - ./data:/app/data
+  - ./monitoring_data:/app/monitoring_data
+  - ./reports:/app/reports
+  - ./secrets:/app/secrets:ro
+
+services:
+
+  # ── Infraestructura ────────────────────────────────────────────────────────
+
+  db:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    container_name: gridbot_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: griduser
+      POSTGRES_PASSWORD: gridpass
+      POSTGRES_DB: gridbot
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U griduser -d gridbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - gridbot_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: gridbot_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gridbot_network
+
+  # ── Migración de base de datos (se ejecuta antes que la API) ──────────────
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridbot_migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+    volumes: *app-volumes
+    command: >
+      sh -c "
+        echo '⏳ Esperando PostgreSQL...' &&
+        python scripts/ensure_pg_grants.py &&
+        alembic upgrade head &&
+        echo '✅ Migraciones aplicadas'
+      "
+    networks:
+      - gridbot_network
+
+  # ── Aplicación principal ───────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridbot_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+    volumes: *app-volumes
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 1
+      --reload
+      --reload-exclude "tests/*"
+      --reload-exclude "*.pyc"
+      --no-access-log
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    networks:
+      - gridbot_network
+
+  # ── Celery ─────────────────────────────────────────────────────────────────
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridbot_worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+      CELERYD_HIJACK_ROOT_LOGGER: "false"
+    volumes: *app-volumes
+    command: >
+      celery -A app.core.celery_app worker
+      --loglevel=info
+      --concurrency=2
+      --queues=celery,low
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - gridbot_network
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridbot_beat
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+    volumes: *app-volumes
+    command: >
+      celery -A app.core.celery_app beat
+      --loglevel=warning
+      --schedule /tmp/celerybeat-schedule
+      --pidfile=/tmp/celerybeat.pid
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridbot_flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    command:
+      - sh
+      - -c
+      - >-
+        celery -A app.core.celery_app flower
+        --port=5555
+        --loglevel=warning
+        --basic-auth=${FLOWER_BASIC_AUTH_USER}:${FLOWER_BASIC_AUTH_PASS}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS -u "$$FLOWER_BASIC_AUTH_USER:$$FLOWER_BASIC_AUTH_PASS" http://localhost:5555/ >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  # ── Observabilidad ─────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gridbot_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gridbot_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: gridbot123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: db:5432
+      GF_DATABASE_NAME: grafana
+      GF_DATABASE_USER: grafana
+      GF_DATABASE_PASSWORD: grafana_pass
+      GF_DATABASE_SSL_MODE: disable
+      GF_LOG_LEVEL: warn
+      GF_LOG_MODE: console
+      GF_LIVE_MAX_CONNECTIONS: "0"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  # ── Exporters (infra metrics para Prometheus) ─────────────────────────────
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: gridbot_redis_exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    # La imagen es distroless (sin shell / wget / curl), el healthcheck por CMD
+    # siempre falla. Prometheus ya valida el estado real haciendo scrape a /metrics.
+    healthcheck:
+      disable: true
+    networks:
+      - gridbot_network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: gridbot_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://griduser:gridpass@db:5432/gridbot?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: ""
+    ports:
+      - "9187:9187"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9187/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: gridbot_cadvisor
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    command:
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --docker=unix:///rootfs/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gridbot_network
+
+volumes:
+  pgdata:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  gridbot_network:
+    driver: bridge

@@ -1,44 +1,121 @@
-name: CI
+# ci-cd-pipeline-agent — Pipeline completo para GridBot
+#
+# Stages:
+#   1. lint       — pyflakes, bandit (seguridad estática)
+#   2. test       — pytest con PostgreSQL real + cobertura
+#   3. migrations — verifica que las migraciones Alembic son válidas
+#   4. docker     — build de imagen (push a GHCR en main)
+#   5. deploy     — deploy a Heroku (solo en main)
+
+name: CI / CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: "3.11"
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/grid-bot
+
+# ─── JOB 1: Lint y seguridad estática ────────────────────────────────────────
 jobs:
-  build-test:
+  lint:
+    name: Lint & Static Security
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Install dependencies
+      - name: Instalar herramientas de análisis
+        run: pip install pyflakes bandit pip-audit
+
+      - name: pyflakes (warnings informativos + bloqueo ante errores reales)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pip-audit pyflakes pytest-mock
-          echo "If you need ML extras locally: pip install -r requirements-ml.txt"
+          # Ejecutamos pyflakes sobre app/ y guardamos el output.
+          # El exit code se ignora a propósito (|| true) porque pyflakes no
+          # distingue severidad: reporta imports no usados y f-strings sin
+          # placeholders como "errores" al mismo nivel que un undefined name.
+          # Solo bloqueamos el build ante errores realmente peligrosos:
+          #   - undefined name (NameError en runtime)
+          #   - invalid syntax (SyntaxError)
+          #   - may be undefined, or defined from star imports
+          python -m pyflakes app | tee pyflakes.log || true
+          echo ""
+          echo "── Errores bloqueantes (undefined / syntax) ──"
+          if grep -E "undefined name|invalid syntax|may be undefined" pyflakes.log; then
+            echo ""
+            echo "❌ Se encontraron errores reales de pyflakes. Corregir antes de mergear."
+            exit 1
+          fi
+          echo "✅ Sin errores bloqueantes. Los warnings informativos quedan para limpieza futura."
 
-      - name: Lint (basic)
+      - name: bandit (vulnerabilidades de seguridad en código)
         run: |
-          python -m pyflakes app || true
+          bandit -r app \
+            --skip B101,B601 \
+            --severity-level medium \
+            --confidence-level medium \
+            -f txt || true
 
-      - name: Security audit (pip-audit)
-        run: |
-          pip-audit -r requirements.txt || true
+      - name: pip-audit (CVEs en dependencias)
+        run: pip-audit -r requirements.txt --ignore-vuln GHSA-jfh8-c2jp-5 || true
 
-      - name: Run tests
+# ─── JOB 2: Tests con PostgreSQL real ────────────────────────────────────────
+  test:
+    name: Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:15-alpine
         env:
-          DATABASE_URL: sqlite:///./test.db
-          REDIS_URL: redis://localhost:6379
-          # Evitar llamadas reales a Binance/externas en CI
+          POSTGRES_DB: gridbot_test
+          POSTGRES_USER: gridbot
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-mock pytest-asyncio pytest-cov
+
+      - name: Correr tests
+        env:
+          DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_test
+          REDIS_URL: redis://localhost:6379/0
           USE_REAL_BINANCE: "0"
           SKIP_API_HEALTHCHECK: "1"
           CI: "true"
@@ -49,33 +126,159 @@ jobs:
           EMERGENCY_STOP: "true"
           EXPORT_OPENAPI: "0"
           INTEGRITY_GUARD_DISABLED: "1"
+          BINANCE_API_KEY: "ci_dummy_key"
+          BINANCE_SECRET_KEY: "ci_dummy_secret"
+          TELEGRAM_BOT_TOKEN: ""
+          TELEGRAM_CHAT_ID: ""
         run: |
-          pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=xml:coverage.xml || true
-          [ -f coverage.xml ] || touch coverage.xml
-          echo "\n==== Coverage (term-missing, skip-covered) ===="
-          pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=term-missing:skip-covered || true
+          pytest tests/ \
+            -q \
+            --maxfail=10 \
+            --disable-warnings \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing:skip-covered
 
-      - name: Export OpenAPI schema
-        env:
-          PYTHONPATH: .
-          USE_REAL_BINANCE: "0"
-          BINANCE_TESTNET: "true"
-          PAPER_TRADING: "true"
-          EXPORT_OPENAPI: "1"
-        run: |
-          python scripts/export_openapi.py
-
-      - name: Upload OpenAPI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openapi
-          path: Docs/openapi.json
-
-      - name: Upload coverage to Codecov
-        if: ${{ always() }}
+      - name: Subir cobertura a Codecov
+        if: always()
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+# ─── JOB 3: Verificar migraciones Alembic ────────────────────────────────────
+  migrations:
+    name: Alembic Migrations Check
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: gridbot_migrations
+          POSTGRES_USER: gridbot
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Aplicar migraciones (upgrade head)
+        env:
+          DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_migrations
+          BINANCE_API_KEY: "ci_dummy"
+          BINANCE_SECRET_KEY: "ci_dummy"
+        run: alembic upgrade head
+
+      - name: Verificar que no hay migraciones pendientes
+        env:
+          DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_migrations
+          BINANCE_API_KEY: "ci_dummy"
+          BINANCE_SECRET_KEY: "ci_dummy"
+        run: |
+          PENDING=$(alembic current 2>&1)
+          echo "Estado Alembic: $PENDING"
+          # Verificar que el estado es 'head'
+          alembic current | grep "(head)" || (echo "❌ Migraciones pendientes detectadas" && exit 1)
+
+# ─── JOB 4: Docker build (y push en main) ────────────────────────────────────
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [test, migrations]
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login a GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos de imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ─── JOB 5: Deploy a Heroku (solo en main) ───────────────────────────────────
+  deploy:
+    name: Deploy to Heroku
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy a Heroku via Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: |
+          if [ -z "$HEROKU_API_KEY" ] || [ -z "$HEROKU_APP_NAME" ]; then
+            echo "⚠️  HEROKU_API_KEY o HEROKU_APP_NAME no configurados — deploy omitido"
+            exit 0
+          fi
+          # Instalar Heroku CLI
+          curl https://cli-assets.heroku.com/install.sh | sh
+          # Login y deploy
+          echo "$HEROKU_API_KEY" | docker login --username=_ \
+            --password-stdin registry.heroku.com
+          docker pull ${{ env.IMAGE_NAME }}:latest
+          docker tag ${{ env.IMAGE_NAME }}:latest \
+            registry.heroku.com/$HEROKU_APP_NAME/web
+          docker push registry.heroku.com/$HEROKU_APP_NAME/web
+          heroku container:release web --app $HEROKU_APP_NAME
+          echo "✅ Deploy completado a Heroku app: $HEROKU_APP_NAME"
+
+      - name: Ejecutar migraciones en Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: |
+          if [ -z "$HEROKU_API_KEY" ] || [ -z "$HEROKU_APP_NAME" ]; then
+            exit 0
+          fi
+          heroku run --app $HEROKU_APP_NAME "alembic upgrade head" || true

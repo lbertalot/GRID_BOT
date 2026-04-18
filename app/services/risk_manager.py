@@ -15,6 +15,8 @@ _client_singleton = get_binance_client_singleton()
 binance_client = _client_singleton.client if _client_singleton.is_ready() else None
 from app.services.telegram_alert import send_telegram_alert, send_telegram_alert_async
 from app.core.error_handler import handle_risk_manager_errors, error_handler
+from app.db.session import SessionLocal
+from app.services.risk_metrics_engine import risk_metrics_engine
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,14 @@ class RiskManager:
         self.trading_enabled = True
         self.emergency_stop = False
         
+        # Motor de métricas de riesgo históricas (antigravity-awesome-skills / risk-metrics-calculation)
+        # _last_portfolio_value y _cached_risk_metrics se actualizan en cada llamada a
+        # calculate_risk_metrics() para que los métodos privados puedan usar el caché
+        # sin abrir múltiples sesiones de DB por ciclo.
+        self._dias_historial: int = 90
+        self._last_portfolio_value: float = 0.0
+        self._cached_risk_metrics: dict = {}
+
         logger.info("RiskManager inicializado con límites de riesgo configurados")
     
     async def check_portfolio_risk(self) -> RiskStatus:
@@ -196,17 +206,25 @@ class RiskManager:
             total_exposure = (total_value - usdt_balance) / total_value if total_value > 0 else 0.0
             largest_position_pct = largest_position / total_value if total_value > 0 else 0.0
             
-            # Calcular pérdida diaria (simplificado)
+            # Actualizar caché de portafolio y calcular métricas reales desde DB.
+            # Una sola sesión de DB por ciclo: los métodos privados consumen el caché.
+            self._last_portfolio_value = total_value
+            self._cached_risk_metrics = self._fetch_risk_metrics_from_db(total_value)
+
+            if self._cached_risk_metrics.get("datos_insuficientes"):
+                logger.info(
+                    "Métricas de riesgo con fallbacks: %d días de historial disponibles "
+                    "(mínimo 10). Se necesitan más trades cerrados en PostgreSQL.",
+                    self._cached_risk_metrics.get("dias_analizados", 0),
+                )
+
+            # Extraer métricas calculadas (fallbacks seguros si datos insuficientes)
+            portfolio_volatility = self._cached_risk_metrics.get("volatilidad", 0.05)
+            sharpe_ratio = self._cached_risk_metrics.get("sharpe_ratio", 0.0)
+            max_drawdown = self._cached_risk_metrics.get("max_drawdown", 0.05)
+
+            # Pérdida diaria real: PnL negativo de hoy / capital total
             current_daily_loss = self._calculate_daily_loss()
-            
-            # Calcular volatilidad (simplificado)
-            portfolio_volatility = self._calculate_portfolio_volatility()
-            
-            # Calcular Sharpe ratio (simplificado)
-            sharpe_ratio = self._calculate_sharpe_ratio()
-            
-            # Calcular máximo drawdown (simplificado)
-            max_drawdown = self._calculate_max_drawdown()
             
             # Calcular score de riesgo
             risk_score = self._calculate_risk_score(
@@ -470,25 +488,82 @@ class RiskManager:
             logger.error(f"Error verificando stop-loss para {symbol}: {e}")
             return False
     
+    def _fetch_risk_metrics_from_db(self, portfolio_value: float) -> dict:
+        """Abre una sesión síncrona y calcula todas las métricas de riesgo desde la DB.
+
+        Se llama UNA SOLA VEZ por ciclo de calculate_risk_metrics() y guarda el resultado
+        en self._cached_risk_metrics para que los métodos privados no dupliquen queries.
+
+        Args:
+            portfolio_value: Valor del portafolio en USDT (necesario para normalizar
+                             los PnL diarios a retornos porcentuales).
+
+        Returns:
+            Dict con volatilidad, sharpe_ratio, max_drawdown, var_95_usdt,
+            cvar_95_usdt, pnl_hoy_usdt, dias_analizados, datos_insuficientes,
+            pnl_total_usdt, pnl_promedio_diario.
+            Dict vacío si ocurre un error de DB (los métodos privados aplican fallbacks).
+        """
+        db = SessionLocal()
+        try:
+            return risk_metrics_engine.resumen_completo(
+                db=db,
+                portfolio_value=portfolio_value,
+                dias=self._dias_historial,
+            )
+        except Exception as exc:
+            logger.error("Error obteniendo métricas de riesgo desde DB: %s", exc)
+            return {}
+        finally:
+            db.close()
+
     def _calculate_daily_loss(self) -> float:
-        """Calcula pérdida diaria (simplificado)"""
-        # Implementación simplificada - en producción se usarían datos históricos
-        return 0.0
+        """Pérdida diaria real: PnL negativo de HOY / capital total.
+
+        Usa el PnL realizado en el día actual extraído del caché de métricas.
+        Retorna 0.0 si no hubo trades cerrados hoy o si el portafolio es 0.
+        """
+        pnl_hoy = self._cached_risk_metrics.get("pnl_hoy_usdt", 0.0)
+        if self._last_portfolio_value <= 0 or pnl_hoy >= 0:
+            # Sin pérdida (ganancia o neutro) o sin capital conocido → 0
+            return 0.0
+        return abs(pnl_hoy) / self._last_portfolio_value
     
     def _calculate_portfolio_volatility(self) -> float:
-        """Calcula volatilidad del portafolio (simplificado)"""
-        # Implementación simplificada - en producción se usarían datos históricos
-        return 0.05  # 5% por defecto
-    
+        """Volatilidad anualizada de retornos diarios (std(PnL/capital) * sqrt(365)).
+
+        Usa el caché de métricas calculado en el ciclo actual. Si no hay caché
+        (llamada independiente fuera de calculate_risk_metrics), abre una nueva sesión.
+        Fallback: 0.05 (5%) si hay datos insuficientes en PostgreSQL.
+        """
+        if self._cached_risk_metrics:
+            return self._cached_risk_metrics.get("volatilidad", 0.05)
+        metricas = self._fetch_risk_metrics_from_db(self._last_portfolio_value)
+        return metricas.get("volatilidad", 0.05)
+
     def _calculate_sharpe_ratio(self) -> float:
-        """Calcula Sharpe ratio (simplificado)"""
-        # Implementación simplificada - en producción se usarían datos históricos
-        return 1.0  # 1.0 por defecto
-    
+        """Sharpe Ratio anualizado calculado desde el historial de trades en PostgreSQL.
+
+        Fórmula: (retorno_excedente_diario / std_diario) * sqrt(365).
+        rf_rate=0.0 para crypto (sin alternativa libre de riesgo equivalente).
+        Fallback: 0.0 si hay datos insuficientes.
+        """
+        if self._cached_risk_metrics:
+            return self._cached_risk_metrics.get("sharpe_ratio", 0.0)
+        metricas = self._fetch_risk_metrics_from_db(self._last_portfolio_value)
+        return metricas.get("sharpe_ratio", 0.0)
+
     def _calculate_max_drawdown(self) -> float:
-        """Calcula máximo drawdown (simplificado)"""
-        # Implementación simplificada - en producción se usarían datos históricos
-        return 0.05  # 5% por defecto
+        """Máximo Drawdown desde la curva de equity acumulada (PnL acumulado).
+
+        DD = (max_histórico - equity_actual) / |max_histórico|.
+        Usa PnL acumulado como proxy de equity (no requiere snapshots de balance).
+        Fallback: 0.05 (5%) si hay datos insuficientes.
+        """
+        if self._cached_risk_metrics:
+            return self._cached_risk_metrics.get("max_drawdown", 0.05)
+        metricas = self._fetch_risk_metrics_from_db(self._last_portfolio_value)
+        return metricas.get("max_drawdown", 0.05)
     
     def _calculate_risk_score(self, total_exposure: float, daily_loss: float, 
                             largest_position: float, volatility: float, 

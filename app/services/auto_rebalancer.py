@@ -1,4 +1,16 @@
 """
+⚠️ DEPRECATED — cleanup-archive-agent (2026-04-17)
+
+Este módulo está reemplazado por `auto_rebalancer_v2.py`, que implementa
+la misma lógica con mejoras de robustez y manejo de concurrencia.
+
+Migra todos los imports a:
+    from app.services.auto_rebalancer_v2 import AutoRebalancerV2
+
+Este archivo se mantiene temporalmente para compatibilidad hacia atrás
+y será eliminado en el próximo ciclo de mantenimiento.
+
+---
 AutoRebalancer Service - Sistema de rebalanceo automático para Grid Trading Bot
 
 Este servicio resuelve el problema de saldos insuficientes detectado en el análisis:
