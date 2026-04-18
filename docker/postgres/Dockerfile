@@ -20,3 +20,4 @@ COPY 01b-grafana-schema.sql   /docker-entrypoint-initdb.d/01b-grafana-schema.sql
 # Copiar script de inicialización de la BD de la aplicación y sus grants
 COPY init.sql                 /docker-entrypoint-initdb.d/02-init-gridbot.sql
 COPY 02b-gridbot-grants.sql   /docker-entrypoint-initdb.d/02b-gridbot-grants.sql
+COPY 03-gridbot-login-alias.sql /docker-entrypoint-initdb.d/03-gridbot-login-alias.sql

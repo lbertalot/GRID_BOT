@@ -206,12 +206,13 @@ services:
       --loglevel=info
       --concurrency=2
       --queues=celery,low
+    # Sin -d: el nombre del nodo Celery no siempre coincide con celery@$HOSTNAME
     healthcheck:
-      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping --timeout=8 || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 45s
     networks:
       - gridbot_network
 
@@ -262,18 +263,27 @@ services:
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # 1 = sin Basic Auth (solo local). /api/* sigue siendo uso consciente del cliente.
+      FLOWER_DISABLE_AUTH: ${FLOWER_DISABLE_AUTH:-0}
     command:
       - sh
       - -c
-      - >-
-        celery -A app.core.celery_app flower
-        --port=5555
-        --loglevel=warning
-        --basic-auth=${FLOWER_BASIC_AUTH_USER}:${FLOWER_BASIC_AUTH_PASS}
+      - |
+        if [ "$${FLOWER_DISABLE_AUTH:-0}" = "1" ]; then
+          exec celery -A app.core.celery_app flower --port=5555 --loglevel=warning
+        else
+          exec celery -A app.core.celery_app flower --port=5555 --loglevel=warning \
+            --basic-auth="$${FLOWER_BASIC_AUTH_USER:-admin}:$${FLOWER_BASIC_AUTH_PASS:-admin}"
+        fi
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsS -u "$$FLOWER_BASIC_AUTH_USER:$$FLOWER_BASIC_AUTH_PASS" http://localhost:5555/ >/dev/null || exit 1
+        - |
+          if [ "$${FLOWER_DISABLE_AUTH:-0}" = "1" ]; then
+            curl -fsS http://localhost:5555/ >/dev/null || exit 1
+          else
+            curl -fsS -u "$${FLOWER_BASIC_AUTH_USER:-admin}:$${FLOWER_BASIC_AUTH_PASS:-admin}" http://localhost:5555/ >/dev/null || exit 1
+          fi
       interval: 30s
       timeout: 10s
       retries: 3
@@ -379,8 +389,11 @@ services:
     networks:
       - gridbot_network
 
+  # cAdvisor ≥0.54 corrige "failed to identify the read-write layer ID" con Docker
+  # que usa image/overlayfs (p. ej. Docker 29+). v0.49.x fallaba al leer layerdb.
+  # Tag v0.54.1 verificado en gcr.io (latest también sirve).
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    image: gcr.io/cadvisor/cadvisor:v0.54.1
     container_name: gridbot_cadvisor
     restart: unless-stopped
     privileged: true
@@ -398,7 +411,8 @@ services:
     command:
       - --housekeeping_interval=30s
       - --store_container_labels=false
-      - --docker=unix:///rootfs/run/docker.sock
+      - --docker_only
+      - --docker=unix:///var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/healthz || exit 1"]
       interval: 30s
