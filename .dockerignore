@@ -1,0 +1,51 @@
+# Entorno virtual local (no va al contenedor — se instala desde requirements.txt)
+.venv/
+venv/
+env/
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Git
+.git/
+.gitignore
+
+# Tests y cobertura (no necesarios en producción)
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs y datos locales
+logs/*.log
+monitoring_data/
+reports/
+cache/
+data/
+
+# Docker compose files locales
+docker-compose.local.yml
+
+# Editor y OS
+.cursor/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Documentación (reduce imagen)
+docs/
+*.md
+!README.md
+
+# Scripts de operación puntual
+scripts/archive/
+
+# Variables de entorno (se pasan en runtime)
+.env
+.env.*

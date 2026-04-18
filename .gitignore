@@ -18,6 +18,9 @@ ENV/
 *.pem
 *production.env
 
+# Directorio de secretos (claves Ed25519 Binance, etc.)
+secrets/
+
 # Docker
 *.log
 docker-compose.override.yml

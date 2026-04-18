@@ -527,6 +527,8 @@ git push heroku main
 heroku open
 ```
 
+Para usar **PostgreSQL y Redis con tier gratis** (Neon + Upstash) en lugar de los add-ons de pago de Heroku, sigue [Docs/MIGRATION_HEROKU_FREE_TIER.md](Docs/MIGRATION_HEROKU_FREE_TIER.md) y el [checklist](Docs/CHECKLIST_MIGRATION_HEROKU.md).
+
 ## 📚 Documentación Adicional
 
 ### Guías de Usuario

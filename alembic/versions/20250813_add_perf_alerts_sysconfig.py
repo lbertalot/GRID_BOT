@@ -2,7 +2,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '20250813_add_perf_alerts_sysconfig'
+revision = 'add_perf_alerts_cfg'
 down_revision = None
 branch_labels = None
 depends_on = None
