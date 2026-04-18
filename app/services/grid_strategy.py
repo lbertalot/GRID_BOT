@@ -1,11 +1,22 @@
 from typing import List, Dict
+import numpy as np
+
 
 def calculate_grid_levels(min_price: float, max_price: float, grids: int) -> List[float]:
-    """Ejecuta calculate_grid_levels."""
+    """
+    Calcula niveles de grilla con distribución logarítmica.
+
+    adaptive-grid-agent: reemplaza la distribución lineal original.
+    La distribución log-uniforme pone más niveles en precios bajos,
+    donde el PnL por movimiento porcentual es mayor, mejorando la
+    captura de oscilaciones en rangos de alta volatilidad.
+    """
     if grids < 2:
         raise ValueError("El número de grillas debe ser al menos 2")
-    step = (max_price - min_price) / (grids - 1)
-    return [round(min_price + i * step, 8) for i in range(grids)]
+    log_min = np.log(min_price)
+    log_max = np.log(max_price)
+    log_levels = np.linspace(log_min, log_max, grids)
+    return [round(float(np.exp(l)), 8) for l in log_levels]
 
 def decide_grid_action(current_price: float, grid_levels: List[float], last_action: str = None) -> Dict:
     """

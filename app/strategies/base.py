@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED — cleanup-archive-agent (2026-04-17)
+
+Este directorio (`app/strategies/`) está reemplazado por `app/services/strategies/`,
+que es el directorio activo con las estrategias en uso.
+
+Migra todos los imports a:
+    from app.services.strategies.base import BaseStrategy
+
+---
 Framework Base de Estrategias de Trading
 """
 

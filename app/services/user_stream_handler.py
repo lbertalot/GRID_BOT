@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict
 
-from app.services.binance_user_stream import BinanceUserStream
+from app.services.binance_user_stream import BinanceUserStreamHandler
 from app.core.operation_tracker import OperationTracker, OperationStatus
 
 
@@ -44,7 +44,9 @@ async def start_user_stream_and_track(api_key: str) -> None:
         except Exception:
             pass
 
-    stream = BinanceUserStream(api_key)
-    await stream.start(on_event=_on_event)
+    stream = BinanceUserStreamHandler(api_key=api_key)
+    # El handler nuevo expone `on_fill` (ejecuciones). Lo usamos como adapter del
+    # callback `_on_event` para mantener la semántica de tracking existente.
+    await stream.start(on_fill=_on_event)
 
 

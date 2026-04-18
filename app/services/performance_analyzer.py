@@ -9,10 +9,11 @@ Este servicio calcula métricas avanzadas de rendimiento como:
 - Métricas de riesgo
 """
 
+import asyncio
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from dataclasses import dataclass
 
@@ -21,6 +22,14 @@ from app.services.binance_client_singleton import get_binance_client_singleton
 # Compatibilidad: mantener variable 'client' para no romper código existente
 _client_singleton = get_binance_client_singleton()
 client = _client_singleton.client if _client_singleton.is_ready() else None
+
+# portfolio-snapshot-agent: historial y trades reales desde PostgreSQL
+from app.db.session import SessionLocal
+from app.models.trade import Trade
+from app.services.portfolio_snapshot_service import (
+    get_portfolio_value_history as _snapshot_history,
+    get_latest_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,110 +124,146 @@ class PerformanceAnalyzer:
     
     async def get_portfolio_value_history(self, days: int) -> List[float]:
         """
-        Obtiene el historial de valores del portafolio
-        
-        Args:
-            days: Número de días hacia atrás
-            
-        Returns:
-            Lista de valores del portafolio
+        Obtiene el historial real de valores del portafolio desde PostgreSQL.
+
+        Usa la tabla portfolio_snapshots (portfolio-snapshot-agent).
+        Si no hay suficientes snapshots retorna lista vacía para activar fallback.
         """
         try:
-            # Por ahora, simulamos datos históricos
-            # En una implementación real, esto vendría de la base de datos
-            current_value = await self.get_current_portfolio_value()
-            
-            # Simular datos históricos con tendencia positiva
-            values = []
-            base_value = current_value * 0.95  # Empezar 5% más bajo
-            
-            for i in range(days):
-                # Simular crecimiento con volatilidad
-                daily_return = np.random.normal(0.001, 0.02)  # 0.1% promedio, 2% volatilidad
-                base_value *= (1 + daily_return)
-                values.append(base_value)
-            
+            db = SessionLocal()
+            try:
+                values = _snapshot_history(db, days=days)
+            finally:
+                db.close()
+
+            if len(values) < 2:
+                logger.warning(
+                    "[PerformanceAnalyzer] Solo %d snapshot(s) en los últimos %d días. "
+                    "El agente portfolio-snapshot-agent necesita más tiempo de ejecución "
+                    "(captura cada 15 min). Retornando lista vacía.",
+                    len(values),
+                    days,
+                )
+                return []
+
+            logger.info(
+                "[PerformanceAnalyzer] %d snapshots reales cargados para %d días",
+                len(values),
+                days,
+            )
             return values
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo historial de valores: {e}")
+
+        except Exception as exc:
+            logger.error("[PerformanceAnalyzer] Error obteniendo historial de snapshots: %s", exc)
             return []
     
     async def get_trade_history(self, days: int) -> List[Dict]:
         """
-        Obtiene el historial de trades
-        
-        Args:
-            days: Número de días hacia atrás
-            
-        Returns:
-            Lista de trades con información de P&L
+        Obtiene el historial real de trades cerrados desde PostgreSQL.
+
+        Retorna solo trades con exit_price y profit_loss registrados
+        (trades completamente cerrados).
         """
         try:
-            # Por ahora, simulamos datos de trades
-            # En una implementación real, esto vendría de la base de datos
-            trades = []
-            
-            for i in range(days):
-                # Simular algunos trades por día
-                daily_trades = np.random.poisson(2)  # Promedio 2 trades por día
-                
-                for _ in range(daily_trades):
-                    # Simular P&L de trade
-                    pnl = np.random.normal(0.5, 2.0)  # Promedio $0.5, std $2.0
-                    
-                    trades.append({
-                        'timestamp': datetime.now() - timedelta(days=i),
-                        'symbol': np.random.choice(['BNBUSDT', 'ANIMEUSDT', 'GPSUSDT', 'GUNUSDT']),
-                        'side': np.random.choice(['BUY', 'SELL']),
-                        'quantity': np.random.uniform(0.001, 1.0),
-                        'price': np.random.uniform(0.01, 1000),
-                        'realized_pnl': pnl,
-                        'status': 'FILLED'
-                    })
-            
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            db = SessionLocal()
+            try:
+                rows = (
+                    db.query(Trade)
+                    .filter(
+                        Trade.timestamp >= since,
+                        Trade.exit_price.isnot(None),
+                        Trade.profit_loss.isnot(None),
+                    )
+                    .order_by(Trade.timestamp.asc())
+                    .all()
+                )
+            finally:
+                db.close()
+
+            trades = [
+                {
+                    "timestamp": row.timestamp,
+                    "symbol": row.symbol,
+                    "side": row.side,
+                    "quantity": row.quantity,
+                    "price": row.exit_price,
+                    "realized_pnl": float(row.profit_loss),
+                    "status": "FILLED",
+                }
+                for row in rows
+            ]
+
+            logger.info(
+                "[PerformanceAnalyzer] %d trades reales cargados para %d días",
+                len(trades),
+                days,
+            )
             return trades
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo historial de trades: {e}")
+
+        except Exception as exc:
+            logger.error("[PerformanceAnalyzer] Error obteniendo historial de trades: %s", exc)
             return []
     
     async def get_current_portfolio_value(self) -> float:
         """
-        Obtiene el valor actual del portafolio
-        
-        Returns:
-            Valor total del portafolio en USDT
+        Obtiene el valor actual del portafolio.
+
+        performance-analyzer-realdata-agent: usa el snapshot más reciente de DB
+        como primer intento (evita hammear Binance API). Si el snapshot tiene más
+        de 20 minutos o no existe, cae al cálculo directo via Binance.
         """
+        from datetime import timezone
+        # Intentar desde snapshot reciente (< 20 min)
         try:
-            import asyncio
-            
-            # ✅ FIX: Obtener account info (non-blocking)
+            db = SessionLocal()
+            try:
+                latest = get_latest_snapshot(db)
+            finally:
+                db.close()
+
+            if latest and latest.captured_at:
+                age_seconds = (
+                    datetime.now(timezone.utc) - latest.captured_at
+                ).total_seconds()
+                if age_seconds < 1200:  # menos de 20 minutos
+                    logger.debug(
+                        "[PerformanceAnalyzer] Usando snapshot reciente: %.2f USDT (age=%.0fs)",
+                        latest.total_value_usdt, age_seconds,
+                    )
+                    return float(latest.total_value_usdt)
+        except Exception as exc:
+            logger.warning(
+                "[PerformanceAnalyzer] No se pudo usar snapshot: %s — usando Binance API", exc
+            )
+
+        # Fallback: calcular en tiempo real desde Binance
+        try:
             account_info = await asyncio.to_thread(client.get_account)
             total_value = 0.0
-            
-            for balance in account_info['balances']:
-                asset = balance['asset']
-                free_balance = float(balance['free'])
-                
+
+            for balance in account_info["balances"]:
+                asset = balance["asset"]
+                free_balance = float(balance["free"])
+
                 if free_balance > 0:
-                    if asset == 'USDT':
+                    if asset == "USDT":
                         total_value += free_balance
                     else:
-                        # ✅ FIX: Obtener precio actual del activo (non-blocking)
                         try:
                             symbol = f"{asset}USDT"
-                            ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=symbol)
-                            price = float(ticker['price'])
+                            ticker = await asyncio.to_thread(
+                                client.get_symbol_ticker, symbol=symbol
+                            )
+                            price = float(ticker["price"])
                             total_value += free_balance * price
-                        except:
-                            # Si no se puede obtener precio, ignorar el activo
+                        except Exception:
                             continue
-            
+
             return total_value
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo valor del portafolio: {e}")
+
+        except Exception as exc:
+            logger.error("[PerformanceAnalyzer] Error obteniendo valor del portafolio: %s", exc)
             return 0.0
     
     def _calculate_total_return(self, portfolio_values: List[float]) -> float:

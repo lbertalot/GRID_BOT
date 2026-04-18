@@ -1,10 +1,11 @@
 """
 Balance Service con Optimistic Locking
 GridBot v2.5 - FIX para Bug #1: Race Condition
+balance-race-condition-fixer: corrección de set_balance() y upsert_from_exchange()
 """
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import update
+from sqlalchemy import update, text
 from sqlalchemy.orm import Session
 from app.models.balance import Balance
 from app.db.session import SessionLocal
@@ -127,32 +128,92 @@ class BalanceService:
         )
     
     @staticmethod
-    def set_balance(db: Session, asset: str, amount: Decimal) -> Balance:
+    def set_balance(db: Session, asset: str, amount: Decimal, max_retries: int = 5) -> Balance:
         """
-        Establecer balance absoluto (no incremental)
-        Útil para sincronización con Binance
-        
-        Args:
-            db: Sesión de BD
-            asset: Asset a establecer
-            amount: Cantidad absoluta
-        
-        Returns:
-            Balance actualizado
+        Establecer balance absoluto con optimistic locking.
+
+        balance-race-condition-fixer: versión anterior no verificaba versión en el
+        UPDATE, permitiendo que dos workers concurrentes se pisaran mutuamente.
+        Ahora usa el mismo patrón CAS de update_balance().
         """
-        balance = db.query(Balance).filter(Balance.asset == asset).first()
-        
-        if not balance:
-            balance = Balance(asset=asset, amount=amount, version=0)
-            db.add(balance)
-        else:
-            balance.amount = amount
-            balance.version += 1
-        
-        db.commit()
-        db.refresh(balance)
-        logger.info(f"✅ Balance establecido: {asset} = {amount} (v{balance.version})")
-        return balance
+        for attempt in range(max_retries):
+            try:
+                balance = db.query(Balance).filter(Balance.asset == asset).first()
+
+                if not balance:
+                    balance = Balance(asset=asset, amount=amount, version=0)
+                    db.add(balance)
+                    db.commit()
+                    db.refresh(balance)
+                    logger.info("✅ Balance creado: %s = %s (v0)", asset, amount)
+                    return balance
+
+                old_version = balance.version
+
+                stmt = (
+                    update(Balance)
+                    .where(Balance.asset == asset, Balance.version == old_version)
+                    .values(amount=amount, version=old_version + 1)
+                )
+                result = db.execute(stmt)
+                db.commit()
+
+                if result.rowcount == 0:
+                    db.rollback()
+                    logger.warning(
+                        "⚠️ [set_balance] Conflicto CAS en %s (intento %d/%d)",
+                        asset, attempt + 1, max_retries,
+                    )
+                    wait = (2 ** attempt) * 0.001 + random.uniform(0, 0.005)
+                    time.sleep(wait)
+                    continue
+
+                db.refresh(balance)
+                logger.info("✅ Balance establecido: %s = %s (v%d)", asset, amount, balance.version)
+                return balance
+
+            except Exception as exc:
+                db.rollback()
+                logger.error("❌ Error en set_balance %s: %s", asset, exc)
+                if attempt == max_retries - 1:
+                    raise
+
+        raise ConcurrentModificationError(
+            f"set_balance: no se pudo actualizar {asset} en {max_retries} intentos"
+        )
+
+    @staticmethod
+    def upsert_from_exchange(db: Session, asset: str, amount: Decimal) -> None:
+        """
+        UPSERT atómico para sincronizar balances desde Binance.
+
+        balance-race-condition-fixer: usa una sola sentencia SQL atómica
+        (INSERT ... ON CONFLICT DO UPDATE con version++) para que dos workers
+        de sincronización concurrentes nunca se pisen. Equivale a:
+
+            INSERT INTO balances (asset, amount, version)
+            VALUES (:asset, :amount, 0)
+            ON CONFLICT (asset) DO UPDATE
+            SET amount = :amount,
+                version = balances.version + 1,
+                updated_at = NOW()
+
+        Este approach evita el read-modify-write que tenía el asyncpg crudo.
+        """
+        db.execute(
+            text(
+                """
+                INSERT INTO balances (asset, amount, version, updated_at)
+                VALUES (:asset, :amount, 0, NOW())
+                ON CONFLICT (asset) DO UPDATE
+                    SET amount     = :amount,
+                        version    = balances.version + 1,
+                        updated_at = NOW()
+                """
+            ),
+            {"asset": asset, "amount": str(amount)},
+        )
+        # No hacer commit aquí; el caller decide el límite de transacción
     
     @staticmethod
     def get_all_balances(db: Session) -> list[Balance]:
