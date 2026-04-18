@@ -53,6 +53,16 @@ docker compose --profile production up -d db redis prometheus grafana api
 # Grafana: http://localhost:3000
 ```
 
+### Stack completo local (`docker-compose.local.yml`)
+Incluye API, Celery worker/beat, Flower, Postgres, Redis, Prometheus, Grafana, exporters y cAdvisor. Requiere `.env` en la raíz del repo.
+
+```bash
+docker compose -f docker-compose.local.yml up --build -d
+```
+
+- API: `http://localhost:8000` · Flower: `5555` · Grafana: `3000` · Prometheus: `9090` · cAdvisor: `8081`
+- Flower usa Basic Auth desde `FLOWER_BASIC_AUTH_*`; en desarrollo local se puede poner `FLOWER_DISABLE_AUTH=1` en `.env` para desactivar la autenticación.
+
 ### Uvicorn local (sin Docker)
 ```bash
 uvicorn app.main:app --reload --port 8000
