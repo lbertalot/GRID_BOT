@@ -780,6 +780,13 @@ class OptimizedGridManager:
 
     async def _save_trade_to_db(self, symbol: str, side: str, quantity: float, price: float, order_id: str):
         """Guarda un trade en la base de datos PostgreSQL con manejo optimizado"""
+        if not symbol or not side or quantity <= 0 or price <= 0:
+            logger.error(
+                f"❌ Datos inválidos para guardar trade: symbol={symbol}, side={side}, "
+                f"quantity={quantity}, price={price}"
+            )
+            return
+
         db = None
         try:
             from app.db.session import SessionLocal
@@ -789,7 +796,8 @@ class OptimizedGridManager:
             logger.info(f"🔄 Guardando trade en BD: {side} {quantity} {symbol} @ ${price:.6f}")
             
             db = SessionLocal()
-            
+            saved_id: Optional[int] = None
+
             if side.upper() == 'SELL':
                 # Buscar última BUY sin cerrar para realizar PnL
                 open_buy = db.query(Trade).filter(
@@ -802,6 +810,7 @@ class OptimizedGridManager:
                     open_buy.profit_loss = (float(price) - float(open_buy.entry_price)) * float(min(quantity, open_buy.quantity))
                     db.commit()
                     db.refresh(open_buy)
+                    saved_id = open_buy.id
                     logger.info(f"✅ PnL realizado registrado: {open_buy.profit_loss:.6f} USDT en {symbol}")
                 else:
                     # Sin BUY abierto: registrar trade SELL como evento de salida sin PnL
@@ -815,6 +824,7 @@ class OptimizedGridManager:
                     db.add(trade)
                     db.commit()
                     db.refresh(trade)
+                    saved_id = trade.id
             else:
                 # BUY: crear entrada abierta
                 trade = Trade(
@@ -827,12 +837,9 @@ class OptimizedGridManager:
                 db.add(trade)
                 db.commit()
                 db.refresh(trade)
-            
-            # Validar datos antes de guardar
-            if not symbol or not side or quantity <= 0 or price <= 0:
-                raise ValueError(f"Datos inválidos: symbol={symbol}, side={side}, quantity={quantity}, price={price}")
-            
-            logger.info(f"✅ Trade guardado exitosamente en BD - ID: {trade.id}")
+                saved_id = trade.id
+
+            logger.info(f"✅ Trade guardado exitosamente en BD - ID: {saved_id}")
             
         except Exception as e:
             logger.error(f"❌ Error guardando trade en BD: {e}")
