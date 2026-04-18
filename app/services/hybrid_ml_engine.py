@@ -3,6 +3,7 @@ HybridMLEngine para V2.5 "Low-Risk, Predictive & Adaptive Grid".
 Combina modelos deep learning (LSTM/Transformer) con River para predicción de régimen.
 """
 
+import json
 import logging
 import os
 import pickle
