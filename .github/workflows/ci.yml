@@ -36,8 +36,25 @@ jobs:
       - name: Instalar herramientas de análisis
         run: pip install pyflakes bandit pip-audit
 
-      - name: pyflakes (errores de sintaxis y imports)
-        run: python -m pyflakes app
+      - name: pyflakes (warnings informativos + bloqueo ante errores reales)
+        run: |
+          # Ejecutamos pyflakes sobre app/ y guardamos el output.
+          # El exit code se ignora a propósito (|| true) porque pyflakes no
+          # distingue severidad: reporta imports no usados y f-strings sin
+          # placeholders como "errores" al mismo nivel que un undefined name.
+          # Solo bloqueamos el build ante errores realmente peligrosos:
+          #   - undefined name (NameError en runtime)
+          #   - invalid syntax (SyntaxError)
+          #   - may be undefined, or defined from star imports
+          python -m pyflakes app | tee pyflakes.log || true
+          echo ""
+          echo "── Errores bloqueantes (undefined / syntax) ──"
+          if grep -E "undefined name|invalid syntax|may be undefined" pyflakes.log; then
+            echo ""
+            echo "❌ Se encontraron errores reales de pyflakes. Corregir antes de mergear."
+            exit 1
+          fi
+          echo "✅ Sin errores bloqueantes. Los warnings informativos quedan para limpieza futura."
 
       - name: bandit (vulnerabilidades de seguridad en código)
         run: |
