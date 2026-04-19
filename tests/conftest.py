@@ -213,24 +213,6 @@ def mock_config():
     return _build_mock_config()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def wait_api_ready():
-    if os.getenv("SKIP_API_HEALTHCHECK") == "1":
-        return
-    base_url = os.getenv("GRIDBOT_BASE_URL", "http://localhost:8000")
-    deadline = time.time() + 45
-    last_err = None
-    while time.time() < deadline:
-        try:
-            r = requests.get(f"{base_url}/health", timeout=5)
-            if r.status_code == 200:
-                return
-        except Exception as e:
-            last_err = e
-        time.sleep(2)
-    raise RuntimeError(f"API no disponible en {base_url} tras espera: {last_err}")
-
-
 # ─── Auto-skip de tests E2E en CI sin servidor HTTP ──────────────────────────
 # Varios tests (test_auth_working, test_api_endpoints, test_metrics, etc.)
 # hacen requests HTTP reales contra http://localhost:8000. En CI no levantamos
@@ -292,6 +274,30 @@ _BROKEN_PREEXISTING_TEST_FILES = {
     "test_balance_concurrency.py",
     "test_market_data_collector.py",
 }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def wait_api_ready(request: pytest.FixtureRequest) -> None:
+    """Espera a /health solo si la sesión incluye tests E2E que llaman HTTP real."""
+    if os.getenv("SKIP_API_HEALTHCHECK") == "1":
+        return
+    needs_http_server = any(
+        os.path.basename(str(item.fspath)) in _E2E_TEST_FILES for item in request.session.items
+    )
+    if not needs_http_server:
+        return
+    base_url = os.getenv("GRIDBOT_BASE_URL", "http://localhost:8000")
+    deadline = time.time() + 45
+    last_err = None
+    while time.time() < deadline:
+        try:
+            r = requests.get(f"{base_url}/health", timeout=5)
+            if r.status_code == 200:
+                return
+        except Exception as e:
+            last_err = e
+        time.sleep(2)
+    raise RuntimeError(f"API no disponible en {base_url} tras espera: {last_err}")
 
 
 def pytest_collection_modifyitems(config, items):
