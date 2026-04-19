@@ -16,6 +16,17 @@ from app.core.distributed_lock import (
 )
 
 
+@pytest.fixture
+def ensure_clean_redis() -> None:
+    """Cada test de locks arranca sin singleton Redis residual (evita URL obsoleta)."""
+    reset_redis_client()
+    yield
+    reset_redis_client()
+
+
+pytestmark = pytest.mark.usefixtures("ensure_clean_redis")
+
+
 def _require_redis_for_lock_tests() -> None:
     """Salta el módulo si no hay Redis (CI sin servicios, dev sin docker)."""
     reset_redis_client()
@@ -187,5 +198,5 @@ def test_lock_blocking_mode():
 
 
 if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__, "-v", "--tb=short"]))
+    sys.exit(pytest.main([__file__, "-v", "--tb=short"]))
 

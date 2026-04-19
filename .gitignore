@@ -25,7 +25,8 @@ secrets/
 *.log
 docker-compose.override.yml
 
-# Runtime logs y artefactos (no versionar; el directorio se mantiene con .gitkeep)
+# Runtime logs y artefactos (no versionar). El directorio `logs/` se conserva
+# en el repo solo con logs/.gitkeep (runtime escribe fuera de git).
 logs/**
 !logs/.gitkeep
 
