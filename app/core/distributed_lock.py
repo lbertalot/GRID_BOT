@@ -44,7 +44,9 @@ def get_redis_client() -> Redis:
     """
     global _redis_client
     if _redis_client is None:
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        # Por defecto localhost: útil para pytest en el host; en Docker Compose
+        # REDIS_URL apunta a redis://redis:6379/0 vía variables de entorno.
+        redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
         try:
             _redis_client = Redis.from_url(
                 redis_url,
@@ -59,6 +61,12 @@ def get_redis_client() -> Redis:
             logger.error(f"❌ Error conectando a Redis: {e}")
             raise
     return _redis_client
+
+
+def reset_redis_client() -> None:
+    """Liberar el singleton (tests o cambio de REDIS_URL en runtime)."""
+    global _redis_client
+    _redis_client = None
 
 
 def with_distributed_lock(
