@@ -214,15 +214,18 @@ def mock_config():
 
 
 # ─── Auto-skip de tests E2E en CI sin servidor HTTP ──────────────────────────
-# Varios tests (test_auth_working, test_api_endpoints, test_metrics, etc.)
-# hacen requests HTTP reales contra http://localhost:8000. En CI no levantamos
-# un FastAPI server (solo Postgres + Redis como services), así que esos tests
-# no pueden correr ahí y fallan con ConnectionError.
+# Varios tests hacen requests HTTP reales contra http://localhost:8000 (no
+# usan solo TestClient en proceso). En CI no levantamos un servidor FastAPI.
 #
-# Política: si SKIP_API_HEALTHCHECK=1 (o estamos en CI), saltamos los tests
-# que dependen de un servidor HTTP externo. Los tests unitarios reales y
-# los que usan TestClient de FastAPI siguen ejecutándose normalmente.
+# Política (pytest_collection_modifyitems): si SKIP_API_HEALTHCHECK=1 o CI=true,
+# se marcan como skip los archivos listados abajo.
+#
+# Relación con wait_api_ready: si algún test de esta lista está en la sesión,
+# el fixture de sesión espera hasta 45s a GET /health antes de ejecutar tests.
+# Así las suites solo-unitarias (p. ej. sin ningún archivo de esta lista) no
+# esperan al API.
 _E2E_TEST_FILES = {
+    # Cada archivo aquí implica HTTP real al API en ejecución (típicamente :8000)
     "test_api_endpoints.py",
     "test_auth_working.py",
     "test_authentication.py",
@@ -278,7 +281,16 @@ _BROKEN_PREEXISTING_TEST_FILES = {
 
 @pytest.fixture(scope="session", autouse=True)
 def wait_api_ready(request: pytest.FixtureRequest) -> None:
-    """Espera a /health solo si la sesión incluye tests E2E que llaman HTTP real."""
+    """
+    Espera a que el servidor HTTP responda en /health solo cuando hace falta.
+
+    Comportamiento:
+    - SKIP_API_HEALTHCHECK=1: no espera (CI o desarrollo sin API levantada).
+    - Ningún test recolectado pertenece a _E2E_TEST_FILES: retorno inmediato
+      (ahorra ~45s en suites que no llaman al API en localhost).
+    - Hay al menos un test E2E HTTP: bucle hasta 45s contra GRIDBOT_BASE_URL
+      (default http://localhost:8000) hasta status 200 en /health.
+    """
     if os.getenv("SKIP_API_HEALTHCHECK") == "1":
         return
     needs_http_server = any(
