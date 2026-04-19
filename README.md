@@ -151,6 +151,10 @@ Dependencias clave:
 # Copiar archivo de configuración
 cp env.example .env
 
+# SECRET_KEY debe estar en `.env` (requerido por docker-compose para el servicio api).
+# Generar valor fuerte: openssl rand -hex 32
+# SECRET_KEY=...
+
 # Configurar variables de entorno para producción
 BINANCE_API_KEY=your_real_api_key
 BINANCE_SECRET_KEY=your_real_secret_key
