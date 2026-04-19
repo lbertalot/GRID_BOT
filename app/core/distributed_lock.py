@@ -44,7 +44,10 @@ def get_redis_client() -> Redis:
     """
     global _redis_client
     if _redis_client is None:
-        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        # Default 127.0.0.1: pytest y FastAPI en el host sin Docker. En Compose,
+        # define REDIS_URL=redis://redis:6379/0 (o el que use tu stack) en .env.
+        redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+        url_source = "REDIS_URL" if "REDIS_URL" in os.environ else "default(localhost)"
         try:
             _redis_client = Redis.from_url(
                 redis_url,
@@ -54,11 +57,26 @@ def get_redis_client() -> Redis:
             )
             # Test connection
             _redis_client.ping()
-            logger.info(f"✅ Redis client conectado para distributed locks: {redis_url}")
+            logger.info(
+                "Redis client listo para distributed locks (url=%s, source=%s)",
+                redis_url,
+                url_source,
+            )
         except RedisError as e:
             logger.error(f"❌ Error conectando a Redis: {e}")
             raise
     return _redis_client
+
+
+def reset_redis_client() -> None:
+    """
+    Descarta el cliente Redis singleton.
+
+    Uso típico: tests (fixture) para forzar nueva conexión tras cambiar REDIS_URL,
+    o depuración. En producción no suele hacer falta llamarla.
+    """
+    global _redis_client
+    _redis_client = None
 
 
 def with_distributed_lock(

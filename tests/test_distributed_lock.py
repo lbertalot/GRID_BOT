@@ -1,12 +1,41 @@
 """
 Test de Lock Distribuido para Celery Tasks
 """
+import os
 import sys
-sys.path.insert(0, '/app')
-
 import time
 import threading
-from app.core.distributed_lock import with_distributed_lock, check_lock_status, force_release_lock
+
+import pytest
+
+from app.core.distributed_lock import (
+    with_distributed_lock,
+    check_lock_status,
+    force_release_lock,
+    reset_redis_client,
+)
+
+
+@pytest.fixture
+def ensure_clean_redis() -> None:
+    """Cada test de locks arranca sin singleton Redis residual (evita URL obsoleta)."""
+    reset_redis_client()
+    yield
+    reset_redis_client()
+
+
+pytestmark = pytest.mark.usefixtures("ensure_clean_redis")
+
+
+def _require_redis_for_lock_tests() -> None:
+    """Salta el módulo si no hay Redis (CI sin servicios, dev sin docker)."""
+    reset_redis_client()
+    try:
+        from app.core.distributed_lock import get_redis_client
+
+        get_redis_client().ping()
+    except Exception as exc:  # noqa: BLE001 — mensaje claro para skip
+        pytest.skip(f"Redis no disponible para distributed_lock: {exc}")
 
 
 # Función de prueba con lock
@@ -16,21 +45,21 @@ max_concurrent = 0
 
 
 @with_distributed_lock("test_lock", timeout=5, blocking=False)
-def test_function():
-    """Función de prueba que simula trabajo"""
+def locked_work_fn():
+    """Función de prueba que simula trabajo (no nombrar test_*: pytest la recolectaría)."""
     global call_count, concurrent_calls, max_concurrent
-    
+
     call_count += 1
     concurrent_calls += 1
-    
+
     if concurrent_calls > max_concurrent:
         max_concurrent = concurrent_calls
-    
+
     print(f"✅ Función ejecutada (call #{call_count}, concurrent: {concurrent_calls})")
-    
+
     # Simular trabajo
     time.sleep(2)
-    
+
     concurrent_calls -= 1
     return {"status": "ok", "call_number": call_count}
 
@@ -38,14 +67,16 @@ def test_function():
 def worker(worker_id):
     """Worker que intenta ejecutar la función"""
     print(f"Worker {worker_id} iniciando...")
-    result = test_function()
+    result = locked_work_fn()
     print(f"Worker {worker_id} resultado: {result}")
 
 
 def test_distributed_lock():
     """Test principal de lock distribuido"""
     global call_count, concurrent_calls, max_concurrent
-    
+
+    _require_redis_for_lock_tests()
+
     print("\n" + "="*70)
     print("🧪 TEST DE LOCK DISTRIBUIDO")
     print("="*70 + "\n")
@@ -111,12 +142,14 @@ def test_distributed_lock():
     
     # Cleanup
     force_release_lock("test_lock")
-    
-    return success
+
+    assert success, "El lock distribuido no serializó las ejecuciones como se esperaba"
 
 
 def test_lock_blocking_mode():
     """Test de modo blocking (espera a que se libere)"""
+    _require_redis_for_lock_tests()
+
     print("\n" + "="*70)
     print("🧪 TEST DE LOCK EN MODO BLOCKING")
     print("="*70 + "\n")
@@ -161,30 +194,9 @@ def test_lock_blocking_mode():
         success = False
     
     force_release_lock("test_lock_blocking")
-    return success
+    assert success, "Modo blocking del lock distribuido no completó 3 ejecuciones esperadas"
 
 
 if __name__ == "__main__":
-    try:
-        # Test 1: Modo non-blocking (skip si lock está tomado)
-        test1_passed = test_distributed_lock()
-        
-        # Test 2: Modo blocking (espera a que se libere)
-        test2_passed = test_lock_blocking_mode()
-        
-        # Resultado final
-        if test1_passed and test2_passed:
-            print("🎉🎉🎉 TODOS LOS TESTS PASARON 🎉🎉🎉")
-            print("✅ Lock Distribuido funciona correctamente")
-            print("✅ Bug #2 RESUELTO\n")
-            sys.exit(0)
-        else:
-            print("❌ ALGUNOS TESTS FALLARON")
-            sys.exit(1)
-            
-    except Exception as e:
-        print(f"❌ Error fatal en tests: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    sys.exit(pytest.main([__file__, "-v", "--tb=short"]))
 
