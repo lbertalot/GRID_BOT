@@ -234,8 +234,16 @@ Estos tests DEBEN pasar siempre. Son la línea de defensa contra regresiones cr�
 
 ### 7.4 Cobertura global
 
-- **Baseline 2026-04-26**: 29.05 % global (medido con `pytest --cov=app`).
-- **Gate CI actual**: `--cov-fail-under=29` (ver `.github/workflows/ci.yml`).
+| Entorno | Baseline 2026-04-26 | Gate activo |
+|---|---|---|
+| Local (`python3.11`) | 29.05 % | — |
+| CI (GitHub Actions hosted) | 25.70 % | `--cov-fail-under=25` |
+
+El delta ~3.3 pp entre local y CI se debe a diferencias de entorno:
+redis/postgres siempre disponibles localmente vs skips adicionales en hosted,
+variaciones en `sys.path` y módulos importados durante la sesión de tests.
+
+- **Gate CI actual**: `--cov-fail-under=25` (ver `.github/workflows/ci.yml`).
 - **Plan de subida**: +5 pp por sprint hasta 85 %. Documentado en `docs/CICD_RUNBOOK.md`.
 
 ### 7.5 Deuda de seguridad (Bandit + pip-audit)
