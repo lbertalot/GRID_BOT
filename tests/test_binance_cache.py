@@ -19,5 +19,3 @@ async def test_async_cache_memory_fallback(monkeypatch):
     assert v == "50000"
     await asyncio.sleep(1.1)
     assert await cache.get("price:BTCUSDT") is None
-
-

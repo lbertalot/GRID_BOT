@@ -15,14 +15,15 @@ Política:
   - Sin tocar la lógica del módulo (TESTING_RULES §1).
   - Mock estricto del cliente Binance.
 """
+
 from __future__ import annotations
 
-from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.services.order_validation import OrderValidator
+
 # `order_validation.py` importa `BinanceAPIException` desde `binance.exceptions`.
 # La firma real (python-binance) requiere un `response` HTTP-like, así que
 # subclaseamos para producir excepciones duck-typed con `.code` y `.message`
@@ -65,7 +66,12 @@ def _exchange_info(
                 "quotePrecision": 8,
                 "baseAssetPrecision": 8,
                 "filters": [
-                    {"filterType": "LOT_SIZE", "stepSize": step, "minQty": min_qty, "maxQty": max_qty},
+                    {
+                        "filterType": "LOT_SIZE",
+                        "stepSize": step,
+                        "minQty": min_qty,
+                        "maxQty": max_qty,
+                    },
                     {"filterType": "MIN_NOTIONAL", "minNotional": min_notional},
                     {
                         "filterType": "PRICE_FILTER",
@@ -230,9 +236,7 @@ def test_validate_limit_sin_precio_falla(validator):
 def test_validate_limit_redondea_a_tick_y_warning(validator):
     """Precio 50123.456 con tick 0.01 → 50123.45 + warning de ajuste."""
     v, _ = validator
-    res = v.validate_order_parameters(
-        "BTCUSDT", 0.001, "BUY", "LIMIT", price=50123.456
-    )
+    res = v.validate_order_parameters("BTCUSDT", 0.001, "BUY", "LIMIT", price=50123.456)
     assert res["is_valid"] is True
     assert res["adjusted_price"] == pytest.approx(50123.45)
     assert any("tickSize" in w for w in res["warnings"])

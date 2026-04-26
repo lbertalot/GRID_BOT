@@ -18,10 +18,9 @@ HALLAZGOS:
 
 import os
 import sys
-import time
 import asyncio
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
@@ -36,6 +35,7 @@ from app.core.risk_manager import RiskManager, BreakerState, MarketRegime
 # ===========================================================================
 # TEST GROUP 1: Circuit Breakers básicos
 # ===========================================================================
+
 
 class TestCircuitBreakersBasic:
     """Tests básicos de circuit breakers."""
@@ -76,9 +76,9 @@ class TestCircuitBreakersBasic:
     async def test_is_trading_halted_when_any_active(self, breakers):
         """Trading debe estar detenido si cualquier breaker está activo."""
         await breakers.activate_breaker("balance_discrepancy", "test")
-        assert breakers.is_trading_halted(), (
-            "Trading NO está detenido con breaker activo - RIESGO CRÍTICO"
-        )
+        assert (
+            breakers.is_trading_halted()
+        ), "Trading NO está detenido con breaker activo - RIESGO CRÍTICO"
 
     @pytest.mark.asyncio
     async def test_is_trading_halted_when_none_active(self, breakers):
@@ -89,6 +89,7 @@ class TestCircuitBreakersBasic:
 # ===========================================================================
 # TEST GROUP 2: Modo Crítico
 # ===========================================================================
+
 
 class TestCriticalMode:
     """Tests del modo crítico (activación masiva de breakers)."""
@@ -105,9 +106,9 @@ class TestCriticalMode:
         result = await breakers.activate_critical_mode()
         assert result is True
         for name in breakers.breakers:
-            assert breakers.is_breaker_active(name), (
-                f"Breaker '{name}' no activo en modo crítico"
-            )
+            assert breakers.is_breaker_active(
+                name
+            ), f"Breaker '{name}' no activo en modo crítico"
 
     @pytest.mark.asyncio
     async def test_critical_mode_deactivation(self, breakers):
@@ -116,9 +117,9 @@ class TestCriticalMode:
         result = await breakers.deactivate_critical_mode()
         assert result is True
         for name in breakers.breakers:
-            assert not breakers.is_breaker_active(name), (
-                f"Breaker '{name}' sigue activo después de desactivar modo crítico"
-            )
+            assert not breakers.is_breaker_active(
+                name
+            ), f"Breaker '{name}' sigue activo después de desactivar modo crítico"
 
     @pytest.mark.asyncio
     async def test_is_critical_mode_active(self, breakers):
@@ -131,14 +132,15 @@ class TestCriticalMode:
     async def test_trading_halted_in_critical_mode(self, breakers):
         """Trading DEBE estar detenido en modo crítico."""
         await breakers.activate_critical_mode()
-        assert breakers.is_trading_halted(), (
-            "Trading NO detenido en modo crítico - RIESGO EXTREMO"
-        )
+        assert (
+            breakers.is_trading_halted()
+        ), "Trading NO detenido en modo crítico - RIESGO EXTREMO"
 
 
 # ===========================================================================
 # TEST GROUP 3: Cooldown - Hallazgo potencial de riesgo
 # ===========================================================================
+
 
 class TestCooldownBehavior:
     """
@@ -166,7 +168,9 @@ class TestCooldownBehavior:
         breakers = breakers_with_cooldown
 
         # Primera activación
-        result1 = await breakers.activate_breaker("balance_discrepancy", "primera alerta")
+        result1 = await breakers.activate_breaker(
+            "balance_discrepancy", "primera alerta"
+        )
         assert result1 is True
 
         # Desactivar
@@ -174,14 +178,16 @@ class TestCooldownBehavior:
         assert not breakers.is_breaker_active("balance_discrepancy")
 
         # Intentar reactivar inmediatamente (dentro del cooldown)
-        result2 = await breakers.activate_breaker("balance_discrepancy", "segunda alerta REAL")
+        result2 = await breakers.activate_breaker(
+            "balance_discrepancy", "segunda alerta REAL"
+        )
 
         # HALLAZGO: result2 es False por cooldown
         # Esto significa que una emergencia real fue IGNORADA
         if not result2:
-            assert not breakers.is_breaker_active("balance_discrepancy"), (
-                "Breaker debería estar inactivo debido al cooldown"
-            )
+            assert not breakers.is_breaker_active(
+                "balance_discrepancy"
+            ), "Breaker debería estar inactivo debido al cooldown"
 
     @pytest.mark.asyncio
     async def test_cooldown_zero_allows_immediate_reactivation(self):
@@ -211,14 +217,15 @@ class TestCooldownBehavior:
         await breakers.activate_critical_mode()
 
         # Verificar que critical_mode al menos se activó
-        assert breakers.is_critical_mode_active(), (
-            "Modo crítico no se activó; el cooldown bloqueó la emergencia"
-        )
+        assert (
+            breakers.is_critical_mode_active()
+        ), "Modo crítico no se activó; el cooldown bloqueó la emergencia"
 
 
 # ===========================================================================
 # TEST GROUP 4: RiskManager circuit breaker
 # ===========================================================================
+
 
 class TestRiskManagerBreaker:
     """Tests del circuit breaker en RiskManager."""
@@ -276,6 +283,7 @@ class TestRiskManagerBreaker:
 # TEST GROUP 5: Integración - TradeExecutor no consulta breakers
 # ===========================================================================
 
+
 class TestBreakerTradeExecutorIntegration:
     """
     HALLAZGO CRÍTICO: TradeExecutor NO consulta los circuit breakers
@@ -323,20 +331,22 @@ class TestBreakerTradeExecutorIntegration:
         Test propuesto para el fix: execute_order debe rechazar
         si breakers están activos.
         """
+
         # Este test valida la lógica recomendada
         class MockBreakers:
             def is_trading_halted(self):
                 return True
 
         breakers = MockBreakers()
-        assert breakers.is_trading_halted(), (
-            "Guard clause debería prevenir ejecución de órdenes"
-        )
+        assert (
+            breakers.is_trading_halted()
+        ), "Guard clause debería prevenir ejecución de órdenes"
 
 
 # ===========================================================================
 # TEST GROUP 6: Resiliencia de breakers
 # ===========================================================================
+
 
 class TestBreakerResilience:
     """Tests de resiliencia del sistema de breakers."""
@@ -378,7 +388,9 @@ class TestBreakerResilience:
     @pytest.mark.asyncio
     async def test_breaker_state_after_exception_in_metrics(self, breakers):
         """Si las métricas fallan, el breaker debe seguir activándose."""
-        with patch("app.core.circuit_breakers.CircuitBreakers.activate_breaker") as mock:
+        with patch(
+            "app.core.circuit_breakers.CircuitBreakers.activate_breaker"
+        ) as mock:
             # Simular que la métrica falla pero el breaker sigue
             mock.return_value = True
             result = await mock("balance_discrepancy", "test")

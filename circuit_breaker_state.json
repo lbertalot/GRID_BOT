@@ -1,10 +1,10 @@
 {
   "is_open": true,
   "reason": "L\u00edmite de p\u00e9rdida diaria excedido: 31.50% > 5.00%",
-  "opened_at": "2025-10-05T08:09:12.672738",
+  "opened_at": "2026-04-26T18:56:23.901752",
   "daily_loss": 0.31500000000000006,
-  "total_loss": 0.31500000000000006,
-  "consecutive_losses": 14,
+  "total_loss": 0.7650000000000005,
+  "consecutive_losses": 34,
   "hourly_loss": 0.31500000000000006,
-  "last_reset": "2025-10-05T07:56:15.069539"
+  "last_reset": "2026-04-26T16:54:34.229600"
 }

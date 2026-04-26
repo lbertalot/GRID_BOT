@@ -14,7 +14,6 @@ Compatibilidad:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Any, List
@@ -37,13 +36,17 @@ class AdaptationPolicy:
     max_qty_multiplier: float = 2.0
     # Auto-reversión
     drawdown_pct_threshold: float = 0.05  # 5%
-    drawdown_window: int = 10             # últimos N trades
+    drawdown_window: int = 10  # últimos N trades
 
 
 class StrategyManager:
     """Administra la adaptación de parámetros de grid por símbolo."""
 
-    def __init__(self, policy: Optional[AdaptationPolicy] = None, ml_engine: Optional[MLEngine] = None):
+    def __init__(
+        self,
+        policy: Optional[AdaptationPolicy] = None,
+        ml_engine: Optional[MLEngine] = None,
+    ):
         self.policy = policy or AdaptationPolicy()
         self.ml = ml_engine or MLEngine()
         # Guardar baseline para auto-reversión: {symbol: {grids, quantity, min_price, max_price}}
@@ -70,7 +73,7 @@ class StrategyManager:
             return result
         # Agrupar por símbolo últimos N
         by_symbol: Dict[str, List[float]] = {}
-        for tr in history[-self.policy.drawdown_window:]:
+        for tr in history[-self.policy.drawdown_window :]:
             symbol = getattr(tr, "symbol", None)
             profit = getattr(tr, "profit", 0.0) or 0.0
             if not symbol:
@@ -86,14 +89,20 @@ class StrategyManager:
             result[symbol] = (dd / base) >= self.policy.drawdown_pct_threshold
         return result
 
-    async def adapt_manager(self, manager: Any, symbols: Optional[List[str]] = None) -> Dict[str, Dict[str, float]]:
+    async def adapt_manager(
+        self, manager: Any, symbols: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, float]]:
         """
         Adapta parámetros (grids, quantity) por símbolo en base a señales del modelo.
         Retorna un dict con los cambios aplicados.
         """
         if not hasattr(manager, "config") or not hasattr(manager.config, "assets"):
             return {}
-        target_symbols = symbols or [a.symbol for a in manager.config.assets.values() if getattr(a, "is_active", True)]
+        target_symbols = symbols or [
+            a.symbol
+            for a in manager.config.assets.values()
+            if getattr(a, "is_active", True)
+        ]
 
         # Evaluar drawdown local
         dd_flags = self._compute_drawdown_flag(manager)
@@ -109,11 +118,31 @@ class StrategyManager:
             if dd_flags.get(symbol):
                 base = self._baseline.get(symbol)
                 if base:
-                    asset.grids = int(max(self.policy.min_grids, min(self.policy.max_grids, base["grids"])))
-                    asset.quantity = float(max(0.0, min(base["quantity"], base["quantity"] * self.policy.max_qty_multiplier)))
-                    asset.min_price = float(base["min_price"])  # mantener rango original
-                    asset.max_price = float(base["max_price"])  # mantener rango original
-                    changes[symbol] = {"grids": float(asset.grids), "quantity": float(asset.quantity)}
+                    asset.grids = int(
+                        max(
+                            self.policy.min_grids,
+                            min(self.policy.max_grids, base["grids"]),
+                        )
+                    )
+                    asset.quantity = float(
+                        max(
+                            0.0,
+                            min(
+                                base["quantity"],
+                                base["quantity"] * self.policy.max_qty_multiplier,
+                            ),
+                        )
+                    )
+                    asset.min_price = float(
+                        base["min_price"]
+                    )  # mantener rango original
+                    asset.max_price = float(
+                        base["max_price"]
+                    )  # mantener rango original
+                    changes[symbol] = {
+                        "grids": float(asset.grids),
+                        "quantity": float(asset.quantity),
+                    }
                     logger.info(f"Auto-reversión aplicada por drawdown en {symbol}")
                     continue
 
@@ -126,7 +155,15 @@ class StrategyManager:
 
             # Ajustes en base al régimen
             if pred.label == 1 and pred.proba >= 0.6:  # alcista
-                new_grids = int(min(self.policy.max_grids, max(self.policy.min_grids, asset.grids + self.policy.bullish_grid_increment)))
+                new_grids = int(
+                    min(
+                        self.policy.max_grids,
+                        max(
+                            self.policy.min_grids,
+                            asset.grids + self.policy.bullish_grid_increment,
+                        ),
+                    )
+                )
                 qty = float(asset.quantity) * self.policy.bullish_qty_multiplier
                 # limitar multiplicador total respecto a baseline si existe
                 base = self._baseline.get(symbol)
@@ -135,9 +172,20 @@ class StrategyManager:
                     qty = min(qty, max_qty)
                 asset.grids = new_grids
                 asset.quantity = qty
-                changes[symbol] = {"grids": float(asset.grids), "quantity": float(asset.quantity)}
+                changes[symbol] = {
+                    "grids": float(asset.grids),
+                    "quantity": float(asset.quantity),
+                }
             elif pred.label == 0 and pred.proba >= 0.6:  # bajista con alta confianza
-                new_grids = int(max(self.policy.min_grids, min(self.policy.max_grids, asset.grids - self.policy.bearish_grid_decrement)))
+                new_grids = int(
+                    max(
+                        self.policy.min_grids,
+                        min(
+                            self.policy.max_grids,
+                            asset.grids - self.policy.bearish_grid_decrement,
+                        ),
+                    )
+                )
                 qty = float(asset.quantity) * self.policy.bearish_qty_multiplier
                 base = self._baseline.get(symbol)
                 if base:
@@ -145,7 +193,10 @@ class StrategyManager:
                     qty = max(qty, min_qty)
                 asset.grids = new_grids
                 asset.quantity = qty
-                changes[symbol] = {"grids": float(asset.grids), "quantity": float(asset.quantity)}
+                changes[symbol] = {
+                    "grids": float(asset.grids),
+                    "quantity": float(asset.quantity),
+                }
             else:
                 # Sin cambios si la confianza es baja
                 continue
@@ -155,8 +206,7 @@ class StrategyManager:
 
 # Instancia global opcional (evitar efectos en exportación de OpenAPI/CI)
 import os as _os
+
 strategy_manager = None  # siempre definido para evitar ImportError
 if _os.getenv("EXPORT_OPENAPI", "0") != "1":
     strategy_manager = StrategyManager()
-
-

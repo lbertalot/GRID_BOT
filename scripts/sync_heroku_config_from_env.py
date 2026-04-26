@@ -8,10 +8,11 @@ Uso: python scripts/sync_heroku_config_from_env.py [app_name]
   con valores locales (p. ej. redis://localhost) rompe el worker.
 - DATABASE_URL sí se puede sincronizar si usas Neon/Upstash (pon las URLs en .env).
 """
-import os
+
 import subprocess
 import sys
 from pathlib import Path
+
 
 # Cargar .env manualmente sin imprimir valores
 def load_env(env_path: Path) -> dict[str, str]:
@@ -30,10 +31,21 @@ def load_env(env_path: Path) -> dict[str, str]:
             if not k:
                 continue
             v = v.strip('"').strip("'")
-            if "YOUR_" in v or "_HERE" in v or v in ("", "your_email@gmail.com", "your_app_password", "noreply@gridbot.com"):
+            if (
+                "YOUR_" in v
+                or "_HERE" in v
+                or v
+                in (
+                    "",
+                    "your_email@gmail.com",
+                    "your_app_password",
+                    "noreply@gridbot.com",
+                )
+            ):
                 continue
             out[k] = v
     return out
+
 
 def main():
     app = sys.argv[1] if len(sys.argv) > 1 else "grid-bot-ia"
@@ -63,6 +75,7 @@ def main():
             print(f"Set {k}")
     print("Done.")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

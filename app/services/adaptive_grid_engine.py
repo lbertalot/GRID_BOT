@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 # Multiplicador ATR para el rango de la grilla (cuántos ATRs abarca el rango)
 ATR_MULTIPLIER_DEFAULT = 3.0
-ATR_MULTIPLIER_HIGH_VOL = 2.0   # En alta volatilidad, rango más estrecho
-ATR_MULTIPLIER_LOW_VOL = 4.0    # En baja volatilidad, rango más amplio
+ATR_MULTIPLIER_HIGH_VOL = 2.0  # En alta volatilidad, rango más estrecho
+ATR_MULTIPLIER_LOW_VOL = 4.0  # En baja volatilidad, rango más amplio
 
 # Límites de número de niveles de grilla
 GRIDS_MIN = 3
@@ -58,6 +58,7 @@ FALLBACK_RANGE_PCT = 0.04  # ±4% del precio actual
 # ---------------------------------------------------------------------------
 # Cálculo de volatilidad desde PnL histórico
 # ---------------------------------------------------------------------------
+
 
 def _estimate_atr_from_trades(
     db: Session,
@@ -115,6 +116,7 @@ def _detect_volatility_regime(atr: float, current_price: float) -> str:
 # Motor principal
 # ---------------------------------------------------------------------------
 
+
 class AdaptiveGridEngine:
     """
     Calcula configuraciones de grilla adaptativas basadas en volatilidad real.
@@ -160,7 +162,8 @@ class AdaptiveGridEngine:
             atr = half_range * 2
             logger.warning(
                 "[AdaptiveGrid] No hay suficientes datos para %s. Usando fallback ±%.1f%%",
-                symbol, FALLBACK_RANGE_PCT * 100,
+                symbol,
+                FALLBACK_RANGE_PCT * 100,
             )
         else:
             regime = _detect_volatility_regime(atr, current_price)
@@ -192,9 +195,13 @@ class AdaptiveGridEngine:
         logger.info(
             "[AdaptiveGrid] %s | precio=%.2f | min=%.2f | max=%.2f | "
             "grids=%d | ATR=%.4f | régimen=%s",
-            symbol, current_price,
-            config["min_price"], config["max_price"],
-            grids, atr, regime,
+            symbol,
+            current_price,
+            config["min_price"],
+            config["max_price"],
+            grids,
+            atr,
+            regime,
         )
         return config
 
@@ -227,7 +234,10 @@ class AdaptiveGridEngine:
         if current_price < current_min or current_price > current_max:
             logger.warning(
                 "[AdaptiveGrid] %s fuera del rango activo (%.2f not in [%.2f, %.2f]) — reajuste requerido",
-                symbol, current_price, current_min, current_max,
+                symbol,
+                current_price,
+                current_min,
+                current_max,
             )
             return True
 

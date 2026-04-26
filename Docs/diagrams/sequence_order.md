@@ -19,5 +19,3 @@ sequenceDiagram
   API-->>Client: 202 Accepted / 200 OK
   API->>Prometheus: Exponer métricas
 ```
-
-

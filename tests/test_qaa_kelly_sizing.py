@@ -17,9 +17,7 @@ HALLAZGOS:
 
 import os
 import sys
-import math
 import pytest
-from unittest.mock import MagicMock
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
@@ -30,16 +28,15 @@ os.environ.setdefault("SKIP_API_HEALTHCHECK", "1")
 from app.core.risk_manager import (
     RiskManager,
     PositionSizeParams,
-    KellyParams,
     TrailingStopParams,
     MarketRegime,
-    BreakerState,
 )
 
 
 # ===========================================================================
 # TEST GROUP 1: Kelly Fraccional - Cálculos correctos
 # ===========================================================================
+
 
 class TestKellyFractionalCalculation:
     """Tests del cálculo de Kelly fraccional."""
@@ -83,9 +80,9 @@ class TestKellyFractionalCalculation:
         )
         size = risk_manager.calculate_dynamic_position_size(params)
         assert size > 0, "Debe usar fallback ATR incluso con Kelly negativo"
-        assert size < params.account_equity * 0.5, (
-            "Con Kelly negativo, el tamaño debe ser conservador"
-        )
+        assert (
+            size < params.account_equity * 0.5
+        ), "Con Kelly negativo, el tamaño debe ser conservador"
 
     def test_kelly_with_50_50_winrate(self, risk_manager):
         """Con winrate=0.5 y R=1, Kelly=0. Debe usar fallback."""
@@ -104,14 +101,15 @@ class TestKellyFractionalCalculation:
         size_low = risk_manager.calculate_dynamic_position_size(params_low)
         size_high = risk_manager.calculate_dynamic_position_size(params_high)
 
-        assert size_high >= size_low, (
-            f"Mayor winrate ({size_high}) debería dar tamaño >= que menor ({size_low})"
-        )
+        assert (
+            size_high >= size_low
+        ), f"Mayor winrate ({size_high}) debería dar tamaño >= que menor ({size_low})"
 
 
 # ===========================================================================
 # TEST GROUP 2: Límites de posición
 # ===========================================================================
+
 
 class TestPositionLimits:
     """Tests de límites de tamaño de posición."""
@@ -137,18 +135,18 @@ class TestPositionLimits:
         params = self._make_params(cap_symbol_pct=0.20)
         size = risk_manager.calculate_dynamic_position_size(params)
         max_allowed = params.account_equity * params.cap_symbol_pct
-        assert size <= max_allowed, (
-            f"Posición {size} excede límite por símbolo {max_allowed}"
-        )
+        assert (
+            size <= max_allowed
+        ), f"Posición {size} excede límite por símbolo {max_allowed}"
 
     def test_position_capped_at_equity_limit(self, risk_manager):
         """Posición no debe exceder cap_equity_pct (80%)."""
         params = self._make_params(cap_equity_pct=0.80)
         size = risk_manager.calculate_dynamic_position_size(params)
         max_allowed = params.account_equity * params.cap_equity_pct
-        assert size <= max_allowed, (
-            f"Posición {size} excede límite de equity {max_allowed}"
-        )
+        assert (
+            size <= max_allowed
+        ), f"Posición {size} excede límite de equity {max_allowed}"
 
     def test_position_capped_by_daily_loss(self, risk_manager):
         """
@@ -163,9 +161,9 @@ class TestPositionLimits:
         # Pero Kelly con winrate=0.8 y R=3.0 puede dar más que eso
         # Lo importante es que el size es finito y positivo
         assert size > 0, "Size debe ser positivo"
-        assert size <= params.account_equity * params.cap_symbol_pct, (
-            f"Posición {size} excede límite por símbolo"
-        )
+        assert (
+            size <= params.account_equity * params.cap_symbol_pct
+        ), f"Posición {size} excede límite por símbolo"
 
     def test_position_zero_when_daily_loss_exceeded(self, risk_manager):
         """
@@ -202,6 +200,7 @@ class TestPositionLimits:
 # TEST GROUP 3: Regime multipliers
 # ===========================================================================
 
+
 class TestRegimeMultipliers:
     """Tests de multiplicadores por régimen de mercado."""
 
@@ -231,9 +230,9 @@ class TestRegimeMultipliers:
         risk_manager_crash.current_regime = MarketRegime.CRASH_IMMINENT
         size_crash = risk_manager_crash.calculate_dynamic_position_size(params)
 
-        assert size_crash <= size_normal, (
-            f"CRASH_IMMINENT ({size_crash}) no redujo posición vs RANGE ({size_normal})"
-        )
+        assert (
+            size_crash <= size_normal
+        ), f"CRASH_IMMINENT ({size_crash}) no redujo posición vs RANGE ({size_normal})"
 
     def test_bull_trend_same_as_range(self, risk_manager):
         """BULL_TREND y RANGE deben tener el mismo multiplicador (1.0)."""
@@ -248,14 +247,15 @@ class TestRegimeMultipliers:
     def test_all_regimes_have_multiplier(self, risk_manager):
         """Todos los regímenes deben tener multiplicador definido."""
         for regime in MarketRegime:
-            assert regime in risk_manager.regime_multipliers, (
-                f"Régimen {regime.value} sin multiplicador definido"
-            )
+            assert (
+                regime in risk_manager.regime_multipliers
+            ), f"Régimen {regime.value} sin multiplicador definido"
 
 
 # ===========================================================================
 # TEST GROUP 4: Hallazgo - apply_market_regime_filter acumulativo
 # ===========================================================================
+
 
 class TestRegimeFilterAccumulation:
     """
@@ -310,6 +310,7 @@ class TestRegimeFilterAccumulation:
 # TEST GROUP 5: Trailing Stops
 # ===========================================================================
 
+
 class TestTrailingStops:
     """Tests de trailing stops adaptativos."""
 
@@ -327,9 +328,9 @@ class TestTrailingStops:
             is_long=True,
         )
         stop = risk_manager.get_adaptive_trailing_stop(params)
-        assert stop < params.entry_price, (
-            f"Stop {stop} no está debajo de entry {params.entry_price}"
-        )
+        assert (
+            stop < params.entry_price
+        ), f"Stop {stop} no está debajo de entry {params.entry_price}"
 
     def test_trailing_stop_above_entry_for_short(self, risk_manager):
         """Stop para posición corta debe estar encima del entry."""
@@ -341,9 +342,9 @@ class TestTrailingStops:
             is_long=False,
         )
         stop = risk_manager.get_adaptive_trailing_stop(params)
-        assert stop > params.entry_price, (
-            f"Stop {stop} no está encima de entry {params.entry_price}"
-        )
+        assert (
+            stop > params.entry_price
+        ), f"Stop {stop} no está encima de entry {params.entry_price}"
 
     def test_trailing_stop_distance_proportional_to_atr(self, risk_manager):
         """Distancia del stop debe ser proporcional al ATR."""
@@ -371,9 +372,9 @@ class TestTrailingStops:
         initial_stop = risk_manager.get_adaptive_trailing_stop(params)
         new_stop = risk_manager.update_trailing_stop("BTCUSDT", 55000.0)
         if new_stop is not None:
-            assert new_stop > initial_stop, (
-                f"Stop no se movió hacia arriba: {new_stop} <= {initial_stop}"
-            )
+            assert (
+                new_stop > initial_stop
+            ), f"Stop no se movió hacia arriba: {new_stop} <= {initial_stop}"
 
     def test_trailing_stop_never_moves_down_for_long(self, risk_manager):
         """Stop de long NUNCA debe moverse hacia abajo."""
@@ -386,9 +387,9 @@ class TestTrailingStops:
         )
         risk_manager.get_adaptive_trailing_stop(params)
         new_stop = risk_manager.update_trailing_stop("BTCUSDT", 45000.0)
-        assert new_stop is None, (
-            "Stop se movió hacia abajo para long; debe permanecer estático"
-        )
+        assert (
+            new_stop is None
+        ), "Stop se movió hacia abajo para long; debe permanecer estático"
 
     def test_trailing_stop_with_zero_atr(self, risk_manager):
         """ATR=0 debe ser manejado sin crash."""
@@ -406,6 +407,7 @@ class TestTrailingStops:
 # ===========================================================================
 # TEST GROUP 6: Risk status
 # ===========================================================================
+
 
 class TestRiskStatus:
     """Tests del estado de riesgo."""

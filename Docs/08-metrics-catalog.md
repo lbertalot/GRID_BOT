@@ -1,6 +1,6 @@
 ## Catálogo de Métricas Prometheus
 
-> **Actualizado**: 2025-01-XX  
+> **Actualizado**: 2025-01-XX
 > **Origen**: `app/core/metrics.py` y middleware
 
 ### MÉTRICAS DE RENTABILIDAD
@@ -201,5 +201,3 @@ sum by (code) (rate(binance_api_errors_total[5m]))
 # Errores de WebSocket
 sum by (phase) (rate(ws_errors_total[5m]))
 ```
-
-

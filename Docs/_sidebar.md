@@ -41,4 +41,3 @@
 - [Referencias: Verificación Tests](references/VERIFICACION_TESTS_FINAL.md)
 - [Referencias: Resumen Ejecutivo](references/Executive_Summary_GridBot_v2.5.md)
 - [RFC v2.5](rfc/RFC_GridBot_v2.5.md)
-

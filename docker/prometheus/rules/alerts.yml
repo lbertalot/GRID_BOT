@@ -82,4 +82,4 @@ groups:
           severity: warning
         annotations:
           summary: "Muchas tareas fallidas en Celery"
-          description: "Tasa de fallos en tareas de Celery es alta" 
+          description: "Tasa de fallos en tareas de Celery es alta"

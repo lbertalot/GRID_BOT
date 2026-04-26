@@ -19,9 +19,7 @@ HALLAZGOS:
 import os
 import sys
 import time
-import asyncio
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 from decimal import Decimal
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,6 +34,7 @@ from app.core.circuit_breakers import CircuitBreakers
 # ===========================================================================
 # TEST GROUP 1: Reconciliación - Hallazgo de reconciliación nula
 # ===========================================================================
+
 
 class TestReconciliationNullDiscrepancy:
     """
@@ -61,14 +60,14 @@ class TestReconciliationNullDiscrepancy:
 
         # Reproducir la lógica del código actual
         int_total_value = total_value  # Línea 76: siempre igual
-        discrepancy = 0.0             # Línea 80: siempre 0
-        int_usdt = ext_usdt           # Línea 81: siempre igual
+        discrepancy = 0.0  # Línea 80: siempre 0
+        int_usdt = ext_usdt  # Línea 81: siempre igual
         has_internal_accounting = False  # Línea 82: siempre False
 
         assert discrepancy == 0.0, "Bug confirmado: discrepancy siempre es 0"
-        assert not has_internal_accounting, (
-            "has_internal_accounting es False, breaker nunca se activa"
-        )
+        assert (
+            not has_internal_accounting
+        ), "has_internal_accounting es False, breaker nunca se activa"
 
     def test_breaker_never_activates_from_reconciliation(self):
         """
@@ -95,6 +94,7 @@ class TestReconciliationNullDiscrepancy:
 # ===========================================================================
 # TEST GROUP 2: Latencia de reconciliación
 # ===========================================================================
+
 
 class TestReconciliationLatency:
     """Tests de latencia de reconciliación."""
@@ -126,22 +126,23 @@ class TestReconciliationLatency:
             total_value += qty * price
 
         elapsed = time.time() - start
-        assert elapsed < 1.0, (
-            f"Procesamiento local tardó {elapsed:.3f}s, debería ser instantáneo"
-        )
+        assert (
+            elapsed < 1.0
+        ), f"Procesamiento local tardó {elapsed:.3f}s, debería ser instantáneo"
 
     def test_reconciliation_interval_configured(self):
         """Verificar que el intervalo de reconciliación es <= 60s."""
         # El intervalo por defecto del servicio
         default_interval = 60
-        assert default_interval <= 60, (
-            f"Intervalo de reconciliación {default_interval}s > 60s"
-        )
+        assert (
+            default_interval <= 60
+        ), f"Intervalo de reconciliación {default_interval}s > 60s"
 
 
 # ===========================================================================
 # TEST GROUP 3: Idempotencia de órdenes
 # ===========================================================================
+
 
 class TestOrderIdempotency:
     """Tests de idempotencia de ejecución de órdenes."""
@@ -149,6 +150,7 @@ class TestOrderIdempotency:
     def test_client_order_id_generation_uniqueness(self):
         """Cada orden debe tener un client_order_id único."""
         import uuid
+
         ids = set()
         for _ in range(10000):
             order_id = str(uuid.uuid4())
@@ -204,6 +206,7 @@ class TestOrderIdempotency:
 # TEST GROUP 4: Consistencia de balances
 # ===========================================================================
 
+
 class TestBalanceConsistency:
     """Tests de consistencia de balances internos."""
 
@@ -212,9 +215,7 @@ class TestBalanceConsistency:
         qty = Decimal("0.001")
         price = Decimal("50000.01")
         total = qty * price
-        assert total == Decimal("50.00001"), (
-            f"Balance calculation imprecise: {total}"
-        )
+        assert total == Decimal("50.00001"), f"Balance calculation imprecise: {total}"
 
     def test_commission_subtracted_correctly(self):
         """La comisión debe restarse correctamente del balance."""
@@ -250,9 +251,9 @@ class TestBalanceConsistency:
         total_commission = buy_commission + sell_commission  # 10.00
         expected_final = initial_usdt - total_commission  # 9990.00
 
-        assert usdt_after_sell == expected_final, (
-            f"Balance final {usdt_after_sell} != esperado {expected_final}"
-        )
+        assert (
+            usdt_after_sell == expected_final
+        ), f"Balance final {usdt_after_sell} != esperado {expected_final}"
 
     def test_concurrent_balance_updates_race_condition(self):
         """
@@ -271,14 +272,15 @@ class TestBalanceConsistency:
         for _ in range(100):
             update_balance(Decimal("-10.00"))
 
-        assert balance["USDT"] == Decimal("9000.00"), (
-            f"Balance incorrecto: {balance['USDT']}"
-        )
+        assert balance["USDT"] == Decimal(
+            "9000.00"
+        ), f"Balance incorrecto: {balance['USDT']}"
 
 
 # ===========================================================================
 # TEST GROUP 5: Reconciliación con discrepancias simuladas
 # ===========================================================================
+
 
 class TestReconciliationWithDiscrepancies:
     """Tests de reconciliación con discrepancias simuladas."""
@@ -317,19 +319,20 @@ class TestReconciliationWithDiscrepancies:
         threshold_abs = ext_usdt * threshold_pct  # $100
 
         discrepancy = Decimal("50.00")  # $50 de diferencia
-        assert discrepancy < threshold_abs, (
-            f"Discrepancia {discrepancy} >= umbral {threshold_abs}"
-        )
+        assert (
+            discrepancy < threshold_abs
+        ), f"Discrepancia {discrepancy} >= umbral {threshold_abs}"
 
         large_discrepancy = Decimal("150.00")
-        assert large_discrepancy > threshold_abs, (
-            f"Discrepancia grande {large_discrepancy} debería superar umbral"
-        )
+        assert (
+            large_discrepancy > threshold_abs
+        ), f"Discrepancia grande {large_discrepancy} debería superar umbral"
 
 
 # ===========================================================================
 # TEST GROUP 6: Circuit Breaker activación por reconciliación
 # ===========================================================================
+
 
 class TestReconciliationBreakerActivation:
     """Tests de activación de breakers por discrepancia de reconciliación."""
@@ -367,15 +370,16 @@ class TestReconciliationBreakerActivation:
         denom = max(1.0, ext_usdt)
         relative_gap = discrepancy_usd / denom
 
-        assert relative_gap <= threshold_pct, (
-            f"Relative gap {relative_gap} debería ser <= {threshold_pct}"
-        )
+        assert (
+            relative_gap <= threshold_pct
+        ), f"Relative gap {relative_gap} debería ser <= {threshold_pct}"
         assert not breakers.is_breaker_active("balance_discrepancy")
 
 
 # ===========================================================================
 # TEST GROUP 7: PnL no contabilizado
 # ===========================================================================
+
 
 class TestUnaccountedPnL:
     """Tests de detección de PnL no contabilizado."""
@@ -387,9 +391,7 @@ class TestUnaccountedPnL:
         recorded_pnl = Decimal("400.00")  # Solo $400 registrados
 
         unaccounted = current_portfolio - initial_portfolio - recorded_pnl
-        assert unaccounted == Decimal("100.00"), (
-            f"PnL no contabilizado: {unaccounted}"
-        )
+        assert unaccounted == Decimal("100.00"), f"PnL no contabilizado: {unaccounted}"
 
     def test_negative_unaccounted_pnl_is_loss(self):
         """PnL no contabilizado negativo indica pérdida no registrada."""
@@ -398,6 +400,6 @@ class TestUnaccountedPnL:
         recorded_pnl = Decimal("-100.00")
 
         unaccounted = current_portfolio - initial_portfolio - recorded_pnl
-        assert unaccounted == Decimal("-100.00"), (
-            f"Pérdida no contabilizada: {unaccounted}"
-        )
+        assert unaccounted == Decimal(
+            "-100.00"
+        ), f"Pérdida no contabilizada: {unaccounted}"

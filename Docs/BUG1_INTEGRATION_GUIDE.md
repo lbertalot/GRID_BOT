@@ -1,7 +1,7 @@
 # Bug #1: Guía de Integración Completa ✅
 
-> **Status**: ✅ INTEGRADO  
-> **Fecha**: 2026-01-02  
+> **Status**: ✅ INTEGRADO
+> **Fecha**: 2026-01-02
 > **Archivos Actualizados**: 4 archivos principales
 
 ---
@@ -148,7 +148,7 @@ graph LR
     C --> D[Guardar Trade en BD]
     D --> E[FIN]
     style E fill:#f99,stroke:#333,stroke-width:2px
-    
+
     F[Balances Internos] -.->|Desincronizados| E
 ```
 
@@ -168,7 +168,7 @@ graph LR
     F --> G[Guardar Trade]
     G --> H[FIN]
     style H fill:#9f9,stroke:#333,stroke-width:2px
-    
+
     I[Balances Internos] -->|SINCRONIZADOS| H
 ```
 
@@ -213,9 +213,9 @@ balance_update_conflicts_total{asset="USDT"} 3
 ### 3. **Verificar balances en BD**
 ```bash
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT asset, amount, version, updated_at 
-  FROM balances 
-  WHERE asset IN ('USDT', 'ETH', 'BTC') 
+  SELECT asset, amount, version, updated_at
+  FROM balances
+  WHERE asset IN ('USDT', 'ETH', 'BTC')
   ORDER BY updated_at DESC;
 "
 ```
@@ -245,13 +245,13 @@ Si necesitas implementar un nuevo tipo de orden (ej: STOP_LOSS), sigue este patr
 def execute_stop_loss_sell(self, symbol: str, quantity: str, stop_price: str, db: Optional[Session] = None) -> Dict[str, Any]:
     """Shortcut para orden STOP_LOSS SELL"""
     return self.execute_order(
-        symbol, 
-        "SELL", 
-        "STOP_LOSS_LIMIT", 
-        quantity, 
+        symbol,
+        "SELL",
+        "STOP_LOSS_LIMIT",
+        quantity,
         stopPrice=stop_price,
         price=stop_price,  # Límite = stop en este caso
-        db=db, 
+        db=db,
         timeInForce="GTC"
     )
 ```
@@ -281,16 +281,16 @@ from app.services.trade_executor import get_trade_executor
 class MiNuevoServicio:
     def __init__(self):
         self.trade_executor = get_trade_executor()
-    
+
     async def ejecutar_estrategia(self):
         # Tu lógica aquí...
-        
+
         # Ejecutar trade
         result = self.trade_executor.execute_market_buy(
             symbol="ETHUSDT",
             quantity="0.1"
         )
-        
+
         # ✅ El balance ya está actualizado!
         # Continúa con tu lógica...
 ```
@@ -394,5 +394,3 @@ sum(balance_update_conflicts_total) by (asset)
 **Bug #1 Status**: ✅ **100% COMPLETADO E INTEGRADO**
 
 **Próximo paso**: Bug #2 - Lock Distribuido para Celery Tasks
-
-

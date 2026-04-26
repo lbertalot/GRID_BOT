@@ -23,7 +23,7 @@ python -m pytest tests/test_models.py -v
 
 **Resultado**: ✅ **3/3 PASSED**
 - `test_system_config_crud` - PASSED
-- `test_alerts_insert` - PASSED  
+- `test_alerts_insert` - PASSED
 - `test_performance_metrics_defaults` - PASSED
 
 ### Tests de Configuración
@@ -44,7 +44,7 @@ python -m pytest tests/test_paper_mode_flag.py -v
 - vectorbt 0.26.0 + numba 0.53.1 en macOS
 - Problema de inicialización de módulos internos
 
-**Impacto**: 
+**Impacto**:
 - ❌ Tests que dependen de backtesting_service fallan
 - ✅ Tests básicos funcionan correctamente
 - ✅ Funcionalidad principal no afectada

@@ -14,5 +14,3 @@ El servicio expone `/metrics` con contadores, gauges e histogramas. Grafana pres
 
 ### Reconciliación
 Proceso periódico que compara balances/posiciones internas con Binance y corrige discrepancias. Objetivo: ≤ 60 s y discrepancia ≤ 0.1%. Resultados disponibles en `GET /api/reconciliation/summary` y métricas dedicadas.
-
-

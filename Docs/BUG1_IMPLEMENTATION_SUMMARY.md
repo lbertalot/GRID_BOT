@@ -1,8 +1,8 @@
 # Bug #1: Race Condition en Balance - Implementación Completada ✅
 
-> **Fecha**: 2026-01-02  
-> **Status**: ✅ COMPLETADO Y VALIDADO  
-> **Tiempo**: 4 horas  
+> **Fecha**: 2026-01-02
+> **Status**: ✅ COMPLETADO Y VALIDADO
+> **Tiempo**: 4 horas
 > **Criticidad**: P0 - MÁXIMA
 
 ---
@@ -52,7 +52,7 @@ docker exec gridbot_db psql -U griduser -d gridbot -c "\d balances"
 ```python
 class Balance(Base):
     __tablename__ = "balances"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     asset = Column(String(20), unique=True, nullable=False, index=True)
     amount = Column(Numeric(20, 8), nullable=False, default=0)
@@ -78,11 +78,11 @@ class Balance(Base):
 def update_balance(db: Session, asset: str, delta: Decimal, max_retries: int = 10):
     for attempt in range(max_retries):
         balance = db.query(Balance).filter(Balance.asset == asset).first()
-        
+
         # ... create if not exists
-        
+
         old_version = balance.version
-        
+
         # ✅ UPDATE con verificación de versión
         stmt = update(Balance).where(
             Balance.asset == asset,
@@ -91,16 +91,16 @@ def update_balance(db: Session, asset: str, delta: Decimal, max_retries: int = 1
             amount=new_amount,
             version=old_version + 1  # ✅ Incrementa versión
         )
-        
+
         result = db.execute(stmt)
-        
+
         if result.rowcount == 0:
             # ⚠️ Conflicto detectado - reintentar
             balance_update_conflicts_total.inc()
             wait_time = (2 ** attempt) * 0.001 + random.uniform(0, 0.01)
             time.sleep(wait_time)
             continue
-        
+
         # ✅ Éxito
         return balance
 ```
@@ -163,12 +163,12 @@ rate(balance_update_conflicts_total[5m])
 **Validación Manual SQL**:
 ```sql
 -- Update con versión correcta
-UPDATE balances SET amount = amount + 10, version = version + 1 
+UPDATE balances SET amount = amount + 10, version = version + 1
 WHERE asset = 'TEST' AND version = 0;
 -- Result: UPDATE 1 ✅
 
 -- Update con versión incorrecta (conflicto)
-UPDATE balances SET amount = amount + 10, version = version + 1 
+UPDATE balances SET amount = amount + 10, version = version + 1
 WHERE asset = 'TEST' AND version = 0;  -- Versión vieja
 -- Result: UPDATE 0 ✅ (conflicto detectado)
 ```
@@ -189,7 +189,7 @@ balance = db.query(Balance).first()  # Lee: 100.0 (mismo valor)
 balance.amount += 10  # 110.0
 db.commit()
 
-# Thread B  
+# Thread B
 balance.amount += 5  # 105.0 (basado en 100.0!)
 db.commit()  # ⚠️ SOBRESCRIBE el cambio de A
 
@@ -215,7 +215,7 @@ stmt = update(Balance).where(
 ).values(amount=110.0, version=1)
 result = db.execute(stmt)  # ✅ SUCCESS (rowcount=1)
 
-# Thread B  
+# Thread B
 stmt = update(Balance).where(
     Balance.asset == 'USDT',
     Balance.version == 0  # ⚠️ Versión vieja!
@@ -258,7 +258,7 @@ result = db.execute(stmt)  # ✅ SUCCESS
    # En vez de:
    balance.amount += delta
    db.commit()
-   
+
    # Usar:
    from app.services.balance_service import BalanceService
    BalanceService.update_balance(db, asset, delta)
@@ -341,5 +341,3 @@ docker logs gridbot_api | grep "Balance actualizado"
 **Impacto**: Eliminado riesgo de pérdida de fondos por race conditions
 
 **Siguiente Bug**: Bug #2 - Lock Distribuido para Celery Tasks
-
-

@@ -1,7 +1,7 @@
 # 📚 GridBot v2.5 - Índice de Documentación
 
-> **Actualizado**: 2025-01-XX  
-> **Versión**: 2.5  
+> **Actualizado**: 2025-01-XX
+> **Versión**: 2.5
 > **Estado**: Documentación actualizada y limpia
 
 ---
@@ -286,11 +286,9 @@ Según tu rol:
 
 ---
 
-**Preparado por**: Cursor AI Agent  
-**Fecha**: 2026-01-03  
-**Versión**: 1.0  
+**Preparado por**: Cursor AI Agent
+**Fecha**: 2026-01-03
+**Versión**: 1.0
 **Contacto**: Ver [AGENTS.md](./AGENTS.md) para soporte
 
 ---
-
-

@@ -7,7 +7,7 @@ Convierte comisiones a USDT cuando es necesario.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 import logging
 import time
 from binance.exceptions import BinanceAPIException
@@ -50,7 +50,9 @@ def _convert_to_usdt(amount: float, asset: str) -> float:
         return 0.0
 
 
-def _commission_usdt(commission: float, commission_asset: str, symbol: str, side: str) -> float:
+def _commission_usdt(
+    commission: float, commission_asset: str, symbol: str, side: str
+) -> float:
     if commission is None or commission == 0.0:
         return 0.0
     quote = _get_quote_asset(symbol)
@@ -108,29 +110,33 @@ def _fifo_realized_pnl_usdt(trades: List[dict], symbol: str) -> Tuple[float, flo
     return profit_total, invested_total
 
 
-def compute_binance_pnl_and_roi(allowed_symbols: List[str]) -> Tuple[float, float, float]:
+def compute_binance_pnl_and_roi(
+    allowed_symbols: List[str],
+) -> Tuple[float, float, float]:
     """
     Obtiene trades de Binance y calcula (profit_total_usdt, invested_usdt, roi_total_pct).
-    
+
     Maneja errores -2015 (IP no autorizada) con circuit breaker para evitar spam de logs.
     """
     global _last_2015_error_ts, _2015_error_count, _2015_circuit_open_until
-    
+
     client = get_binance_client_singleton().client
     if client is None:
         return 0.0, 0.0, 0.0
-    
+
     # Verificar circuit breaker para errores -2015
     now = time.time()
     if now < _2015_circuit_open_until:
         # Circuit breaker abierto: no intentar llamadas
-        logger.debug(f"Circuit breaker activo para errores -2015 (hasta {_2015_circuit_open_until - now:.0f}s)")
+        logger.debug(
+            f"Circuit breaker activo para errores -2015 (hasta {_2015_circuit_open_until - now:.0f}s)"
+        )
         return 0.0, 0.0, 0.0
-    
+
     total_profit = 0.0
     total_invested = 0.0
     has_2015_error = False
-    
+
     for symbol in allowed_symbols:
         try:
             trades = client.get_my_trades(symbol=symbol)
@@ -139,11 +145,11 @@ def compute_binance_pnl_and_roi(allowed_symbols: List[str]) -> Tuple[float, floa
             total_invested += inv
         except BinanceAPIException as e:
             # Manejar específicamente error -2015 (IP no autorizada)
-            if getattr(e, 'code', None) == -2015 or 'Invalid API-key, IP' in str(e):
+            if getattr(e, "code", None) == -2015 or "Invalid API-key, IP" in str(e):
                 has_2015_error = True
                 _2015_error_count += 1
                 _last_2015_error_ts = now
-                
+
                 # Log solo la primera vez o cada 5 minutos
                 if _2015_error_count == 1 or (now - _last_2015_error_ts) > 300:
                     logger.warning(
@@ -153,11 +159,14 @@ def compute_binance_pnl_and_roi(allowed_symbols: List[str]) -> Tuple[float, floa
                     )
                     # Notificar usando el sistema del singleton
                     try:
-                        from app.services.binance_client_singleton import _notify_invalid_ip
+                        from app.services.binance_client_singleton import (
+                            _notify_invalid_ip,
+                        )
+
                         _notify_invalid_ip(str(e))
                     except Exception:
                         pass
-                
+
                 # Activar circuit breaker después de N errores
                 if _2015_error_count >= _2015_MAX_ERRORS:
                     _2015_circuit_open_until = now + _2015_COOLDOWN_SECONDS
@@ -172,14 +181,12 @@ def compute_binance_pnl_and_roi(allowed_symbols: List[str]) -> Tuple[float, floa
         except Exception as e:
             # Errores no relacionados con API
             logger.warning(f"No se pudo obtener/calc PnL para {symbol}: {e}")
-    
+
     # Resetear contador si no hubo errores -2015
     if not has_2015_error and _2015_error_count > 0:
         # Si pasaron más de 10 minutos sin errores, resetear contador
         if now - _last_2015_error_ts > 600:
             _2015_error_count = 0
-    
+
     roi_pct = (total_profit / total_invested * 100.0) if total_invested > 0 else 0.0
     return total_profit, total_invested, roi_pct
-
-

@@ -1,6 +1,6 @@
 ## Mapa de Endpoints → Código
 
-> **Actualizado**: 2025-01-XX  
+> **Actualizado**: 2025-01-XX
 > **Nota**: Endpoints marcados con `(auth)` requieren autenticación mediante API key
 
 ### Endpoints de Sistema y Salud
@@ -132,5 +132,3 @@
 - **Autenticación**: Los endpoints marcados con `(auth)` requieren header `Authorization: Bearer <API_KEY>`
 - **Prefijos**: Algunos endpoints están disponibles en múltiples rutas por compatibilidad (ej: `/order` y `/api/trade/order`)
 - **Documentación completa**: Para contratos completos con schemas, ver `docs/openapi.json` o `/docs` en la API en ejecución
-
-

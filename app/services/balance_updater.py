@@ -8,6 +8,7 @@ Correcciones respecto a la versión anterior:
 - Un solo commit al final para atomicidad de toda la sincronización.
 - Logging estructurado con contadores.
 """
+
 import asyncio
 import logging
 import os
@@ -31,13 +32,17 @@ async def update_balances_in_db() -> Dict[str, int]:
     Retorna dict con contadores: updated, skipped, errors.
     """
     load_dotenv()
-    logger.info("[BalanceUpdater] Iniciando sincronización de balances desde Binance...")
+    logger.info(
+        "[BalanceUpdater] Iniciando sincronización de balances desde Binance..."
+    )
 
     api_key = os.getenv("BINANCE_API_KEY")
     api_secret = os.getenv("BINANCE_SECRET_KEY")
 
     if not api_key or not api_secret:
-        logger.error("[BalanceUpdater] BINANCE_API_KEY / BINANCE_SECRET_KEY no configuradas")
+        logger.error(
+            "[BalanceUpdater] BINANCE_API_KEY / BINANCE_SECRET_KEY no configuradas"
+        )
         return {"updated": 0, "skipped": 0, "errors": 1}
 
     # Obtener balances de Binance (síncrono en thread para no bloquear event loop)
@@ -54,7 +59,9 @@ async def update_balances_in_db() -> Dict[str, int]:
     result = await asyncio.to_thread(_persist_balances, client)
     logger.info(
         "[BalanceUpdater] Sincronización completa: updated=%d skipped=%d errors=%d",
-        result["updated"], result["skipped"], result["errors"],
+        result["updated"],
+        result["skipped"],
+        result["errors"],
     )
     return result
 
@@ -92,9 +99,7 @@ def _persist_balances(balances: list) -> Dict[str, int]:
                 BalanceService.upsert_from_exchange(db, asset=asset, amount=total)
                 updated += 1
             except Exception as exc:
-                logger.warning(
-                    "[BalanceUpdater] Error en upsert de %s: %s", asset, exc
-                )
+                logger.warning("[BalanceUpdater] Error en upsert de %s: %s", asset, exc)
                 errors += 1
 
         # Un único commit para toda la sincronización

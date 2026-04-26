@@ -163,7 +163,7 @@ CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON gridbot.orders
     FOR EACH ROW EXECUTE FUNCTION gridbot.update_updated_at_column();
 
 -- Insertar usuario de prueba (solo para desarrollo)
-INSERT INTO gridbot.users (email, username, password_hash, is_verified) 
+INSERT INTO gridbot.users (email, username, password_hash, is_verified)
 VALUES ('admin@gridbot.com', 'admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.i8mG', true)
 ON CONFLICT (email) DO NOTHING;
 
@@ -176,4 +176,4 @@ COMMENT ON TABLE gridbot.orders IS 'Órdenes de trading';
 COMMENT ON TABLE gridbot.trades IS 'Trades ejecutados';
 COMMENT ON TABLE gridbot.performance_metrics IS 'Métricas de rendimiento diarias';
 COMMENT ON TABLE gridbot.alerts IS 'Alertas del sistema';
-COMMENT ON TABLE gridbot.system_logs IS 'Logs del sistema'; 
+COMMENT ON TABLE gridbot.system_logs IS 'Logs del sistema';

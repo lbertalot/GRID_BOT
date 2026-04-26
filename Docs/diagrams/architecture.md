@@ -33,5 +33,3 @@ flowchart LR
   API -->|/metrics| Prom
   Prom --> Graf
 ```
-
-

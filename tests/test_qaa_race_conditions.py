@@ -21,7 +21,7 @@ import threading
 import time
 import pytest
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from concurrent.futures import ThreadPoolExecutor
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -37,6 +37,7 @@ from app.core.risk_manager import RiskManager
 # ===========================================================================
 # TEST GROUP 1: Dict-based state (no thread-safe)
 # ===========================================================================
+
 
 class TestDictStateSafety:
     """
@@ -68,9 +69,9 @@ class TestDictStateSafety:
         for t in threads:
             t.join()
 
-        assert shared_dict["counter"] == 10000, (
-            f"Counter {shared_dict['counter']} != 10000 - race condition"
-        )
+        assert (
+            shared_dict["counter"] == 10000
+        ), f"Counter {shared_dict['counter']} != 10000 - race condition"
 
     def test_breaker_state_consistency_under_threads(self):
         """Breakers deben mantener estado consistente bajo threads."""
@@ -101,6 +102,7 @@ class TestDictStateSafety:
 # ===========================================================================
 # TEST GROUP 2: Singleton race conditions
 # ===========================================================================
+
 
 class TestSingletonRaceConditions:
     """
@@ -138,9 +140,9 @@ class TestSingletonRaceConditions:
         successes = sum(1 for r in results if r)
         if successes == 2:
             # Race condition: ambas pasaron el check
-            assert balance["USDT"] == Decimal("-60.00"), (
-                "Balance negativo por race condition"
-            )
+            assert balance["USDT"] == Decimal(
+                "-60.00"
+            ), "Balance negativo por race condition"
 
     def test_order_validator_cache_race(self):
         """
@@ -151,18 +153,30 @@ class TestSingletonRaceConditions:
 
         client = MagicMock()
         client.get_exchange_info.return_value = {
-            "symbols": [{
-                "symbol": "BTCUSDT",
-                "baseAsset": "BTC",
-                "quoteAsset": "USDT",
-                "quotePrecision": 8,
-                "baseAssetPrecision": 8,
-                "filters": [
-                    {"filterType": "PRICE_FILTER", "tickSize": "0.01", "minPrice": "0.01", "maxPrice": "1000000"},
-                    {"filterType": "LOT_SIZE", "stepSize": "0.00001", "minQty": "0.00001", "maxQty": "9000"},
-                    {"filterType": "MIN_NOTIONAL", "minNotional": "10"},
-                ],
-            }]
+            "symbols": [
+                {
+                    "symbol": "BTCUSDT",
+                    "baseAsset": "BTC",
+                    "quoteAsset": "USDT",
+                    "quotePrecision": 8,
+                    "baseAssetPrecision": 8,
+                    "filters": [
+                        {
+                            "filterType": "PRICE_FILTER",
+                            "tickSize": "0.01",
+                            "minPrice": "0.01",
+                            "maxPrice": "1000000",
+                        },
+                        {
+                            "filterType": "LOT_SIZE",
+                            "stepSize": "0.00001",
+                            "minQty": "0.00001",
+                            "maxQty": "9000",
+                        },
+                        {"filterType": "MIN_NOTIONAL", "minNotional": "10"},
+                    ],
+                }
+            ]
         }
 
         validator = OrderValidator(client)
@@ -184,6 +198,7 @@ class TestSingletonRaceConditions:
 # ===========================================================================
 # TEST GROUP 3: Async race conditions
 # ===========================================================================
+
 
 class TestAsyncRaceConditions:
     """Tests de race conditions en contexto async."""
@@ -243,6 +258,7 @@ class TestAsyncRaceConditions:
 # TEST GROUP 4: RiskManager state race conditions
 # ===========================================================================
 
+
 class TestRiskManagerRaceConditions:
     """Tests de race conditions en RiskManager."""
 
@@ -289,9 +305,7 @@ class TestRiskManagerRaceConditions:
 
         assert len(states) == 500
         for state in states:
-            assert isinstance(state, BreakerState), (
-                f"Estado inesperado: {state}"
-            )
+            assert isinstance(state, BreakerState), f"Estado inesperado: {state}"
 
     def test_concurrent_trailing_stop_updates(self):
         """Updates concurrentes de trailing stops."""
@@ -327,6 +341,7 @@ class TestRiskManagerRaceConditions:
 # ===========================================================================
 # TEST GROUP 5: Distributed lock simulation
 # ===========================================================================
+
 
 class TestDistributedLockSimulation:
     """Tests de simulación de lock distribuido."""

@@ -1,7 +1,7 @@
 # GridBot v2.5 - Lógica de Trading y Matemática
 
-> **Última actualización**: 2026-01-02  
-> **Auditor**: Senior Software Architect & Trading Systems Specialist  
+> **Última actualización**: 2026-01-02
+> **Auditor**: Senior Software Architect & Trading Systems Specialist
 > **Versión**: 2.5.0
 
 ## 📐 Visión General
@@ -106,7 +106,7 @@ def trading_cycle_tick():
     state = await _get_cycle_state()
     now = datetime.utcnow()
     elapsed = (now - started_at).total_seconds()
-    
+
     if elapsed < 240:  # Evaluación
         cycle_phase.labels(phase="evaluation").set(_now_ts())
         # ... recolectar datos, ML, decisión
@@ -154,7 +154,7 @@ class GridConfig:
     lower_price: Decimal      # Precio mínimo del grid
     grid_levels: int = 10     # Cantidad de niveles
     quantity_per_level: Decimal  # Cantidad por orden
-    
+
     # Calculados
     @property
     def price_step(self) -> Decimal:
@@ -231,7 +231,7 @@ Precio
   │              ┌─────┐  SELL +0.3%
   │     ┌────────┘     └────────┐
   │  ───┘ BUY                   └─── BUY
-  │                              
+  │
   └──────────────────────────────────► Tiempo (minutos)
 ```
 
@@ -253,21 +253,21 @@ class ScalpingConfig:
 ```python
 def should_enter_scalp(current_price, bid, ask, volume_24h):
     spread = (ask - bid) / current_price
-    
+
     # Condiciones:
     # 1. Spread suficiente para cubrir comisiones
     if spread < min_spread_pct + (2 * commission_rate):
         return False
-    
+
     # 2. Volumen suficiente para liquidez
     if volume_24h < min_volume_threshold:
         return False
-    
+
     # 3. Momentum positivo (RSI entre 30-70)
     rsi = calculate_rsi(prices[-14:])
     if not (30 < rsi < 70):
         return False
-    
+
     return True
 ```
 
@@ -277,20 +277,20 @@ def should_enter_scalp(current_price, bid, ask, volume_24h):
 def should_exit_scalp(entry_price, current_price, entry_time):
     pnl_pct = (current_price - entry_price) / entry_price
     elapsed = time.time() - entry_time
-    
+
     # Exit si:
     # 1. Alcanza profit target
     if pnl_pct >= profit_target_pct:
         return True, "PROFIT_TARGET"
-    
+
     # 2. Alcanza stop loss
     if pnl_pct <= -stop_loss_pct:
         return True, "STOP_LOSS"
-    
+
     # 3. Timeout (holding demasiado tiempo)
     if elapsed > max_holding_time_seconds:
         return True, "TIMEOUT"
-    
+
     return False, None
 ```
 
@@ -333,16 +333,16 @@ def calculate_rsi(prices: List[float], period: int = 14) -> float:
     deltas = np.diff(prices)
     gains = np.where(deltas > 0, deltas, 0)
     losses = np.where(deltas < 0, -deltas, 0)
-    
+
     avg_gain = np.mean(gains[-period:])
     avg_loss = np.mean(losses[-period:])
-    
+
     if avg_loss == 0:
         return 100.0
-    
+
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
-    
+
     return rsi
 ```
 
@@ -365,11 +365,11 @@ Histogram = MACD Line - Signal Line
 def calculate_macd(prices: List[float]) -> Dict:
     ema_12 = calculate_ema(prices, 12)
     ema_26 = calculate_ema(prices, 26)
-    
+
     macd_line = ema_12 - ema_26
     signal_line = calculate_ema(macd_line, 9)
     histogram = macd_line - signal_line
-    
+
     return {
         "macd": macd_line,
         "signal": signal_line,
@@ -426,7 +426,7 @@ class LSTMPricePredictor:
         self.model.compile(optimizer='adam', loss='mse')
 ```
 
-**Input**: Últimas 60 velas (1h de datos en timeframe 1min)  
+**Input**: Últimas 60 velas (1h de datos en timeframe 1min)
 **Output**: Precio predicho en 15 minutos
 
 **Features**:
@@ -469,10 +469,10 @@ class RiverOnlineLearner:
             preprocessing.StandardScaler() |
             linear_model.LinearRegression()
         )
-    
+
     def partial_fit(self, x, y):
         self.model.learn_one(x, y)
-    
+
     def predict(self, x):
         return self.model.predict_one(x)
 ```
@@ -514,17 +514,17 @@ Kelly Fraccional = Kelly % × fraction  # fraction = 0.25 por seguridad
 def calculate_kelly_size(win_rate, avg_win, avg_loss, balance, fraction=0.25):
     if avg_loss == 0:
         return 0
-    
+
     b = avg_win / avg_loss
     kelly_pct = (win_rate * (b + 1) - 1) / b
-    
+
     # Protección contra Kelly negativo o excesivo
     kelly_pct = max(0, min(kelly_pct, 0.25))  # Max 25% del balance
-    
+
     fractional_kelly = kelly_pct * fraction
-    
+
     position_size_usdt = balance * fractional_kelly
-    
+
     return position_size_usdt
 ```
 
@@ -558,10 +558,10 @@ position_size = 100 × 0.09 = 9 USDT
 ```python
 def check_stop_loss(entry_price, current_price, stop_loss_pct):
     pnl_pct = (current_price - entry_price) / entry_price
-    
+
     if pnl_pct <= -stop_loss_pct:
         return True, "STOP_LOSS_TRIGGERED"
-    
+
     return False, None
 ```
 
@@ -574,23 +574,23 @@ class TrailingStop:
         self.initial_stop_pct = initial_stop_pct  # 2%
         self.trail_pct = trail_pct  # 0.5%
         self.highest_price = None
-    
+
     def update(self, entry_price, current_price):
         if self.highest_price is None or current_price > self.highest_price:
             self.highest_price = current_price
-        
+
         # Stop loss inicial (desde entry)
         initial_stop = entry_price * (1 - self.initial_stop_pct)
-        
+
         # Trailing stop (desde highest price)
         trailing_stop = self.highest_price * (1 - self.trail_pct)
-        
+
         # Usar el más alto de los dos
         effective_stop = max(initial_stop, trailing_stop)
-        
+
         if current_price <= effective_stop:
             return True, "TRAILING_STOP_TRIGGERED"
-        
+
         return False, None
 ```
 
@@ -622,39 +622,39 @@ Precio
 # app/services/order_validation.py:35
 def validate_against_exchange_info(symbol, price, quantity):
     filters = get_symbol_filters(symbol)  # Desde exchange_info
-    
+
     # PRICE_FILTER
     price_filter = filters['PRICE_FILTER']
     min_price = Decimal(price_filter['minPrice'])
     max_price = Decimal(price_filter['maxPrice'])
     tick_size = Decimal(price_filter['tickSize'])
-    
+
     if not (min_price <= price <= max_price):
         raise ValidationError(f"Price {price} fuera de rango [{min_price}, {max_price}]")
-    
+
     # Ajustar a tick_size
     price = (price // tick_size) * tick_size
-    
+
     # LOT_SIZE
     lot_filter = filters['LOT_SIZE']
     min_qty = Decimal(lot_filter['minQty'])
     max_qty = Decimal(lot_filter['maxQty'])
     step_size = Decimal(lot_filter['stepSize'])
-    
+
     if not (min_qty <= quantity <= max_qty):
         raise ValidationError(f"Quantity {quantity} fuera de rango [{min_qty}, {max_qty}]")
-    
+
     # Ajustar a step_size
     quantity = (quantity // step_size) * step_size
-    
+
     # MIN_NOTIONAL
     notional_filter = filters['MIN_NOTIONAL']
     min_notional = Decimal(notional_filter['minNotional'])
     notional = price * quantity
-    
+
     if notional < min_notional:
         raise ValidationError(f"Notional {notional} < {min_notional}")
-    
+
     return price, quantity
 ```
 
@@ -663,15 +663,15 @@ def validate_against_exchange_info(symbol, price, quantity):
 ```python
 def validate_balance(symbol, side, quantity, price):
     balances = get_balances()
-    
+
     if side == "BUY":
         required_usdt = quantity * price
         commission = required_usdt * 0.001  # 0.1%
         total_required = required_usdt + commission
-        
+
         if balances['USDT'] < total_required:
             raise InsufficientBalanceError(f"Need {total_required} USDT, have {balances['USDT']}")
-    
+
     elif side == "SELL":
         asset = symbol.replace("USDT", "")
         if balances.get(asset, 0) < quantity:
@@ -683,13 +683,13 @@ def validate_balance(symbol, side, quantity, price):
 ```python
 def validate_circuit_breakers():
     breakers = get_breakers_status()
-    
+
     if breakers['balance_discrepancy']['active']:
         raise CircuitBreakerError("Balance discrepancy breaker activo")
-    
+
     if breakers['system_integrity']['active']:
         raise CircuitBreakerError("System integrity breaker activo")
-    
+
     if breakers['critical_mode']['active']:
         raise CircuitBreakerError("CRITICAL MODE - Trading disabled")
 ```
@@ -706,29 +706,29 @@ def validate_circuit_breakers():
 # app/services/metrics_service.py
 def calculate_portfolio_metrics():
     trades = get_all_trades()
-    
+
     # PnL Total
     total_pnl = sum([t.realized_pnl for t in trades if t.status == 'CLOSED'])
-    
+
     # Win Rate
     winning_trades = [t for t in trades if t.realized_pnl > 0]
     win_rate = len(winning_trades) / len(trades) if trades else 0
-    
+
     # Average Win/Loss
     avg_win = sum([t.realized_pnl for t in winning_trades]) / len(winning_trades) if winning_trades else 0
     losing_trades = [t for t in trades if t.realized_pnl < 0]
     avg_loss = abs(sum([t.realized_pnl for t in losing_trades]) / len(losing_trades)) if losing_trades else 0
-    
+
     # Sharpe Ratio (aproximado)
     returns = [t.realized_pnl / t.cost_basis for t in trades if t.status == 'CLOSED']
     sharpe = (mean(returns) - risk_free_rate) / std(returns) if std(returns) > 0 else 0
-    
+
     # Max Drawdown
     cumulative_pnl = cumsum([t.realized_pnl for t in trades])
     running_max = cummax(cumulative_pnl)
     drawdown = running_max - cumulative_pnl
     max_drawdown = max(drawdown)
-    
+
     return {
         "total_pnl": total_pnl,
         "win_rate": win_rate,
@@ -769,5 +769,3 @@ def calculate_portfolio_metrics():
 - [LSTM Networks](https://colah.github.io/posts/2015-08-Understanding-LSTMs/)
 - [Binance API Filters](https://binance-docs.github.io/apidocs/spot/en/#filters)
 - [Technical Analysis Library](https://technical-analysis-library-in-python.readthedocs.io/)
-
-

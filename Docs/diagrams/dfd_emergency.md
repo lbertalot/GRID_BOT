@@ -8,5 +8,3 @@ flowchart TD
   C --> E[Publicar métricas y estado]
   E --> F[Operador revisa y aplica plan]
 ```
-
-

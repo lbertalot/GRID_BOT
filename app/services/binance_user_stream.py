@@ -28,6 +28,7 @@ Mantiene el contrato público previo:
     BinanceUserStreamHandler(...).stop()
     default_on_fill(event)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -63,7 +64,9 @@ class Ed25519Signer:
     def from_env(cls) -> Optional["Ed25519Signer"]:
         pem_path = os.getenv("BINANCE_ED25519_PRIVATE_KEY_PATH", "").strip()
         pem_inline = os.getenv("BINANCE_ED25519_PRIVATE_KEY_PEM", "").strip()
-        passphrase = os.getenv("BINANCE_ED25519_PRIVATE_KEY_PASSPHRASE", "").strip() or None
+        passphrase = (
+            os.getenv("BINANCE_ED25519_PRIVATE_KEY_PASSPHRASE", "").strip() or None
+        )
         pw_bytes = passphrase.encode() if passphrase else None
 
         pem_bytes: Optional[bytes] = None
@@ -72,7 +75,9 @@ class Ed25519Signer:
                 with open(pem_path, "rb") as f:
                     pem_bytes = f.read()
             except Exception as e:
-                logger.error(f"❌ No se pudo leer BINANCE_ED25519_PRIVATE_KEY_PATH={pem_path}: {e}")
+                logger.error(
+                    f"❌ No se pudo leer BINANCE_ED25519_PRIVATE_KEY_PATH={pem_path}: {e}"
+                )
                 return None
         elif pem_inline:
             pem_bytes = pem_inline.encode()
@@ -113,7 +118,11 @@ class BinanceUserStreamHandler:
         ws_base: Optional[str] = None,
         api_key: Optional[str] = None,
     ) -> None:
-        use_testnet = os.getenv("BINANCE_TESTNET", "false").lower() in {"1", "true", "yes"}
+        use_testnet = os.getenv("BINANCE_TESTNET", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
         # WS API v3 base (distinto del antiguo stream.binance.com)
         default_ws = (
@@ -178,7 +187,9 @@ class BinanceUserStreamHandler:
         self.running = True
         self._on_fill = on_fill
         if self.session is None:
-            self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15))
+            self.session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=15)
+            )
         self._conn_task = asyncio.create_task(self._connection_loop())
         logger.info("✅ BinanceUserStreamHandler iniciado (WS API v3 + Ed25519)")
 
@@ -236,6 +247,7 @@ class BinanceUserStreamHandler:
             except Exception as e:
                 try:
                     from app.core.metrics import ws_errors_total, ws_reconnects_total
+
                     ws_errors_total.labels(phase="connect").inc()
                     ws_reconnects_total.inc()
                 except Exception:
@@ -250,7 +262,10 @@ class BinanceUserStreamHandler:
                 )
                 if is_auth_error:
                     try:
-                        from app.services.binance_client_singleton import _notify_invalid_ip
+                        from app.services.binance_client_singleton import (
+                            _notify_invalid_ip,
+                        )
+
                         _notify_invalid_ip(err_str)
                     except Exception:
                         pass
@@ -336,7 +351,9 @@ class BinanceUserStreamHandler:
         resp = await self._send_request("userDataStream.subscribe", timeout=15.0)
         result = resp.get("result") or {}
         self.subscription_id = str(result.get("subscriptionId") or "")
-        logger.info(f"📡 userDataStream.subscribe OK (subscriptionId={self.subscription_id})")
+        logger.info(
+            f"📡 userDataStream.subscribe OK (subscriptionId={self.subscription_id})"
+        )
 
     # --------------------------------------------------------------- Reader
 
@@ -360,6 +377,7 @@ class BinanceUserStreamHandler:
         except Exception as e:
             try:
                 from app.core.metrics import ws_errors_total
+
                 ws_errors_total.labels(phase="message").inc()
             except Exception:
                 pass
@@ -385,6 +403,7 @@ class BinanceUserStreamHandler:
 
         try:
             from app.core.metrics import ws_events_total
+
             ws_events_total.labels(event=etype).inc()
         except Exception:
             pass
@@ -402,6 +421,7 @@ class BinanceUserStreamHandler:
             return
         try:
             from app.core.metrics import ws_fill_latency_seconds
+
             _start = time.perf_counter()
             result = self._on_fill(evt)
             if asyncio.iscoroutine(result):
@@ -410,6 +430,7 @@ class BinanceUserStreamHandler:
         except Exception as e:
             try:
                 from app.core.metrics import ws_errors_total
+
                 ws_errors_total.labels(phase="on_fill").inc()
             except Exception:
                 pass
@@ -444,14 +465,22 @@ async def default_on_fill(event: Dict[str, Any]) -> None:
         try:
             if side == "BUY":
                 if cum_quote:
-                    BalanceService.update_balance(db, quote_asset, -Decimal(str(cum_quote)))
+                    BalanceService.update_balance(
+                        db, quote_asset, -Decimal(str(cum_quote))
+                    )
                 if executed_qty:
-                    BalanceService.update_balance(db, base_asset, Decimal(str(executed_qty)))
+                    BalanceService.update_balance(
+                        db, base_asset, Decimal(str(executed_qty))
+                    )
             else:
                 if executed_qty:
-                    BalanceService.update_balance(db, base_asset, -Decimal(str(executed_qty)))
+                    BalanceService.update_balance(
+                        db, base_asset, -Decimal(str(executed_qty))
+                    )
                 if cum_quote:
-                    BalanceService.update_balance(db, quote_asset, Decimal(str(cum_quote)))
+                    BalanceService.update_balance(
+                        db, quote_asset, Decimal(str(cum_quote))
+                    )
         finally:
             try:
                 db.close()

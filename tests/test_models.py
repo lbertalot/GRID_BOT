@@ -47,5 +47,3 @@ def test_performance_metrics_defaults(in_memory_db):
     stored = session.query(PerformanceMetrics).first()
     assert stored.total_trades == 0
     assert stored.total_profit == 0.0
-
-

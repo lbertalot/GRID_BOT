@@ -11,10 +11,9 @@ Impacto financiero: Rechazo de órdenes, estado inconsistente, pérdida de capit
 
 import os
 import sys
-import math
 import pytest
-from decimal import Decimal, ROUND_DOWN, getcontext
-from unittest.mock import MagicMock, patch
+from decimal import Decimal, ROUND_DOWN
+from unittest.mock import MagicMock
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
@@ -23,7 +22,7 @@ if BASE_DIR not in sys.path:
 os.environ.setdefault("SKIP_API_HEALTHCHECK", "1")
 
 from app.services.order_validation import OrderValidator
-from app.core.precision_validator import PrecisionValidator, validate_trading_order
+from app.core.precision_validator import PrecisionValidator
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
 
 
@@ -40,8 +39,18 @@ REALISTIC_EXCHANGE_INFO = {
             "quotePrecision": 8,
             "baseAssetPrecision": 8,
             "filters": [
-                {"filterType": "PRICE_FILTER", "minPrice": "0.01", "maxPrice": "1000000.00", "tickSize": "0.01"},
-                {"filterType": "LOT_SIZE", "minQty": "0.00001", "maxQty": "9000.00000", "stepSize": "0.00001"},
+                {
+                    "filterType": "PRICE_FILTER",
+                    "minPrice": "0.01",
+                    "maxPrice": "1000000.00",
+                    "tickSize": "0.01",
+                },
+                {
+                    "filterType": "LOT_SIZE",
+                    "minQty": "0.00001",
+                    "maxQty": "9000.00000",
+                    "stepSize": "0.00001",
+                },
                 {"filterType": "MIN_NOTIONAL", "minNotional": "10.00"},
             ],
         },
@@ -52,8 +61,18 @@ REALISTIC_EXCHANGE_INFO = {
             "quotePrecision": 8,
             "baseAssetPrecision": 0,
             "filters": [
-                {"filterType": "PRICE_FILTER", "minPrice": "0.00000001", "maxPrice": "1000.00000000", "tickSize": "0.00000001"},
-                {"filterType": "LOT_SIZE", "minQty": "1.00", "maxQty": "46116860414.00", "stepSize": "1.00"},
+                {
+                    "filterType": "PRICE_FILTER",
+                    "minPrice": "0.00000001",
+                    "maxPrice": "1000.00000000",
+                    "tickSize": "0.00000001",
+                },
+                {
+                    "filterType": "LOT_SIZE",
+                    "minQty": "1.00",
+                    "maxQty": "46116860414.00",
+                    "stepSize": "1.00",
+                },
                 {"filterType": "MIN_NOTIONAL", "minNotional": "5.00"},
             ],
         },
@@ -64,8 +83,18 @@ REALISTIC_EXCHANGE_INFO = {
             "quotePrecision": 8,
             "baseAssetPrecision": 8,
             "filters": [
-                {"filterType": "PRICE_FILTER", "minPrice": "0.01", "maxPrice": "100000.00", "tickSize": "0.01"},
-                {"filterType": "LOT_SIZE", "minQty": "0.0001", "maxQty": "100000.00", "stepSize": "0.0001"},
+                {
+                    "filterType": "PRICE_FILTER",
+                    "minPrice": "0.01",
+                    "maxPrice": "100000.00",
+                    "tickSize": "0.01",
+                },
+                {
+                    "filterType": "LOT_SIZE",
+                    "minQty": "0.0001",
+                    "maxQty": "100000.00",
+                    "stepSize": "0.0001",
+                },
                 {"filterType": "MIN_NOTIONAL", "minNotional": "10.00"},
             ],
         },
@@ -84,6 +113,7 @@ def _make_mock_client(exchange_info=None):
 # ===========================================================================
 # TEST GROUP 1: Validación de stepSize (LOT_SIZE)
 # ===========================================================================
+
 
 class TestLotSizeValidation:
     """Tests para validación de LOT_SIZE filter."""
@@ -107,9 +137,9 @@ class TestLotSizeValidation:
         validator = OrderValidator(client)
         result = validator.adjust_quantity_precision(1500.7, "SHIBUSDT")
         adjusted = result["adjusted_quantity"]
-        assert adjusted == int(adjusted), (
-            f"SHIB cantidad {adjusted} contiene fracción pero stepSize es 1"
-        )
+        assert adjusted == int(
+            adjusted
+        ), f"SHIB cantidad {adjusted} contiene fracción pero stepSize es 1"
 
     def test_quantity_below_min_qty_adjusted_to_min(self):
         """Si la cantidad es menor que minQty, debe ajustarse al mínimo."""
@@ -118,9 +148,7 @@ class TestLotSizeValidation:
         result = validator.adjust_quantity_precision(0.000001, "BTCUSDT")
         adjusted = result["adjusted_quantity"]
         min_qty = result["min_qty"]
-        assert adjusted >= min_qty, (
-            f"Cantidad ajustada {adjusted} < minQty {min_qty}"
-        )
+        assert adjusted >= min_qty, f"Cantidad ajustada {adjusted} < minQty {min_qty}"
 
     def test_quantity_above_max_qty_clamped(self):
         """Si la cantidad excede maxQty, debe limitarse."""
@@ -129,9 +157,7 @@ class TestLotSizeValidation:
         result = validator.adjust_quantity_precision(99999.0, "BTCUSDT")
         adjusted = result["adjusted_quantity"]
         max_qty = result["max_qty"]
-        assert adjusted <= max_qty, (
-            f"Cantidad ajustada {adjusted} > maxQty {max_qty}"
-        )
+        assert adjusted <= max_qty, f"Cantidad ajustada {adjusted} > maxQty {max_qty}"
 
     def test_zero_quantity_rejected(self):
         """Una cantidad de 0 no debe generar orden válida."""
@@ -140,9 +166,9 @@ class TestLotSizeValidation:
         result = validator.adjust_quantity_precision(0.0, "BTCUSDT")
         adjusted = result["adjusted_quantity"]
         min_qty = result["min_qty"]
-        assert adjusted >= min_qty or adjusted == 0, (
-            "Cantidad 0 debe resultar en min_qty o permanecer en 0"
-        )
+        assert (
+            adjusted >= min_qty or adjusted == 0
+        ), "Cantidad 0 debe resultar en min_qty o permanecer en 0"
 
     def test_negative_quantity_handled(self):
         """Una cantidad negativa no debe pasar silenciosamente."""
@@ -168,6 +194,7 @@ class TestLotSizeValidation:
 # TEST GROUP 2: Validación de tickSize (PRICE_FILTER)
 # ===========================================================================
 
+
 class TestPriceFilterValidation:
     """Tests para validación de PRICE_FILTER."""
 
@@ -177,18 +204,18 @@ class TestPriceFilterValidation:
         validator = OrderValidator(client)
         rounded = validator._round_to_tick(50000.123, 0.01)
         remainder = Decimal(str(rounded)) % Decimal("0.01")
-        assert remainder == Decimal("0"), (
-            f"Precio {rounded} no es múltiplo de tickSize 0.01"
-        )
+        assert remainder == Decimal(
+            "0"
+        ), f"Precio {rounded} no es múltiplo de tickSize 0.01"
 
     def test_price_tick_rounding_floor(self):
         """Precio debe redondearse hacia abajo para BUY (seguridad)."""
         client = _make_mock_client()
         validator = OrderValidator(client)
         rounded = validator._round_to_tick(50000.999, 0.01)
-        assert rounded <= 50000.999, (
-            f"Precio {rounded} redondeado hacia arriba (peligroso para BUY)"
-        )
+        assert (
+            rounded <= 50000.999
+        ), f"Precio {rounded} redondeado hacia arriba (peligroso para BUY)"
 
     def test_very_small_tick_shib(self):
         """SHIB tiene tickSize=0.00000001. Verificar precisión."""
@@ -197,9 +224,9 @@ class TestPriceFilterValidation:
         rounded = validator._round_to_tick(0.000012345, 0.00000001)
         step = Decimal("0.00000001")
         remainder = Decimal(str(rounded)) % step
-        assert remainder == Decimal("0"), (
-            f"Precio SHIB {rounded} no respeta tickSize {step}"
-        )
+        assert remainder == Decimal(
+            "0"
+        ), f"Precio SHIB {rounded} no respeta tickSize {step}"
 
     def test_zero_tick_size_returns_original(self):
         """Con tickSize=0, debe retornar el precio original."""
@@ -220,6 +247,7 @@ class TestPriceFilterValidation:
 # TEST GROUP 3: Validación MIN_NOTIONAL
 # ===========================================================================
 
+
 class TestMinNotionalValidation:
     """Tests para validación de MIN_NOTIONAL."""
 
@@ -237,9 +265,9 @@ class TestMinNotionalValidation:
         if result["notional_value"] is not None:
             notional = result["notional_value"]
             if notional < 10.0:
-                assert not result["is_valid"], (
-                    f"Orden con notional ${notional:.2f} < $10 debería ser rechazada"
-                )
+                assert not result[
+                    "is_valid"
+                ], f"Orden con notional ${notional:.2f} < $10 debería ser rechazada"
 
     def test_order_at_exact_min_notional_accepted(self):
         """Orden con notional == min_notional debe ser aceptada."""
@@ -254,9 +282,9 @@ class TestMinNotionalValidation:
             order_type="MARKET",
         )
         if result["notional_value"] is not None:
-            assert result["is_valid"] or result["notional_value"] >= 10.0, (
-                "Orden en el límite exacto de min_notional debería aceptarse"
-            )
+            assert (
+                result["is_valid"] or result["notional_value"] >= 10.0
+            ), "Orden en el límite exacto de min_notional debería aceptarse"
 
     def test_notional_calculation_uses_decimal(self):
         """Notional debe calcularse con Decimal, no float."""
@@ -269,9 +297,9 @@ class TestMinNotionalValidation:
         notional_float = qty_f * price_f
 
         diff = abs(float(notional_decimal) - notional_float)
-        assert diff < 0.01, (
-            f"Diferencia entre Decimal ({notional_decimal}) y float ({notional_float}): {diff}"
-        )
+        assert (
+            diff < 0.01
+        ), f"Diferencia entre Decimal ({notional_decimal}) y float ({notional_float}): {diff}"
 
     def test_very_low_price_high_quantity_notional(self):
         """Tokens baratos con alta cantidad deben validar notional correctamente."""
@@ -291,6 +319,7 @@ class TestMinNotionalValidation:
 # ===========================================================================
 # TEST GROUP 4: Validación completa de orden
 # ===========================================================================
+
 
 class TestFullOrderValidation:
     """Tests de validación end-to-end de órdenes."""
@@ -320,7 +349,9 @@ class TestFullOrderValidation:
             order_type="LIMIT",
             price=51000.0,
         )
-        assert result["is_valid"], f"Orden LIMIT válida rechazada: {result.get('errors')}"
+        assert result[
+            "is_valid"
+        ], f"Orden LIMIT válida rechazada: {result.get('errors')}"
 
     def test_limit_order_without_price_rejected(self):
         """LIMIT sin precio debe ser rechazada."""
@@ -370,6 +401,7 @@ class TestFullOrderValidation:
 # TEST GROUP 5: PrecisionValidator
 # ===========================================================================
 
+
 class TestPrecisionValidatorModule:
     """Tests para el módulo PrecisionValidator standalone."""
 
@@ -387,9 +419,9 @@ class TestPrecisionValidatorModule:
         assert adjusted is not None
         step = Decimal(str(pv.get_symbol_precision("BTCUSDT")["step_size"]))
         remainder = Decimal(str(adjusted)) % step
-        assert remainder == Decimal("0"), (
-            f"Cantidad ajustada {adjusted} no respeta step_size"
-        )
+        assert remainder == Decimal(
+            "0"
+        ), f"Cantidad ajustada {adjusted} no respeta step_size"
 
     def test_notional_below_minimum_rejected(self):
         """Valor notional < $10 debe rechazarse."""
@@ -412,6 +444,7 @@ class TestPrecisionValidatorModule:
 # TEST GROUP 6: Grid Levels
 # ===========================================================================
 
+
 class TestGridLevels:
     """Tests de cálculo de niveles de grid."""
 
@@ -430,9 +463,9 @@ class TestGridLevels:
         """Niveles deben ser estrictamente crecientes."""
         levels = calculate_grid_levels(10000, 20000, 10)
         for i in range(1, len(levels)):
-            assert levels[i] > levels[i - 1], (
-                f"Nivel {i} ({levels[i]}) no es mayor que {i-1} ({levels[i-1]})"
-            )
+            assert (
+                levels[i] > levels[i - 1]
+            ), f"Nivel {i} ({levels[i]}) no es mayor que {i-1} ({levels[i-1]})"
 
     def test_grid_levels_min_2_grids(self):
         """Menos de 2 grids debe lanzar error."""
@@ -473,6 +506,7 @@ class TestGridLevels:
 # TEST GROUP 7: Hallazgos críticos - float en cálculos monetarios
 # ===========================================================================
 
+
 class TestFloatUsageAudit:
     """
     HALLAZGO CRÍTICO: order_validation.py usa float() para stepSize, minQty,
@@ -508,16 +542,16 @@ class TestFloatUsageAudit:
         price = Decimal("50000.01")
         notional = qty * price
         expected = Decimal("10.5000021")
-        assert notional == expected, (
-            f"Notional impreciso: {notional} != {expected}"
-        )
+        assert notional == expected, f"Notional impreciso: {notional} != {expected}"
 
     def test_round_to_step_preserves_precision(self):
         """_round_to_step debe preservar la precisión de Decimal."""
         client = _make_mock_client()
         validator = OrderValidator(client)
         result = validator._round_to_step(0.123456789, 0.00001)
-        expected_decimal = (Decimal("0.123456789") / Decimal("0.00001")).to_integral_value(rounding=ROUND_DOWN) * Decimal("0.00001")
-        assert abs(result - float(expected_decimal)) < 1e-10, (
-            f"Precisión perdida en _round_to_step: {result} vs {float(expected_decimal)}"
-        )
+        expected_decimal = (
+            Decimal("0.123456789") / Decimal("0.00001")
+        ).to_integral_value(rounding=ROUND_DOWN) * Decimal("0.00001")
+        assert (
+            abs(result - float(expected_decimal)) < 1e-10
+        ), f"Precisión perdida en _round_to_step: {result} vs {float(expected_decimal)}"

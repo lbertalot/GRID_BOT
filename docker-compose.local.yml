@@ -28,14 +28,15 @@ x-app-env: &app-env
   ACCESS_LOG: "false"
   DOCKER_ENV: "true"
   TZ: UTC
-  # Trading — modo seguro por defecto en local
-  PAPER_TRADING: "false"
+  # Trading — objetivo inmediato local: PAPER (simulación en app; sin órdenes reales).
+  # FORCE_REAL_MODE vacío o "false" para no anular PAPER_TRADING.
+  PAPER_TRADING: "true"
   TRADING_ENABLED: "true"
   EMERGENCY_STOP: "false"
   FORCE_REAL_MODE: ""
   BINANCE_TESTNET: "false"
   # Estrategia
-  CALIBRATION_MODE: "true"
+  CALIBRATION_MODE: "false"
   MIN_USDT_BALANCE: "15.0"
   TARGET_USDT_BALANCE: "30.0"
   ENABLE_AUTO_REBALANCE: "true"
@@ -55,6 +56,8 @@ x-app-env: &app-env
   MPLCONFIGDIR: /tmp/matplotlib
   MONITORING_DIR: /app/monitoring_data
   REPORTS_DIR: /app/reports
+  # Watchdog pipeline_health_tasks (worker → Prometheus en la red compose)
+  PROMETHEUS_URL: http://prometheus:9090
 
 x-app-volumes: &app-volumes
   - ./app:/app/app
@@ -130,9 +133,9 @@ services:
     environment:
       <<: *app-env
     volumes: *app-volumes
+    # ensure_pg_grants.py espera con reintentos al Postgres real (tras initdb/restart del entrypoint).
     command: >
       sh -c "
-        echo '⏳ Esperando PostgreSQL...' &&
         python scripts/ensure_pg_grants.py &&
         alembic upgrade head &&
         echo '✅ Migraciones aplicadas'

@@ -1,4 +1,3 @@
-import asyncio
 import os
 import sys
 import pytest
@@ -34,5 +33,3 @@ async def test_wrapper_uses_cache(monkeypatch):
     assert p1 == 100.0 and p2 == 100.0
     # Segunda llamada debe venir de caché (solo 1 llamada real)
     assert wrapper.client.calls == 1
-
-

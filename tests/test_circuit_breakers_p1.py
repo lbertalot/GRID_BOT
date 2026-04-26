@@ -18,10 +18,9 @@ Política:
   - 100% offline (TESTING_RULES §1).
   - Sin red, sin DB.
 """
+
 from __future__ import annotations
 
-import os
-import time
 from unittest.mock import patch
 
 import pytest
@@ -192,7 +191,12 @@ async def test_is_trading_halted_falso_cuando_todo_inactivo(cb_no_cooldown):
 async def test_get_all_breakers_status_estructura(cb_no_cooldown):
     await cb_no_cooldown.activate_breaker("balance_discrepancy", "x")
     status = cb_no_cooldown.get_all_breakers_status()
-    assert set(status.keys()) == {"critical_mode", "active_breakers", "total_active", "breakers"}
+    assert set(status.keys()) == {
+        "critical_mode",
+        "active_breakers",
+        "total_active",
+        "breakers",
+    }
     assert status["total_active"] == 1
     assert "balance_discrepancy" in status["active_breakers"]
 

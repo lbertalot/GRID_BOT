@@ -4,8 +4,12 @@ import os
 import ssl
 
 # Priorizar REDIS_URL de Heroku si está disponible, luego CELERY_BROKER_URL
-redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-celery_result_backend = os.getenv("REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+redis_url = os.getenv("REDIS_URL") or os.getenv(
+    "CELERY_BROKER_URL", "redis://localhost:6379/0"
+)
+celery_result_backend = os.getenv("REDIS_URL") or os.getenv(
+    "CELERY_RESULT_BACKEND", "redis://localhost:6379/0"
+)
 
 # Configuración de Celery con soporte para SSL (rediss://)
 broker_use_ssl = {}
@@ -15,10 +19,10 @@ redis_backend_use_ssl = {}
 if redis_url.startswith("rediss://"):
     # Para Celery con Redis SSL, usar broker_use_ssl
     broker_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_NONE,  # Heroku Redis usa SSL pero sin verificación de certificado
+        "ssl_cert_reqs": ssl.CERT_NONE,  # Heroku Redis usa SSL pero sin verificación de certificado
     }
     redis_backend_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_NONE,
+        "ssl_cert_reqs": ssl.CERT_NONE,
     }
 
 # Configuración de Celery
@@ -32,29 +36,30 @@ celery_app = Celery(
         "app.services.ml_tasks",
         "app.services.alert_tasks",
         "app.services.portfolio_snapshot_service",  # portfolio-snapshot-agent
-    ]
+        "app.services.pipeline_health_tasks",
+    ],
 )
 
 # Configuración de Celery
 conf_dict = {
-    'task_serializer': 'json',
-    'accept_content': ['json'],
-    'result_serializer': 'json',
-    'timezone': 'UTC',
-    'enable_utc': True,
-    'task_track_started': True,
-    'task_time_limit': int(os.getenv("CELERY_TASK_HARD_TIMEOUT", str(30 * 60))),
-    'task_soft_time_limit': int(os.getenv("CELERY_TASK_SOFT_TIMEOUT", str(25 * 60))),
-    'worker_prefetch_multiplier': 1,
-    'worker_max_tasks_per_child': 1000,
-    'broker_connection_retry_on_startup': True,
+    "task_serializer": "json",
+    "accept_content": ["json"],
+    "result_serializer": "json",
+    "timezone": "UTC",
+    "enable_utc": True,
+    "task_track_started": True,
+    "task_time_limit": int(os.getenv("CELERY_TASK_HARD_TIMEOUT", str(30 * 60))),
+    "task_soft_time_limit": int(os.getenv("CELERY_TASK_SOFT_TIMEOUT", str(25 * 60))),
+    "worker_prefetch_multiplier": 1,
+    "worker_max_tasks_per_child": 1000,
+    "broker_connection_retry_on_startup": True,
 }
 
 # Añadir opciones SSL si es necesario
 if broker_use_ssl:
-    conf_dict['broker_use_ssl'] = broker_use_ssl
+    conf_dict["broker_use_ssl"] = broker_use_ssl
 if redis_backend_use_ssl:
-    conf_dict['redis_backend_use_ssl'] = redis_backend_use_ssl
+    conf_dict["redis_backend_use_ssl"] = redis_backend_use_ssl
 
 celery_app.conf.update(**conf_dict)
 
@@ -62,6 +67,7 @@ celery_app.conf.update(**conf_dict)
 # observability-tracing-agent: instalar signals de OTel en los workers
 try:
     from app.core.celery_tracing import install_celery_tracing
+
     install_celery_tracing()
 except Exception:
     pass
@@ -86,7 +92,7 @@ celery_app.conf.beat_schedule = {
     },
     "dust-sweep-weekly": {
         "task": "app.services.trading_tasks.dust_sweep",
-        "schedule": crontab(minute=0, hour=3, day_of_week='sun'),  # Domingos 03:00 UTC
+        "schedule": crontab(minute=0, hour=3, day_of_week="sun"),  # Domingos 03:00 UTC
         "options": {"queue": "low"},
         "args": (True,),  # dry_run por defecto
     },
@@ -95,4 +101,9 @@ celery_app.conf.beat_schedule = {
         "task": "app.services.portfolio_snapshot_service.capture_portfolio_snapshot",
         "schedule": 900.0,  # 15 minutos
     },
-} 
+    # Watchdog ingesta: falla si tablas críticas sin escrituras ok en ~65m (Prometheus + evidencia en reports/)
+    "pipeline-db-writes-health": {
+        "task": "app.services.pipeline_health_tasks.check_pipeline_db_writes",
+        "schedule": 900.0,  # 15 minutos
+    },
+}

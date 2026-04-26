@@ -52,5 +52,3 @@ flowchart LR
 5) Ejecución y Tracking: el worker envía a Binance con `client_order_id`, maneja fills parciales, errores y reintentos.
 6) Métricas y Logs: se registran latencias, slippage, PnL y contadores en Prometheus; logs estructurados con `order_id`.
 7) Reconciliación: proceso periódico compara estado interno con Binance y corrige discrepancias (≤ 60 s).
-
-

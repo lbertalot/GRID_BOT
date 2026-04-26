@@ -1,16 +1,16 @@
 import asyncio
 import json
-import math
 import os
-import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 USE_REAL = os.getenv("USE_REAL_BINANCE", "0") == "1"
 if not USE_REAL:
+
     class _DummyClient:
         def get_symbol_ticker(self, symbol: str):
             return {"symbol": symbol, "price": "100.0"}
+
         def get_klines(self, symbol: str, interval: str, limit: int = 100):
             now = int(time.time() * 1000)
             out = []
@@ -22,13 +22,18 @@ if not USE_REAL:
                 l = o * 0.99
                 c = o * 1.005
                 v = 10 + i
-                out.append([open_time, str(o), str(h), str(l), str(c), str(v), close_time])
+                out.append(
+                    [open_time, str(o), str(h), str(l), str(c), str(v), close_time]
+                )
             return out
+
         def create_order(self, **kwargs):
             return {"orderId": int(time.time() * 1000), "status": "FILLED"}
+
     class _DummyException(Exception):
         def __init__(self, *args, **kwargs):
             super().__init__(*args)
+
     Client = _DummyClient  # type: ignore
     BinanceAPIException = _DummyException  # type: ignore
 else:
@@ -74,16 +79,23 @@ class AsyncBinanceWrapper:
     - Rate limiting + backoff exponencial
     """
 
-    def __init__(self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10):
+    def __init__(
+        self, *, ttl_seconds: int = 5, rate_per_sec: float = 5.0, burst: int = 10
+    ):
         # ✅ FASE 4: Usar singleton en lugar de crear nuevo cliente
         if USE_REAL:
-            from app.services.binance_client_singleton import get_binance_client_singleton
+            from app.services.binance_client_singleton import (
+                get_binance_client_singleton,
+            )
+
             singleton = get_binance_client_singleton()
             if singleton.is_ready():
                 self.client = singleton.client
             else:
                 # Fallback si singleton no está listo
-                api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+                api_key = os.getenv("BINANCE_API_KEY") or os.getenv(
+                    "BINANCE_SECRET_KEY"
+                )
                 api_secret = os.getenv("BINANCE_SECRET_KEY")
                 testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
                 self.client = Client(api_key, api_secret, testnet=testnet)
@@ -103,14 +115,26 @@ class AsyncBinanceWrapper:
                 return await coro_func(*args, **kwargs)
             except BinanceAPIException as e:
                 # Retry en errores de rate limit o temporales
-                if getattr(e, 'code', None) in (-1003, -1015) or 429 in [getattr(e, 'status_code', None)]:
+                if getattr(e, "code", None) in (-1003, -1015) or 429 in [
+                    getattr(e, "status_code", None)
+                ]:
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, 8.0)
                     continue
                 raise
             except Exception as e:
                 # Errores transitorios de red (socket/timeout)
-                if any(s in str(e).lower() for s in ["timed out", "temporarily unavailable", "connection reset", "network is unreachable", "read timeout", "write timeout"]):
+                if any(
+                    s in str(e).lower()
+                    for s in [
+                        "timed out",
+                        "temporarily unavailable",
+                        "connection reset",
+                        "network is unreachable",
+                        "read timeout",
+                        "write timeout",
+                    ]
+                ):
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, 8.0)
                     continue
@@ -128,13 +152,19 @@ class AsyncBinanceWrapper:
         await self.price_rl.acquire()
 
         async def _call():
-            return await asyncio.to_thread(lambda: float(self.client.get_symbol_ticker(symbol=symbol.upper())["price"]))
+            return await asyncio.to_thread(
+                lambda: float(
+                    self.client.get_symbol_ticker(symbol=symbol.upper())["price"]
+                )
+            )
 
         price = await self._with_backoff(_call)
         await self.cache.set(key, str(price), self.ttl)
         return price
 
-    async def get_klines(self, symbol: str, interval: str, limit: int = 100) -> list[list[Any]]:
+    async def get_klines(
+        self, symbol: str, interval: str, limit: int = 100
+    ) -> list[list[Any]]:
         key = f"klines:{symbol.upper()}:{interval}:{limit}"
         cached = await self.cache.get(key)
         if cached:
@@ -146,36 +176,43 @@ class AsyncBinanceWrapper:
         await self.klines_rl.acquire()
 
         async def _call():
-            return await asyncio.to_thread(lambda: self.client.get_klines(symbol=symbol.upper(), interval=interval, limit=limit))
+            return await asyncio.to_thread(
+                lambda: self.client.get_klines(
+                    symbol=symbol.upper(), interval=interval, limit=limit
+                )
+            )
 
         kl = await self._with_backoff(_call)
         await self.cache.set(key, kl, self.ttl)
         return kl
 
-    async def create_market_order(self, symbol: str, side: str, quantity: float) -> dict:
+    async def create_market_order(
+        self, symbol: str, side: str, quantity: float
+    ) -> dict:
         """Crea una orden de mercado aplicando validación de cantidad/precio.
         - Ajusta cantidad a stepSize
         - Usa backoff ante errores 429/-1003/-1015
         - Ejecuta en to_thread para no bloquear
         """
         # Validación/ajuste
-        validation = await asyncio.to_thread(self.validator.validate_order_parameters, symbol, quantity, side, 'MARKET')
-        if not validation.get('is_valid', False):
+        validation = await asyncio.to_thread(
+            self.validator.validate_order_parameters, symbol, quantity, side, "MARKET"
+        )
+        if not validation.get("is_valid", False):
             # Levantar error con detalles de validación
-            errors = " | ".join(validation.get('errors') or [])
+            errors = " | ".join(validation.get("errors") or [])
             raise ValueError(f"Parámetros inválidos: {errors}")
-        adjusted_qty = float(validation['quantity_info']['adjusted_quantity'])
+        adjusted_qty = float(validation["quantity_info"]["adjusted_quantity"])
 
         async def _call():
             def _do():
                 return self.client.create_order(
                     symbol=symbol.upper(),
                     side=side.upper(),
-                    type='MARKET',
-                    quantity=adjusted_qty
+                    type="MARKET",
+                    quantity=adjusted_qty,
                 )
+
             return await asyncio.to_thread(_do)
 
         return await self._with_backoff(_call)
-
-
