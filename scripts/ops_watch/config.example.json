@@ -1,0 +1,8 @@
+{
+  "compose_file": "docker-compose.local.yml",
+  "since": "10m",
+  "services": ["api", "worker", "beat", "migrate"],
+  "max_log_bytes": 5242880,
+  "docker_timeout_sec": 120,
+  "output_dir": "reports/ops_watch"
+}

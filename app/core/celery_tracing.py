@@ -31,7 +31,9 @@ def install_celery_tracing() -> bool:
             task_failure,
         )
     except ImportError:
-        logger.debug("[CeleryTracing] opentelemetry o celery no disponibles — tracing desactivado")
+        logger.debug(
+            "[CeleryTracing] opentelemetry o celery no disponibles — tracing desactivado"
+        )
         return False
 
     _active_spans: dict[str, object] = {}
@@ -51,7 +53,9 @@ def install_celery_tracing() -> bool:
                 attributes={
                     "celery.task_id": task_id,
                     "celery.task_name": task.name,
-                    "celery.routing_key": getattr(task.request, "delivery_info", {}).get("routing_key", ""),
+                    "celery.routing_key": getattr(
+                        task.request, "delivery_info", {}
+                    ).get("routing_key", ""),
                 },
             )
             _active_spans[task_id] = (span, token)
@@ -71,6 +75,7 @@ def install_celery_tracing() -> bool:
             span, _ = entry
             try:
                 from opentelemetry.trace import StatusCode
+
                 span.set_status(StatusCode.ERROR, str(exception))
                 span.record_exception(exception)
             except Exception:
@@ -88,6 +93,7 @@ def install_celery_tracing() -> bool:
             pass
         try:
             from opentelemetry import context as ctx_api
+
             ctx_api.detach(token)
         except Exception:
             pass
@@ -107,6 +113,7 @@ def inject_trace_headers() -> dict:
     """
     try:
         from opentelemetry.propagate import inject as otel_inject
+
         carrier: dict = {}
         otel_inject(carrier)
         return carrier

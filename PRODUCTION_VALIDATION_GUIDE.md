@@ -1,7 +1,7 @@
 # 🔍 GridBot v2.5 - Guía de Validación en Producción
 
-> **Objetivo**: Validar que los fixes de Bugs #1, #2 y #3 funcionan correctamente en producción antes de continuar con Bug #4.  
-> **Duración**: 24-48 horas de monitoreo  
+> **Objetivo**: Validar que los fixes de Bugs #1, #2 y #3 funcionan correctamente en producción antes de continuar con Bug #4.
+> **Duración**: 24-48 horas de monitoreo
 > **Responsable**: DevOps + Backend Lead
 
 ---
@@ -55,8 +55,8 @@
 **Test 1: Verificar columna version existe**
 ```bash
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT column_name, data_type 
-  FROM information_schema.columns 
+  SELECT column_name, data_type
+  FROM information_schema.columns
   WHERE table_name = 'balances' AND column_name = 'version';
 "
 # Debe mostrar: version | integer
@@ -214,7 +214,7 @@ rate(distributed_lock_skipped_total{lock_name="trading_cycle"}[5m])
 
 # Porcentaje de locks omitidos (debe ser < 5%)
 (
-  rate(distributed_lock_skipped_total[5m]) / 
+  rate(distributed_lock_skipped_total[5m]) /
   (rate(distributed_lock_acquired_total[5m]) + rate(distributed_lock_skipped_total[5m]))
 ) * 100
 ```
@@ -222,12 +222,12 @@ rate(distributed_lock_skipped_total{lock_name="trading_cycle"}[5m])
 **3. Duración de locks (debe ser < timeout)**
 ```promql
 # P95 de duración de locks
-histogram_quantile(0.95, 
+histogram_quantile(0.95,
   rate(distributed_lock_duration_seconds_bucket[5m])
 )
 
 # Por lock name
-histogram_quantile(0.95, 
+histogram_quantile(0.95,
   rate(distributed_lock_duration_seconds_bucket{lock_name="trading_cycle"}[5m])
 )
 ```
@@ -235,12 +235,12 @@ histogram_quantile(0.95,
 **4. Latencia de API**
 ```promql
 # P50 latency (debe ser < 50ms)
-histogram_quantile(0.50, 
+histogram_quantile(0.50,
   rate(api_request_duration_seconds_bucket[5m])
 )
 
 # P99 latency (debe ser < 250ms)
-histogram_quantile(0.99, 
+histogram_quantile(0.99,
   rate(api_request_duration_seconds_bucket[5m])
 )
 ```
@@ -309,7 +309,7 @@ Tipo: Time series
 - alert: HighLockSkipRate
   expr: |
     (
-      rate(distributed_lock_skipped_total[5m]) / 
+      rate(distributed_lock_skipped_total[5m]) /
       (rate(distributed_lock_acquired_total[5m]) + rate(distributed_lock_skipped_total[5m]))
     ) > 0.10
   for: 15m
@@ -364,7 +364,7 @@ async def check():
     recon = ReconciliationService(client.client, None)
     result = await recon.run_reconciliation_cycle()
     print(f'Discrepancia: {result.get(\"discrepancy_pct\", 0):.2f}%')
-    
+
 asyncio.run(check())
 "
 
@@ -374,7 +374,7 @@ asyncio.run(check())
 **Test 3: Verificar trades en BD**
 ```bash
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT 
+  SELECT
     COUNT(*) as total_trades,
     COUNT(DISTINCT symbol) as unique_symbols,
     SUM(CASE WHEN side = 'BUY' THEN 1 ELSE 0 END) as buys,
@@ -388,7 +388,7 @@ docker exec gridbot_db psql -U griduser -d gridbot -c "
 ```bash
 # Comparar balance inicial vs actual
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT 
+  SELECT
     asset,
     amount,
     version,
@@ -480,9 +480,9 @@ docker logs gridbot_api | grep "Conflicto de concurrencia"
 
 # Ver qué está causando alta concurrencia
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT asset, version, updated_at 
-  FROM balances 
-  WHERE asset = 'USDT' 
+  SELECT asset, version, updated_at
+  FROM balances
+  WHERE asset = 'USDT'
   ORDER BY updated_at DESC LIMIT 10;
 "
 ```
@@ -564,8 +564,8 @@ python scripts/forensic_audit.py
 
 # Ver trades recientes
 docker exec gridbot_db psql -U griduser -d gridbot -c "
-  SELECT * FROM trades 
-  ORDER BY timestamp DESC 
+  SELECT * FROM trades
+  ORDER BY timestamp DESC
   LIMIT 20;
 "
 
@@ -616,13 +616,13 @@ Una vez completada la validación exitosamente:
    - Periodo: [fecha inicio] - [fecha fin]
    - Duración: [horas] de monitoreo
    - Resultado: APROBADO
-   
+
    ## Métricas Clave
    - Conflictos: [N] (< 1/min ✅)
    - Locks omitidos: [N%] (< 5% ✅)
    - Latencia P99: [N ms] (< 250ms ✅)
    - Discrepancia: [N%] (< 1% ✅)
-   
+
    ## Conclusión
    Sistema estable y listo para Bug #4
    ```
@@ -635,12 +635,12 @@ Una vez completada la validación exitosamente:
    - Bug #1: Optimistic locking working (0 conflicts in 24h)
    - Bug #2: Distributed locks working (0 overlaps in 24h)
    - Bug #3: Async I/O working (P99 latency <100ms)
-   
+
    Metrics:
    - Throughput: 49 req/s
    - Latency P99: 50ms
    - Balance discrepancy: <0.1%
-   
+
    Ready for Bug #4: WebSocket order fills"
    ```
 
@@ -675,11 +675,9 @@ En caso de problemas durante validación:
 
 ---
 
-**Preparado por**: Cursor AI Agent  
-**Fecha**: 2026-01-03  
-**Versión**: 1.0  
+**Preparado por**: Cursor AI Agent
+**Fecha**: 2026-01-03
+**Versión**: 1.0
 **Próxima Revisión**: Después de validación 24-48h
 
 ---
-
-

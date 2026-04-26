@@ -22,14 +22,17 @@ async def validate_order_e2e(
     price: float | None = None,
     validator: OrderValidator = Depends(get_order_validator),
 ) -> Dict[str, Any]:
-    validation = validator.validate_order_parameters(symbol, quantity, side, order_type, price)
+    validation = validator.validate_order_parameters(
+        symbol, quantity, side, order_type, price
+    )
     if not validation.get("is_valid"):
         reason = "|".join(validation.get("errors", [])[:1]) or "invalid_order"
         try:
             order_validation_rejects_total.labels(reason=reason, symbol=symbol).inc()
         except Exception:
             pass
-        raise HTTPException(status_code=400, detail={"status": "rejected", "reason": reason, "validation": validation})
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "rejected", "reason": reason, "validation": validation},
+        )
     return validation
-
-

@@ -20,5 +20,3 @@ groups:
         annotations:
           summary: "API de GridBot caída (critical)"
           description: "up{job='gridbot-api'} ausente o 0 por >15m."
-
-

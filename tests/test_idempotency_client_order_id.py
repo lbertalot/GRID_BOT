@@ -15,5 +15,3 @@ def test_client_order_id_is_stable():
     assert cid1 == cid2
     assert cid1.startswith("GRIDBOT_")
     assert len(cid1) == len("GRIDBOT_") + 24
-
-

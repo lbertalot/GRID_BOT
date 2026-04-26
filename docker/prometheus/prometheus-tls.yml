@@ -71,4 +71,4 @@ scrape_configs:
   # - job_name: 'node'
   #   static_configs:
   #     - targets: ['node-exporter:9100']
-  #   scrape_interval: 30s 
+  #   scrape_interval: 30s

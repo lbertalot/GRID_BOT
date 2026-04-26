@@ -48,5 +48,3 @@ def downgrade() -> None:
     op.drop_table('system_config')
     op.drop_table('alerts')
     op.drop_table('performance_metrics')
-
-

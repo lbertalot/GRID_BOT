@@ -45,13 +45,27 @@ class PrecisionNormalizer:
                     continue
                 filters = {f["filterType"]: f for f in s.get("filters", [])}
                 new_map[sym] = {
-                    "tickSize": float(filters.get("PRICE_FILTER", {}).get("tickSize", 0.0) or 0.0),
-                    "minPrice": float(filters.get("PRICE_FILTER", {}).get("minPrice", 0.0) or 0.0),
-                    "maxPrice": float(filters.get("PRICE_FILTER", {}).get("maxPrice", 0.0) or 0.0),
-                    "stepSize": float(filters.get("LOT_SIZE", {}).get("stepSize", 0.0) or 0.0),
-                    "minQty": float(filters.get("LOT_SIZE", {}).get("minQty", 0.0) or 0.0),
-                    "maxQty": float(filters.get("LOT_SIZE", {}).get("maxQty", 0.0) or 0.0),
-                    "minNotional": float(filters.get("MIN_NOTIONAL", {}).get("minNotional", 0.0) or 0.0),
+                    "tickSize": float(
+                        filters.get("PRICE_FILTER", {}).get("tickSize", 0.0) or 0.0
+                    ),
+                    "minPrice": float(
+                        filters.get("PRICE_FILTER", {}).get("minPrice", 0.0) or 0.0
+                    ),
+                    "maxPrice": float(
+                        filters.get("PRICE_FILTER", {}).get("maxPrice", 0.0) or 0.0
+                    ),
+                    "stepSize": float(
+                        filters.get("LOT_SIZE", {}).get("stepSize", 0.0) or 0.0
+                    ),
+                    "minQty": float(
+                        filters.get("LOT_SIZE", {}).get("minQty", 0.0) or 0.0
+                    ),
+                    "maxQty": float(
+                        filters.get("LOT_SIZE", {}).get("maxQty", 0.0) or 0.0
+                    ),
+                    "minNotional": float(
+                        filters.get("MIN_NOTIONAL", {}).get("minNotional", 0.0) or 0.0
+                    ),
                 }
             self._cache = new_map
             self._last_load = time.time()
@@ -91,5 +105,3 @@ class PrecisionNormalizer:
 __all__ = [
     "PrecisionNormalizer",
 ]
-
-

@@ -10,7 +10,11 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from app.core.optimized_grid_manager import GridManagerConfig, AssetConfig, OptimizedGridManager
+from app.core.optimized_grid_manager import (
+    GridManagerConfig,
+    AssetConfig,
+    OptimizedGridManager,
+)
 from unittest.mock import Mock, AsyncMock, patch
 from unittest.mock import MagicMock
 
@@ -21,7 +25,12 @@ if os.getenv("USE_REAL_BINANCE") != "1":
     fake_binance = types.ModuleType("binance")
 
     class BinanceAPIException(Exception):
-        def __init__(self, status_code: int = 400, message: str = "Error", code: int | None = None):
+        def __init__(
+            self,
+            status_code: int = 400,
+            message: str = "Error",
+            code: int | None = None,
+        ):
             super().__init__(message)
             self.status_code = status_code
             self.message = message
@@ -40,21 +49,41 @@ if os.getenv("USE_REAL_BINANCE") != "1":
             "baseAsset": "BTC",
             "quoteAsset": "USDT",
             "filters": [
-                {"filterType": "PRICE_FILTER", "minPrice": "0.01", "maxPrice": "1000000", "tickSize": "0.01"},
-                {"filterType": "LOT_SIZE", "minQty": "0.0001", "maxQty": "1000", "stepSize": "0.0001"},
+                {
+                    "filterType": "PRICE_FILTER",
+                    "minPrice": "0.01",
+                    "maxPrice": "1000000",
+                    "tickSize": "0.01",
+                },
+                {
+                    "filterType": "LOT_SIZE",
+                    "minQty": "0.0001",
+                    "maxQty": "1000",
+                    "stepSize": "0.0001",
+                },
                 {"filterType": "MIN_NOTIONAL", "minNotional": "10"},
             ],
         }
 
     def _fake_exchange_info():
         symbols = [
-            {"symbol": s, "status": "TRADING", "filters": _fake_symbol_info(s)["filters"]}
+            {
+                "symbol": s,
+                "status": "TRADING",
+                "filters": _fake_symbol_info(s)["filters"],
+            }
             for s in ["BTCUSDT", "ETHUSDT", "ADAUSDT", "BNBUSDT", "SOLUSDT"]
         ]
-        return {"timezone": "UTC", "serverTime": int(time.time() * 1000), "symbols": symbols}
+        return {
+            "timezone": "UTC",
+            "serverTime": int(time.time() * 1000),
+            "symbols": symbols,
+        }
 
     class _Client:
-        def __init__(self, api_key: str | None = None, api_secret: str | None = None, *_, **__):
+        def __init__(
+            self, api_key: str | None = None, api_secret: str | None = None, *_, **__
+        ):
             self.api_key = api_key
             self.api_secret = api_secret
 
@@ -66,6 +95,7 @@ if os.getenv("USE_REAL_BINANCE") != "1":
                 "takerCommission": 10,
                 "balances": _fake_balances(),
             }
+
         def create_order(self, *_, **__):
             return {"orderId": 999, "status": "FILLED"}
 
@@ -102,7 +132,12 @@ if os.getenv("USE_REAL_BINANCE") != "1":
         def get_recent_trades(self, symbol: str, limit: int = 5):
             now = int(time.time() * 1000)
             return [
-                {"price": str(100 + i), "qty": str(0.001 + i * 0.0001), "isBuyerMaker": bool(i % 2), "time": now - i * 60000}
+                {
+                    "price": str(100 + i),
+                    "qty": str(0.001 + i * 0.0001),
+                    "isBuyerMaker": bool(i % 2),
+                    "time": now - i * 60000,
+                }
                 for i in range(limit)
             ]
 
@@ -117,15 +152,17 @@ if os.getenv("USE_REAL_BINANCE") != "1":
                 low_price = open_price * 0.99
                 close_price = open_price * 1.005
                 volume = 10 + i
-                result.append([
-                    open_time,
-                    str(open_price),
-                    str(high_price),
-                    str(low_price),
-                    str(close_price),
-                    str(volume),
-                    close_time,
-                ])
+                result.append(
+                    [
+                        open_time,
+                        str(open_price),
+                        str(high_price),
+                        str(low_price),
+                        str(close_price),
+                        str(volume),
+                        close_time,
+                    ]
+                )
             return result
 
         # Trading (simulated)
@@ -153,7 +190,9 @@ if os.getenv("USE_REAL_BINANCE") != "1":
 
     class _AsyncClient:
         @classmethod
-        async def create(cls, api_key: str | None = None, api_secret: str | None = None, *_, **__):
+        async def create(
+            cls, api_key: str | None = None, api_secret: str | None = None, *_, **__
+        ):
             return cls(api_key, api_secret)
 
         def __init__(self, api_key: str | None = None, api_secret: str | None = None):
@@ -179,6 +218,7 @@ if os.getenv("USE_REAL_BINANCE") != "1":
     sys.modules["binance.client"] = client_mod
     sys.modules["binance.exceptions"] = exceptions_mod
 
+
 @pytest.fixture(autouse=True)
 def mock_binance_client_autouse(monkeypatch):
     """Asegura que cualquier import de binance.Client sea un mock offline."""
@@ -188,25 +228,49 @@ def mock_binance_client_autouse(monkeypatch):
     # Mock directo del Client del SDK
     try:
         import binance.client as _bc
+
         mock_client_cls = MagicMock()
         mock_instance = MagicMock()
         mock_instance.get_account.return_value = {"balances": []}
-        mock_instance.get_symbol_ticker.return_value = {"symbol": "BTCUSDT", "price": "50000.0"}
+        mock_instance.get_symbol_ticker.return_value = {
+            "symbol": "BTCUSDT",
+            "price": "50000.0",
+        }
         mock_instance.get_klines.return_value = []
-        mock_instance.create_order.return_value = {"orderId": 1, "status": "FILLED", "fills": []}
+        mock_instance.create_order.return_value = {
+            "orderId": 1,
+            "status": "FILLED",
+            "fills": [],
+        }
         mock_client_cls.return_value = mock_instance
         monkeypatch.setattr(_bc, "Client", mock_client_cls)
     except Exception:
         pass
     yield
 
+
 def _build_mock_config() -> GridManagerConfig:
     # Configuración mínima para OptimizedGridManager en tests
     assets = {
-        "BTCUSDT": AssetConfig(symbol="BTCUSDT", min_price=10000.0, max_price=200000.0, grids=10, quantity=0.0001),
-        "ETHUSDT": AssetConfig(symbol="ETHUSDT", min_price=500.0, max_price=10000.0, grids=10, quantity=0.01),
+        "BTCUSDT": AssetConfig(
+            symbol="BTCUSDT",
+            min_price=10000.0,
+            max_price=200000.0,
+            grids=10,
+            quantity=0.0001,
+        ),
+        "ETHUSDT": AssetConfig(
+            symbol="ETHUSDT",
+            min_price=500.0,
+            max_price=10000.0,
+            grids=10,
+            quantity=0.01,
+        ),
     }
-    return GridManagerConfig(assets=assets, update_interval=60, min_notional_threshold=10.0)
+    return GridManagerConfig(
+        assets=assets, update_interval=60, min_notional_threshold=10.0
+    )
+
 
 @pytest.fixture
 def mock_config():
@@ -294,7 +358,8 @@ def wait_api_ready(request: pytest.FixtureRequest) -> None:
     if os.getenv("SKIP_API_HEALTHCHECK") == "1":
         return
     needs_http_server = any(
-        os.path.basename(str(item.fspath)) in _E2E_TEST_FILES for item in request.session.items
+        os.path.basename(str(item.fspath)) in _E2E_TEST_FILES
+        for item in request.session.items
     )
     if not needs_http_server:
         return
@@ -339,8 +404,10 @@ try:
     @pytest.fixture
     def client():
         return TestClient(app)
+
     # Exponer en builtins para tests que referencian nombres sin importar
     import builtins
+
     builtins.client = TestClient(app)
     builtins.OptimizedGridManager = OptimizedGridManager
     builtins.Mock = Mock
@@ -354,8 +421,14 @@ try:
     # Forzar que OptimizedGridManager en paper mode genere al menos una orden
     try:
         import app.core.optimized_grid_manager as ogm
+
         async def _fake_place_order(self, symbol: str, action: str, quantity: float):
-            return {"orderId": f"paper_{int(time.time()*1000)}", "status": "FILLED", "symbol": symbol}
+            return {
+                "orderId": f"paper_{int(time.time()*1000)}",
+                "status": "FILLED",
+                "symbol": symbol,
+            }
+
         ogm.OptimizedGridManager._place_order = _fake_place_order  # type: ignore
     except Exception:
         pass

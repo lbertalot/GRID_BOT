@@ -17,5 +17,3 @@ Basado en el PRD, GridBot v2.5 minimiza rechazos del exchange, pérdidas por err
 - Prometheus + Grafana (métricas y visualización)
 - Binance API + websockets
 - ML: River (online), TensorFlow/Keras (LSTM/Transformer), vectorbt (backtesting)
-
-

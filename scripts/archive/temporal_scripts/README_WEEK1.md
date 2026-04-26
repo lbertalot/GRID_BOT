@@ -386,15 +386,15 @@ logger = logging.getLogger(__name__)
 async def main():
     """Función principal"""
     logger.info("🚀 Iniciando script...")
-    
+
     try:
         # Tu código aquí
         pass
-        
+
     except Exception as e:
         logger.error(f"❌ Error: {e}", exc_info=True)
         return 1
-    
+
     logger.info("✅ Completado")
     return 0
 
@@ -437,8 +437,8 @@ Si tienes problemas con los scripts:
 
 ---
 
-**Última actualización**: 2025-01-02  
-**Versión**: 1.0  
-**Scripts testeados**: ✅ Todos funcionando  
+**Última actualización**: 2025-01-02
+**Versión**: 1.0
+**Scripts testeados**: ✅ Todos funcionando
 
 **¡Buena suerte con la Semana 1! 🚀**

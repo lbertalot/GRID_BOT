@@ -1,8 +1,15 @@
-from typing import Protocol, Dict, Any
+from typing import Protocol, Any
+
 
 class Strategy(Protocol):
-    def __call__(self, *, price_history: list[float], balances: dict[str, float], params: dict[str, Any]) -> dict:
-        ...
+    def __call__(
+        self,
+        *,
+        price_history: list[float],
+        balances: dict[str, float],
+        params: dict[str, Any],
+    ) -> dict: ...
+
 
 # Ejemplo de respuesta estándar:
 # {
@@ -10,4 +17,4 @@ class Strategy(Protocol):
 #   'quantity': float,
 #   'reason': str,
 #   'extra': dict (opcional)
-# } 
+# }

@@ -16,16 +16,25 @@ class IntegrityGuardMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, protected_prefixes: list[str] | None = None) -> None:
         super().__init__(app)
-        self._protected_prefixes = protected_prefixes or ["/api/trade", "/api/strategies"]
+        self._protected_prefixes = protected_prefixes or [
+            "/api/trade",
+            "/api/strategies",
+        ]
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         method = request.method.upper()
         path = request.url.path
 
         # Bypass en entorno de tests o si está explícitamente deshabilitado
         try:
             import os  # local import para minimizar dependencias en import time
-            if os.getenv("DISABLE_INTEGRITY_GUARD", "false").lower() == "true" or "PYTEST_CURRENT_TEST" in os.environ:
+
+            if (
+                os.getenv("DISABLE_INTEGRITY_GUARD", "false").lower() == "true"
+                or "PYTEST_CURRENT_TEST" in os.environ
+            ):
                 return await call_next(request)
         except Exception:
             pass
@@ -33,7 +42,9 @@ class IntegrityGuardMiddleware(BaseHTTPMiddleware):
         # Permitir lectura y rutas públicas
         if method in ("GET", "HEAD", "OPTIONS"):
             return await call_next(request)
-        if path.startswith("/breakers/summary") or path.startswith("/api/reconciliation/summary"):
+        if path.startswith("/breakers/summary") or path.startswith(
+            "/api/reconciliation/summary"
+        ):
             return await call_next(request)
 
         if any(path.startswith(p) for p in self._protected_prefixes):
@@ -41,7 +52,9 @@ class IntegrityGuardMiddleware(BaseHTTPMiddleware):
             try:
                 if breakers:
                     summary = breakers.get_all_breakers_status()
-                    if summary.get("total_active", 0) > 0 or summary.get("critical_mode"):
+                    if summary.get("total_active", 0) > 0 or summary.get(
+                        "critical_mode"
+                    ):
                         return JSONResponse(
                             status_code=503,
                             content={
@@ -55,5 +68,3 @@ class IntegrityGuardMiddleware(BaseHTTPMiddleware):
                 pass
 
         return await call_next(request)
-
-

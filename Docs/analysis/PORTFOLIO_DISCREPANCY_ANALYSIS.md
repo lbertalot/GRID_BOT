@@ -2,11 +2,11 @@
 
 ## 🚨 Alerta Recibida
 
-**Tipo:** WARNING  
-**Nombre:** GridBotPortfolioDiscrepancyHighAbsolute  
-**Timestamp:** 2025-09-20 21:04:33.498Z  
-**Duración:** Recurrente (múltiples alertas)  
-**Umbral:** >5 USDT por más de 6 minutos  
+**Tipo:** WARNING
+**Nombre:** GridBotPortfolioDiscrepancyHighAbsolute
+**Timestamp:** 2025-09-20 21:04:33.498Z
+**Duración:** Recurrente (múltiples alertas)
+**Umbral:** >5 USDT por más de 6 minutos
 
 ## 🔍 Investigación Realizada
 
@@ -157,6 +157,6 @@ Los problemas identificados son principalmente técnicos relacionados con métri
 
 ---
 
-**Fecha de Análisis:** 2025-09-21 14:30:00  
-**Analista:** GridBot Monitoring System  
+**Fecha de Análisis:** 2025-09-21 14:30:00
+**Analista:** GridBot Monitoring System
 **Estado:** ⚠️ MONITOREO - Sistema operativo con alertas técnicas

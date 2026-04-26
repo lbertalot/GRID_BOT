@@ -19,5 +19,3 @@ async def breakers_summary() -> Dict[str, Any]:
         return breakers.get_all_breakers_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {e}")
-
-

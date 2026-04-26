@@ -712,4 +712,3 @@ Notas:
 - Métricas Prometheus añadidas:
   - `order_validation_rejects_total{reason,symbol}`
   - `external_auth_failures_total{provider,reason}`, `commission_update_failures_total{provider,reason}` (para seguimiento de fallos externos)
-

@@ -39,4 +39,3 @@ groups:
         annotations:
           summary: "Exceso de reconexiones de WebSocket (>3/5m)"
           description: "WebSocket user stream inestable, revisar conectividad/credenciales"
-

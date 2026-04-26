@@ -228,7 +228,8 @@ pytest tests/test_<archivo>.py::<test> -vv -s
 ```bash
 # Levantar BD limpia local
 docker compose --profile development up -d db
-DATABASE_URL=postgresql://gridbot:testpass@localhost:5432/gridbot_test alembic upgrade head
+# Reemplazá ${DB_PASS} por la contraseña local del container (ver docker-compose.yml).
+DATABASE_URL="postgresql://gridbot:${DB_PASS}@localhost:5432/gridbot_test" alembic upgrade head  # pragma: allowlist secret
 DATABASE_URL=... alembic current
 ```
 

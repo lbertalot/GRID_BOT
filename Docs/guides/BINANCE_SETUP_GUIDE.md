@@ -304,4 +304,4 @@ docker-compose exec api ping api.binance.com
 
 **🎉 ¡Configuración de Binance completada!**
 
-GridBot está listo para operar con tu cuenta de Binance de forma segura. 
+GridBot está listo para operar con tu cuenta de Binance de forma segura.

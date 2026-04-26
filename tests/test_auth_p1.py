@@ -13,6 +13,7 @@ Política:
   - Sin secretos reales (TESTING_RULES.md §1).
   - Sin tocar lógica (solo Request mocks + monkeypatch env).
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

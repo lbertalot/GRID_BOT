@@ -140,17 +140,17 @@ echo -n "  Verificando métricas de distributed_lock... "
 LOCK_METRICS=$(curl -s http://localhost:8000/metrics 2>&1 | grep "distributed_lock")
 if [ -n "$LOCK_METRICS" ]; then
     print_status "OK" "  Métricas de lock distribuido existen"
-    
+
     ACQUIRED=$(echo "$LOCK_METRICS" | grep "distributed_lock_acquired_total" | grep -v "^#" | awk '{sum+=$NF} END {print sum}')
     SKIPPED=$(echo "$LOCK_METRICS" | grep "distributed_lock_skipped_total" | grep -v "^#" | awk '{sum+=$NF} END {print sum}')
-    
+
     echo -e "     ${CYAN}Locks adquiridos: ${ACQUIRED:-0}${NC}"
     echo -e "     ${CYAN}Locks omitidos: ${SKIPPED:-0}${NC}"
-    
+
     if [ "${ACQUIRED:-0}" -gt 0 ] 2>/dev/null; then
         SKIP_RATE=$(echo "scale=2; ($SKIPPED / $ACQUIRED) * 100" | bc)
         echo -e "     ${CYAN}Tasa de omisión: ${SKIP_RATE}%${NC}"
-        
+
         if [ $(echo "$SKIP_RATE < 5" | bc) -eq 1 ]; then
             print_status "OK" "  Tasa de omisión < 5% (óptimo)"
         else
@@ -221,12 +221,12 @@ if [ $CHECKS_FAILED -eq 0 ]; then
     echo "║                                                                    ║"
     echo "╚════════════════════════════════════════════════════════════════════╝"
     echo ""
-    
+
     if [ $CHECKS_WARNING -gt 0 ]; then
         echo -e "${YELLOW}⚠️  Hay $CHECKS_WARNING warnings (revisar arriba)${NC}"
         echo ""
     fi
-    
+
     exit 0
 else
     echo "╔════════════════════════════════════════════════════════════════════╗"
@@ -240,4 +240,3 @@ else
     echo ""
     exit 1
 fi
-

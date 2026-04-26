@@ -39,7 +39,7 @@ Completa la siguiente información para el despliegue:
 
 ### E. Addons
 Verifica si ya existen o indica qué planes quieres:
-- [ ] PostgreSQL: Plan actual: `___________________` 
+- [ ] PostgreSQL: Plan actual: `___________________`
   - Opciones: `essential-0` (gratis), `essential-1` (~$9/mes), `standard-0` (~$50/mes)
 - [ ] Redis: Plan actual: `___________________`
   - Opciones: `premium-0` (~$15/mes), `premium-3` (~$60/mes)

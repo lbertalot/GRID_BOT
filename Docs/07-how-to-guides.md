@@ -28,5 +28,3 @@ curl -s http://localhost:8000/api/rebalancer/status | jq
 curl -s http://localhost:8000/metrics | head -40
 curl -s 'http://localhost:9090/api/v1/query?query=up' | jq
 ```
-
-

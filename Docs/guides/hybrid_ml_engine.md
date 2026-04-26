@@ -71,5 +71,3 @@ Operational tips
 - Set a fixed random seed for TF (`tf.random.set_seed(42)`) for reproducibility.
 - Store models under `models/{symbol}_deep_{type}_{timestamp}/` to version artifacts alongside scalers and encoders.
 - Use the River side online in production to adapt between deep retrains.
-
-

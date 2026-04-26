@@ -42,5 +42,3 @@ make dry-run SYMBOL=BTCUSDT QTY=0.0002 SIDE=BUY TYPE=MARKET
 # Logs centralizados
 make logs-tail-start
 ```
-
-

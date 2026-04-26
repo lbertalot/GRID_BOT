@@ -78,5 +78,3 @@ Operational guidance
 - Use async flows for any I/O-bound operation (market data, DB, filesystem saves).
 - When River is unavailable, `MLEngine` gracefully falls back and returns neutral predictions `(label=0, proba=0.5)`.
 - Persist deep models with Hybrid engine to `models/` and record scaler and label encoder for reproducible inference.
-
-

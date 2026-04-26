@@ -97,11 +97,11 @@ except Exception as e:
 
 ### IP 149.154.167.220 Intentando Conectarse a Grafana
 ```
-logger=context userId=0 orgId=0 uname= t=2025-09-20T19:41:18.957933866Z level=info 
-msg="Request Completed" method=GET path=/api/live/ws status=401 
-remote_addr=149.154.167.220 time_ms=3 duration=3.368875ms size=105 
-referer= handler=/api/live/ws status_source=server 
-errorReason=Unauthorized errorMessageID=session.token.rotate 
+logger=context userId=0 orgId=0 uname= t=2025-09-20T19:41:18.957933866Z level=info
+msg="Request Completed" method=GET path=/api/live/ws status=401
+remote_addr=149.154.167.220 time_ms=3 duration=3.368875ms size=105
+referer= handler=/api/live/ws status_source=server
+errorReason=Unauthorized errorMessageID=session.token.rotate
 error="token needs to be rotated"
 ```
 
@@ -138,7 +138,7 @@ error="token needs to be rotated"
 
 ---
 
-**Fecha de Auditoría:** 2025-09-20  
-**Auditor:** GridBot Security Team  
-**Estado:** ✅ SEGURO - Sistema funcionando correctamente  
+**Fecha de Auditoría:** 2025-09-20
+**Auditor:** GridBot Security Team
+**Estado:** ✅ SEGURO - Sistema funcionando correctamente
 **Recomendación:** Continuar operación normal

@@ -7,6 +7,7 @@ class PerformanceMetrics(Base):
     """
     Métricas agregadas del sistema de trading.
     """
+
     __tablename__ = "performance_metrics"
 
     id = Column(Integer, primary_key=True)
@@ -19,5 +20,3 @@ class PerformanceMetrics(Base):
     sharpe_ratio = Column(Float, default=0.0)
     max_drawdown = Column(Float, default=0.0)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
-
-

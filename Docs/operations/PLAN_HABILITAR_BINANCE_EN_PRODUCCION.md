@@ -2,10 +2,10 @@
 
 **Objetivo:** Que la app en Heroku pueda usar la API y el User Data Stream de Binance de forma estable, cumpliendo con la documentación de Binance (restricciones por ubicación/IP) y las prácticas de Heroku (configuración, add-ons, dev/prod parity).
 
-**Referencias:**  
-- [Binance API – IP whitelist / restricciones](https://dev.binance.vision/t/whitelisting-ip-address/15369)  
-- [Heroku – QuotaGuard Shield Static IPs](https://devcenter.heroku.com/articles/quotaguardshield)  
-- [Heroku – Development configuration / dev-prod parity](https://devcenter.heroku.com/articles/development-configuration)  
+**Referencias:**
+- [Binance API – IP whitelist / restricciones](https://dev.binance.vision/t/whitelisting-ip-address/15369)
+- [Heroku – QuotaGuard Shield Static IPs](https://devcenter.heroku.com/articles/quotaguardshield)
+- [Heroku – Development configuration / dev-prod parity](https://devcenter.heroku.com/articles/development-configuration)
 - [Análisis de logs](PAPERTRAIL_ANALYSIS_AND_ACTION_PLAN.md) (error 451 / ubicación restringida)
 
 ---
@@ -20,9 +20,9 @@
 
 Para que producción quede funcionando de forma ininterrumpida hace falta:
 
-1. **IP de salida fija** en una región permitida por Binance (p. ej. UE).  
-2. **Enrutar solo el tráfico a Binance** por esa IP (proxy).  
-3. **Registrar esa IP** en la API key de Binance (whitelist).  
+1. **IP de salida fija** en una región permitida por Binance (p. ej. UE).
+2. **Enrutar solo el tráfico a Binance** por esa IP (proxy).
+3. **Registrar esa IP** en la API key de Binance (whitelist).
 4. **Mantener** el resto del diseño (build → release → run, Procfile, add-ons, logging) según Heroku.
 
 ---
@@ -31,9 +31,9 @@ Para que producción quede funcionando de forma ininterrumpida hace falta:
 
 Resumen:
 
-- **Heroku en región Europa** (p. ej. `eu-west-1`), para que el add-on de IP estática también use IPs en UE (permitidas por Binance).  
-- **Add-on QuotaGuard Shield** para obtener 2 IPs estáticas de salida y `QUOTAGUARDSHIELD_URL` (HTTPS proxy).  
-- **Uso explícito del proxy** solo en clientes que hablan con Binance (REST y, si aplica, WebSocket), sin tocar Redis, Postgres ni otros servicios.  
+- **Heroku en región Europa** (p. ej. `eu-west-1`), para que el add-on de IP estática también use IPs en UE (permitidas por Binance).
+- **Add-on QuotaGuard Shield** para obtener 2 IPs estáticas de salida y `QUOTAGUARDSHIELD_URL` (HTTPS proxy).
+- **Uso explícito del proxy** solo en clientes que hablan con Binance (REST y, si aplica, WebSocket), sin tocar Redis, Postgres ni otros servicios.
 - **Whitelist en Binance** de las 2 IPs que asigna QuotaGuard.
 
 Ventajas: compatible con la documentación de Binance (IP whitelist), con Heroku (add-on oficial, build/release/run), y con dev/prod parity (mismo código; en prod se activa proxy vía env).
@@ -115,13 +115,13 @@ Por eso el plan se centra en **Heroku EU + QuotaGuard Shield + proxy solo para B
 
 ## 5. Checklist resumido
 
-- [ ] Fase 1: App en región EU (o decidir quedarse en US y contactar QuotaGuard para IPs en EU).  
-- [x] Fase 1: Add-on QuotaGuard Shield instalado; 2 IPs anotadas (3.222.129.4, 54.205.35.75 — US).  
-- [x] Fase 1: Esas 2 IPs en whitelist de la API key de Binance.  
-- [x] Fase 2: Helper de proxy y uso en Singleton, binance_user_stream y trade_executor.  
-- [ ] Fase 2: Tests que verifiquen uso de proxy cuando la env está definida.  
-- [x] Fase 3: `QUOTAGUARDSHIELD_URL` configurado en prod (add-on).  
-- [ ] Fase 3: Deploy y comprobación sin 451 ni -2015.  
+- [ ] Fase 1: App en región EU (o decidir quedarse en US y contactar QuotaGuard para IPs en EU).
+- [x] Fase 1: Add-on QuotaGuard Shield instalado; 2 IPs anotadas (3.222.129.4, 54.205.35.75 — US).
+- [x] Fase 1: Esas 2 IPs en whitelist de la API key de Binance.
+- [x] Fase 2: Helper de proxy y uso en Singleton, binance_user_stream y trade_executor.
+- [ ] Fase 2: Tests que verifiquen uso de proxy cuando la env está definida.
+- [x] Fase 3: `QUOTAGUARDSHIELD_URL` configurado en prod (add-on).
+- [ ] Fase 3: Deploy y comprobación sin 451 ni -2015.
 - [ ] Fase 4: Alertas y runbook para rotación de IPs/credenciales.
 
 ---

@@ -69,10 +69,17 @@ def setup_tracing(app=None) -> bool:
     if exporter is not None:
         try:
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
             provider.add_span_processor(BatchSpanProcessor(exporter))
-            logger.info("[Tracing] Exportador configurado: %s → %s", EXPORTER, OTLP_ENDPOINT if EXPORTER != "console" else "stdout")
+            logger.info(
+                "[Tracing] Exportador configurado: %s → %s",
+                EXPORTER,
+                OTLP_ENDPOINT if EXPORTER != "console" else "stdout",
+            )
         except Exception as exc:
-            logger.warning("[Tracing] No se pudo configurar exportador %s: %s", EXPORTER, exc)
+            logger.warning(
+                "[Tracing] No se pudo configurar exportador %s: %s", EXPORTER, exc
+            )
 
     trace.set_tracer_provider(provider)
 
@@ -88,32 +95,43 @@ def setup_tracing(app=None) -> bool:
 
     logger.info(
         "[Tracing] OpenTelemetry inicializado: service=%s exporter=%s sample_rate=%.2f",
-        SERVICE_NAME, EXPORTER, SAMPLE_RATE,
+        SERVICE_NAME,
+        EXPORTER,
+        SAMPLE_RATE,
     )
     return True
 
 
-def _build_exporter(
-) -> Optional[object]:
+def _build_exporter() -> Optional[object]:
     """Construye el exportador de trazas según OTEL_EXPORTER."""
     if EXPORTER in ("none", "off", "disabled", ""):
-        logger.info("[Tracing] Exportador deshabilitado (OTEL_EXPORTER=%s).", EXPORTER or "unset")
+        logger.info(
+            "[Tracing] Exportador deshabilitado (OTEL_EXPORTER=%s).",
+            EXPORTER or "unset",
+        )
         return None
 
     if EXPORTER == "console":
         try:
             from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
             return ConsoleSpanExporter()
         except ImportError:
             return None
 
     if EXPORTER in ("otlp", "jaeger"):
         try:
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter,
+            )
+
             return OTLPSpanExporter(endpoint=OTLP_ENDPOINT, insecure=True)
         except ImportError:
             try:
-                from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
                 endpoint_http = OTLP_ENDPOINT.replace("4317", "4318")
                 return OTLPSpanExporter(endpoint=f"{endpoint_http}/v1/traces")
             except ImportError:
@@ -130,6 +148,7 @@ def _build_exporter(
 def _instrument_fastapi(app) -> None:
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
         FastAPIInstrumentor.instrument_app(
             app,
             excluded_urls="/healthz,/metrics,/favicon.ico",
@@ -143,6 +162,7 @@ def _instrument_sqlalchemy() -> None:
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
         from app.db.session import engine
+
         SQLAlchemyInstrumentor().instrument(engine=engine)
         logger.debug("[Tracing] SQLAlchemy instrumentado")
     except Exception as exc:
@@ -152,6 +172,7 @@ def _instrument_sqlalchemy() -> None:
 def _instrument_requests() -> None:
     try:
         from opentelemetry.instrumentation.requests import RequestsInstrumentor
+
         RequestsInstrumentor().instrument()
         logger.debug("[Tracing] requests instrumentado")
     except ImportError:
@@ -172,6 +193,7 @@ def get_tracer(name: str = SERVICE_NAME):
     """
     try:
         from opentelemetry import trace
+
         return trace.get_tracer(name)
     except ImportError:
         return _NoOpTracer()
@@ -183,12 +205,16 @@ class _NoOpTracer:
     class _NoOpSpan:
         def set_attribute(self, *args, **kwargs):
             pass
+
         def set_status(self, *args, **kwargs):
             pass
+
         def record_exception(self, *args, **kwargs):
             pass
+
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             pass
 

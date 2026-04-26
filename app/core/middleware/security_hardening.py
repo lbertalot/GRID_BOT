@@ -57,17 +57,22 @@ _RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 _RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))  # segundos
 
 # Rutas exentas del rate limiting (métricas internas, healthchecks)
-_RATE_LIMIT_EXEMPT_PATHS = frozenset({
-    "/healthz", "/health", "/metrics", "/favicon.ico",
-})
+_RATE_LIMIT_EXEMPT_PATHS = frozenset(
+    {
+        "/healthz",
+        "/health",
+        "/metrics",
+        "/favicon.ico",
+    }
+)
 
 # ── Patrones de inyección a rechazar en path/query ───────────────────────────
 _INJECTION_PATTERNS = re.compile(
-    r"(\.\./|\.\.\\|%2e%2e|%252e|"           # path traversal
+    r"(\.\./|\.\.\\|%2e%2e|%252e|"  # path traversal
     r"union\s+select|drop\s+table|insert\s+into|"  # SQL injection
     r"<script|javascript:|vbscript:|data:text/html|"  # XSS
-    r";\s*(cat|ls|wget|curl|bash|sh)\s+|"    # command injection
-    r"\x00|\x0d\x0a)",                        # null byte / CRLF
+    r";\s*(cat|ls|wget|curl|bash|sh)\s+|"  # command injection
+    r"\x00|\x0d\x0a)",  # null byte / CRLF
     re.IGNORECASE,
 )
 
@@ -75,6 +80,7 @@ _INJECTION_PATTERNS = re.compile(
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Security Headers Middleware
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Añade headers de seguridad estándar a todas las respuestas HTTP."""
@@ -112,6 +118,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Rate Limit Middleware (sliding window, en memoria)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -169,7 +176,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not allowed:
             logger.warning(
                 "[RateLimit] IP %s superó el límite (%d req/%ds) en %s",
-                ip, self._requests, self._window, path,
+                ip,
+                self._requests,
+                self._window,
+                path,
             )
             return JSONResponse(
                 status_code=429,
@@ -193,6 +203,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Input Sanitization Middleware
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class InputSanitizationMiddleware(BaseHTTPMiddleware):
     """

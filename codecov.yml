@@ -1,0 +1,59 @@
+# codecov.yml — Configuración de Codecov para GridBot v2.5
+#
+# Estrategia escalonada (alineada con TESTING_RULES.md §7.4 y CICD_RUNBOOK.md):
+#   - Baseline CI real: ~25% global (2026-04-26)
+#   - Gate local pytest: --cov-fail-under=25
+#   - Codecov: informational (no bloquea PRs) durante sprint code-hygiene
+#   - Plan: elevar thresholds +5pp por sprint hasta 85% global
+#
+# Razón para mode: off / informational:
+#   El proyecto tiene ~75% de código legacy sin tests (drift documentado en
+#   TESTING_RULES.md §7). Los PRs de sincronización y los módulos nuevos se
+#   comparan contra una base de cobertura baja, generando falsos negativos
+#   que bloquean merges legítimos. Se normaliza en sprint 2026-06.
+
+coverage:
+  # Porcentaje de caída tolerable antes de marcar como failure
+  precision: 2
+  round: down
+  range: "20...85"
+
+  status:
+    project:
+      default:
+        # Informational: reporta pero no bloquea el merge
+        informational: true
+        # Permite caídas de hasta 5pp respecto a la base
+        threshold: 5%
+        target: auto
+
+    patch:
+      default:
+        # Informational: el código nuevo puede tener cobertura baja
+        # mientras el sprint de tests no esté completo
+        informational: true
+        target: 15%
+        threshold: 5%
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+# Ignorar archivos que no necesitan cobertura
+ignore:
+  - "scripts/archive/**"
+  - "scripts/ops_watch/**"
+  - "tests/**"
+  - "alembic/**"
+  - "docker/**"
+  - "docs/**"
+  - "Docs/**"
+  - "monitoring_data/**"
+  - "*.md"
+  - "*.yml"
+  - "*.yaml"
+  - "*.json"
+  - "*.sh"

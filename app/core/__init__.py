@@ -1,2 +1,8 @@
-from .optimized_grid_manager import OptimizedGridManager, GridManagerConfig, AssetConfig  # noqa: F401
- 
+"""
+Core package exports.
+
+Evita imports pesados al cargar `app.core` para prevenir ciclos de import
+durante inicialización de módulos (por ejemplo en tests unitarios).
+"""
+
+__all__ = []

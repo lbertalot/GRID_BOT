@@ -1,7 +1,7 @@
 # GridBot v2.5 - Roadmap de Evolución
 
-> **Fecha de Auditoría**: 2026-01-02  
-> **Auditor**: Senior Software Architect & Security Lead  
+> **Fecha de Auditoría**: 2026-01-02
+> **Auditor**: Senior Software Architect & Security Lead
 > **Horizon**: Q1-Q2 2026
 
 ---
@@ -51,7 +51,7 @@ from sqlalchemy import update
 def update_balance_atomic(asset, delta):
     old_balance = db.query(Balance).filter_by(asset=asset).first()
     old_version = old_balance.version
-    
+
     stmt = update(Balance).where(
         Balance.asset == asset,
         Balance.version == old_version  # ✅ Verificar versión
@@ -59,14 +59,14 @@ def update_balance_atomic(asset, delta):
         amount=Balance.amount + delta,
         version=old_version + 1  # ✅ Incrementar versión
     )
-    
+
     result = db.execute(stmt)
     db.commit()
-    
+
     if result.rowcount == 0:
         # Otra transacción modificó el balance
         raise ConcurrentModificationError("Balance was modified, retry")
-    
+
     return result
 ```
 
@@ -85,16 +85,16 @@ def test_concurrent_balance_updates():
         t = Thread(target=lambda: update_balance_atomic("USDT", 1.0))
         threads.append(t)
         t.start()
-    
+
     for t in threads:
         t.join()
-    
+
     final_balance = db.query(Balance).filter_by(asset="USDT").first()
     assert final_balance.amount == initial + 10.0  # ✅ Sin pérdidas
 ```
 
-**Impacto**: **CRÍTICO** - Previene pérdida de fondos por race condition  
-**Esfuerzo**: 8 horas (1 día)  
+**Impacto**: **CRÍTICO** - Previene pérdida de fondos por race condition
+**Esfuerzo**: 8 horas (1 día)
 **Responsable**: Backend Lead
 
 ---
@@ -123,12 +123,12 @@ def trading_cycle_tick():
         timeout=300,  # 5 minutos max
         blocking=False  # No esperar si ya está locked
     )
-    
+
     acquired = lock.acquire(blocking=False)
     if not acquired:
         logger.warning("🔒 Trading cycle ya en ejecución, omitiendo")
         return {"status": "skipped", "reason": "lock_held"}
-    
+
     try:
         # ... lógica de trading
         result = execute_cycle()
@@ -151,18 +151,18 @@ def test_trading_cycle_lock():
     # Ejecutar 2 tareas en paralelo
     task1 = trading_cycle_tick.apply_async()
     task2 = trading_cycle_tick.apply_async()
-    
+
     result1 = task1.get()
     result2 = task2.get()
-    
+
     # Una debe ejecutarse, otra debe ser skipped
     statuses = [result1['status'], result2['status']]
     assert "ok" in statuses
     assert "skipped" in statuses
 ```
 
-**Impacto**: **CRÍTICO** - Previene doble trading y pérdidas  
-**Esfuerzo**: 4 horas  
+**Impacto**: **CRÍTICO** - Previene doble trading y pérdidas
+**Esfuerzo**: 4 horas
 **Responsable**: Backend Lead
 
 ---
@@ -185,34 +185,34 @@ class BinanceUserStreamHandler:
         self._listen_key = None
         self._ws = None
         self._running = False
-    
+
     async def start(self, on_fill: Callable):
         """Iniciar listener de userDataStream"""
         self._session = aiohttp.ClientSession()
-        
+
         # 1. Crear listen key
         self._listen_key = await self._create_listen_key()
-        
+
         # 2. Conectar a WebSocket
         ws_url = f"wss://stream.binance.com:9443/ws/{self._listen_key}"
         self._ws = await self._session.ws_connect(ws_url)
-        
+
         # 3. Listener loop
         self._running = True
         asyncio.create_task(self._listen_loop(on_fill))
         asyncio.create_task(self._keepalive_loop())
-    
+
     async def _listen_loop(self, on_fill):
         """Procesar mensajes de WebSocket"""
         async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 data = msg.json()
                 event_type = data.get("e")
-                
+
                 if event_type == "executionReport":
                     # Order fill detected!
                     order_status = data.get("X")  # FILLED, PARTIALLY_FILLED
-                    
+
                     if order_status in ["FILLED", "PARTIALLY_FILLED"]:
                         fill_data = {
                             "symbol": data.get("s"),
@@ -225,10 +225,10 @@ class BinanceUserStreamHandler:
                             "status": order_status,
                             "timestamp": data.get("T")
                         }
-                        
+
                         # Callback para actualizar BD
                         await on_fill(fill_data)
-    
+
     async def _keepalive_loop(self):
         """PUT listen_key cada 30 minutos"""
         while self._running:
@@ -251,20 +251,20 @@ async def lifespan(app: FastAPI):
 async def handle_order_fill(fill_data: Dict):
     """Callback cuando se detecta un fill"""
     logger.info(f"🎯 Fill detectado: {fill_data}")
-    
+
     # Actualizar trade en BD
     db = SessionLocal()
     try:
         trade = db.query(Trade).filter_by(
             client_order_id=fill_data["client_order_id"]
         ).first()
-        
+
         if trade:
             trade.status = fill_data["status"]
             trade.executed_qty = fill_data["executed_qty"]
             trade.updated_at = datetime.now()
             db.commit()
-            
+
             # Métricas
             orders_filled_total.labels(
                 symbol=fill_data["symbol"],
@@ -282,8 +282,8 @@ async def handle_order_fill(fill_data: Dict):
 - `app/main.py`: Iniciar WebSocket en lifespan
 - `app/services/trading_tasks.py`: Eliminar polling de fills
 
-**Impacto**: **ALTO** - Reduce latencia de actualización de 60s a <1s  
-**Esfuerzo**: 16 horas (2 días)  
+**Impacto**: **ALTO** - Reduce latencia de actualización de 60s a <1s
+**Esfuerzo**: 16 horas (2 días)
 **Responsable**: Backend Lead + DevOps
 
 ---
@@ -335,13 +335,13 @@ async def test_async_query_performance():
         result = await db.execute(select(Trade).limit(1000))
         trades = result.scalars().all()
     elapsed = time.time() - start
-    
+
     # Async debe ser más rápido que sync
     assert elapsed < 0.5  # < 500ms
 ```
 
-**Impacto**: **ALTO** - Mejora throughput y latencia  
-**Esfuerzo**: 80 horas (2 semanas)  
+**Impacto**: **ALTO** - Mejora throughput y latencia
+**Esfuerzo**: 80 horas (2 semanas)
 **Responsable**: Backend Team (2 devs)
 
 ---
@@ -362,12 +362,12 @@ class SecretsManager:
         self.vault_url = os.getenv("VAULT_ADDR", "http://vault:8200")
         self.vault_token = os.getenv("VAULT_TOKEN")
         self.client = hvac.Client(url=self.vault_url, token=self.vault_token)
-    
+
     def get_secret(self, path: str) -> Dict:
         """Obtener secreto de Vault"""
         response = self.client.secrets.kv.v2.read_secret_version(path=path)
         return response['data']['data']
-    
+
     def get_binance_credentials(self) -> Tuple[str, str]:
         """Obtener credenciales de Binance"""
         secrets = self.get_secret("gridbot/binance")
@@ -378,12 +378,12 @@ def get_binance_client_singleton():
     if not hasattr(get_binance_client_singleton, "_instance"):
         secrets_manager = SecretsManager()
         api_key, api_secret = secrets_manager.get_binance_credentials()
-        
+
         get_binance_client_singleton._instance = BinanceClientWrapper(
             api_key=api_key,
             api_secret=api_secret
         )
-    
+
     return get_binance_client_singleton._instance
 ```
 
@@ -411,8 +411,8 @@ services:
 - `docker-compose.yml`: Agregar servicio Vault
 - `requirements.txt`: Agregar `hvac==2.1.0`
 
-**Impacto**: **ALTO** - Previene exposición de claves  
-**Esfuerzo**: 24 horas (3 días)  
+**Impacto**: **ALTO** - Previene exposición de claves
+**Esfuerzo**: 24 horas (3 días)
 **Responsable**: DevOps + Security
 
 ---
@@ -455,8 +455,8 @@ async def execute_trade(
 - `app/api/*.py`: Agregar decoradores `@limiter.limit`
 - `requirements.txt`: Agregar `slowapi==0.1.9`
 
-**Impacto**: **MEDIO** - Protege contra abuso  
-**Esfuerzo**: 8 horas (1 día)  
+**Impacto**: **MEDIO** - Protege contra abuso
+**Esfuerzo**: 8 horas (1 día)
 **Responsable**: Backend Lead
 
 ---
@@ -475,16 +475,16 @@ class IPWhitelistManager:
         self.api_key = binance_api_key
         self.api_secret = binance_api_secret
         self.base_url = "https://api.binance.com"
-    
+
     def get_current_public_ip(self) -> str:
         """Obtener IP pública actual"""
         response = requests.get("https://api.ipify.org")
         return response.text
-    
+
     def update_binance_whitelist(self):
         """Actualizar whitelist de Binance con IP actual"""
         current_ip = self.get_current_public_ip()
-        
+
         # Llamar a Binance API para actualizar whitelist
         # (requiere permisos especiales en API key)
         endpoint = "/sapi/v1/account/apiRestrictions"
@@ -493,7 +493,7 @@ class IPWhitelistManager:
             "ipRestrict": True,
             "ipList": current_ip
         }
-        
+
         # ... firma HMAC y llamada
         logger.info(f"✅ Whitelist actualizada con IP: {current_ip}")
 
@@ -508,8 +508,8 @@ def update_ip_whitelist():
 - `app/services/ip_whitelist_manager.py`: NUEVO
 - `app/scheduler/ip_whitelist_job.py`: NUEVO (Celery Beat job)
 
-**Impacto**: **MEDIO** - Mejora seguridad de API keys  
-**Esfuerzo**: 12 horas (1.5 días)  
+**Impacto**: **MEDIO** - Mejora seguridad de API keys
+**Esfuerzo**: 12 horas (1.5 días)
 **Responsable**: DevOps
 
 ---
@@ -539,7 +539,7 @@ class BinanceClientWrapper:
     def get_account_info(self):
         """Obtener info de cuenta con retry exponential"""
         return self.client.get_account()
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=0.5, min=0.5, max=10),
@@ -555,8 +555,8 @@ class BinanceClientWrapper:
 - `app/services/binance_async.py`: Idem
 - `requirements.txt`: Ya tiene `tenacity==8.2.3` ✅
 
-**Impacto**: **MEDIO** - Mejora resiliencia ante fallas de red  
-**Esfuerzo**: 4 horas  
+**Impacto**: **MEDIO** - Mejora resiliencia ante fallas de red
+**Esfuerzo**: 4 horas
 **Responsable**: Backend Lead
 
 ---
@@ -578,14 +578,14 @@ class CacheManager:
     def __init__(self):
         self.redis = redis.Redis.from_url(os.getenv("REDIS_URL"))
         self.default_ttl = 300  # 5 minutos
-    
+
     def get(self, key: str) -> Optional[Dict]:
         """Get de caché"""
         value = self.redis.get(key)
         if value:
             return json.loads(value)
         return None
-    
+
     def set(self, key: str, value: Dict, ttl: int = None):
         """Set en caché con TTL"""
         self.redis.setex(
@@ -593,17 +593,17 @@ class CacheManager:
             ttl or self.default_ttl,
             json.dumps(value, default=str)
         )
-    
+
     def delete(self, key: str):
         """Invalidar caché"""
         self.redis.delete(key)
-    
+
     def get_or_compute(self, key: str, compute_fn: Callable, ttl: int = None):
         """Cache-aside pattern"""
         cached = self.get(key)
         if cached is not None:
             return cached
-        
+
         # Compute value
         value = compute_fn()
         self.set(key, value, ttl)
@@ -615,7 +615,7 @@ def update_balance(asset: str, delta: Decimal):
     balance = db.query(Balance).filter_by(asset=asset).first()
     balance.amount += delta
     db.commit()
-    
+
     # 2. Invalidar caché
     cache_manager.delete(f"balance:{asset}")
     cache_manager.delete("balances:all")  # ✅ Invalidar agregado
@@ -626,8 +626,8 @@ def update_balance(asset: str, delta: Decimal):
 - `app/services/balance_updater.py`: Invalidar caché en updates
 - `tests/test_cache_invalidation.py`: NUEVO
 
-**Impacto**: **MEDIO** - Reduce queries innecesarias  
-**Esfuerzo**: 8 horas (1 día)  
+**Impacto**: **MEDIO** - Reduce queries innecesarias
+**Esfuerzo**: 8 horas (1 día)
 **Responsable**: Backend Lead
 
 ---
@@ -652,19 +652,19 @@ def setup_tracing(app: FastAPI):
         agent_host_name=os.getenv("JAEGER_HOST", "jaeger"),
         agent_port=6831,
     )
-    
+
     # Configurar provider
     provider = TracerProvider()
     processor = BatchSpanProcessor(jaeger_exporter)
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
-    
+
     # Instrumentar FastAPI
     FastAPIInstrumentor.instrument_app(app)
-    
+
     # Instrumentar SQLAlchemy
     SQLAlchemyInstrumentor().instrument(engine=engine)
-    
+
     return trace.get_tracer(__name__)
 
 # app/main.py
@@ -675,13 +675,13 @@ tracer = setup_tracing(app)
 def execute_trading_cycle():
     with tracer.start_as_current_span("fetch_market_data"):
         data = fetch_market_data()
-    
+
     with tracer.start_as_current_span("ml_prediction"):
         prediction = ml_engine.predict(data)
-    
+
     with tracer.start_as_current_span("place_order"):
         order = place_order(prediction)
-    
+
     return order
 ```
 
@@ -709,8 +709,8 @@ services:
 - `app/services/*.py`: Agregar spans
 - `requirements.txt`: Agregar `opentelemetry-*`
 
-**Impacto**: **MEDIO** - Facilita debug de latencias  
-**Esfuerzo**: 24 horas (3 días)  
+**Impacto**: **MEDIO** - Facilita debug de latencias
+**Esfuerzo**: 24 horas (3 días)
 **Responsable**: DevOps + Backend
 
 ---
@@ -749,7 +749,7 @@ def record_order_execution(order):
         side=order.side,
         strategy=order.strategy
     ).inc()
-    
+
     # Log granular con order_id
     logger.info(
         "order_executed",
@@ -766,8 +766,8 @@ def record_order_execution(order):
 - `app/core/metrics.py`: Reducir labels
 - `app/services/*.py`: Usar structlog para detalles
 
-**Impacto**: **MEDIO** - Reduce carga de Prometheus  
-**Esfuerzo**: 8 horas (1 día)  
+**Impacto**: **MEDIO** - Reduce carga de Prometheus
+**Esfuerzo**: 8 horas (1 día)
 **Responsable**: DevOps
 
 ---
@@ -789,15 +789,15 @@ async def panic_sell(
 ):
     if confirm != "YES_SELL_ALL":
         raise HTTPException(400, "Confirmación requerida")
-    
+
     logger.critical("🚨 PANIC SELL ACTIVADO 🚨")
-    
+
     # 1. Activar circuit breaker crítico
     await breakers.activate_critical_mode()
-    
+
     # 2. Obtener todas las posiciones abiertas
     positions = await get_all_open_positions()
-    
+
     # 3. Crear órdenes de venta MARKET para todo
     results = []
     for pos in positions:
@@ -819,14 +819,14 @@ async def panic_sell(
                 "status": "error",
                 "error": str(e)
             })
-    
+
     # 4. Enviar alerta Telegram
     await send_telegram_alert(
         f"🚨 PANIC SELL EJECUTADO\n"
         f"Posiciones cerradas: {len(results)}\n"
         f"Éxitos: {sum(1 for r in results if r['status'] == 'success')}"
     )
-    
+
     return {
         "status": "completed",
         "results": results,
@@ -838,8 +838,8 @@ async def panic_sell(
 - `app/api/emergency.py`: NUEVO
 - `tests/test_emergency_exit.py`: NUEVO
 
-**Impacto**: **ALTO** - Protección ante eventos extremos  
-**Esfuerzo**: 12 horas (1.5 días)  
+**Impacto**: **ALTO** - Protección ante eventos extremos
+**Esfuerzo**: 12 horas (1.5 días)
 **Responsable**: Backend Lead
 
 ---
@@ -859,7 +859,7 @@ class MLMonitor:
         self.dashboard = Dashboard(tabs=[RegressionPerformanceTab()])
         self.predictions = []
         self.actuals = []
-    
+
     def log_prediction(self, features, prediction, actual=None):
         """Log predicción para monitoreo"""
         self.predictions.append({
@@ -868,21 +868,21 @@ class MLMonitor:
             "prediction": prediction,
             "actual": actual
         })
-    
+
     def calculate_model_metrics(self):
         """Calcular métricas de modelo"""
         if len(self.predictions) < 10:
             return
-        
+
         predictions = [p["prediction"] for p in self.predictions]
         actuals = [p["actual"] for p in self.predictions if p["actual"] is not None]
-        
+
         if len(actuals) > 0:
             from sklearn.metrics import mean_squared_error, mean_absolute_error
-            
+
             mse = mean_squared_error(actuals, predictions[:len(actuals)])
             mae = mean_absolute_error(actuals, predictions[:len(actuals)])
-            
+
             # Exportar como métricas Prometheus
             ml_prediction_error_mse.set(mse)
             ml_prediction_error_mae.set(mae)
@@ -892,8 +892,8 @@ class MLMonitor:
 - `app/services/ml_monitoring.py`: NUEVO
 - `requirements.txt`: Agregar `evidently==0.4.0`
 
-**Impacto**: **BAJO** - Mejora confiabilidad de ML  
-**Esfuerzo**: 16 horas (2 días)  
+**Impacto**: **BAJO** - Mejora confiabilidad de ML
+**Esfuerzo**: 16 horas (2 días)
 **Responsable**: ML Engineer
 
 ---
@@ -943,5 +943,3 @@ class MLMonitor:
 ---
 
 **FIN DEL ROADMAP**
-
-

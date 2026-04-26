@@ -1,7 +1,7 @@
 # GridBot v2.5 - Arquitectura del Sistema
 
-> **Última actualización**: 2026-01-02  
-> **Auditor**: Senior Software Architect  
+> **Última actualización**: 2026-01-02
+> **Auditor**: Senior Software Architect
 > **Versión del sistema**: 2.5.0
 
 ## 📐 Visión General de la Arquitectura
@@ -120,7 +120,7 @@ symbols = ["ETHUSDT"]  # ⚠️ Universo hardcodeado temporal
   ```python
   def __init__(self, ...):
       self._client = None  # Lazy initialization
-      
+
   async def _get_sync_client(self):
       if self._client is None:
           self._client = Client(api_key, api_secret, testnet=False)
@@ -206,11 +206,11 @@ order = client_singleton.client.create_order(
 async def run_reconciliation_cycle(self):
     # 1. Obtiene balances de Binance
     account_info = client_singleton.get_account_info()
-    
+
     # 2. Compara con BD interna (trades)
     # 3. Calcula discrepancia
     discrepancy = ext_usdt - int_usdt
-    
+
     # 4. Activa breaker si supera umbral (1%)
     if relative_gap > self._threshold_pct:
         await self._breakers.activate_breaker('balance_discrepancy')
@@ -443,7 +443,7 @@ breaker_state = Gauge(..., labelnames=['type'])
    ```python
    from redis import Redis
    redis = Redis()
-   
+
    def trading_cycle_tick():
        lock = redis.lock("cycle_lock", timeout=300)
        if not lock.acquire(blocking=False):
@@ -469,7 +469,7 @@ breaker_state = Gauge(..., labelnames=['type'])
 5. **Exponential Backoff para Binance**
    ```python
    from tenacity import retry, wait_exponential
-   
+
    @retry(wait=wait_exponential(min=1, max=60))
    def call_binance_api():
        ...
@@ -495,5 +495,3 @@ breaker_state = Gauge(..., labelnames=['type'])
 | Fecha      | Cambio                                      | Auditor |
 |------------|---------------------------------------------|---------|
 | 2026-01-02 | Documento inicial post-auditoría profunda  | SA Team |
-
-

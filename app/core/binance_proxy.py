@@ -10,6 +10,7 @@ Esto funciona correctamente desde Heroku EU, donde no hay bloqueo 451.
 
 Solo tráfico hacia Binance debe usar proxy; Redis, Postgres, etc. no.
 """
+
 from __future__ import annotations
 
 import logging

@@ -108,13 +108,13 @@ docker-compose up -d --build
 ## Estado Esperado Post-Reseteo
 
 - ✅ Prometheus funcionando sin métricas históricas
-- ✅ Grafana conectado a Prometheus limpio  
+- ✅ Grafana conectado a Prometheus limpio
 - ✅ Alertmanager funcionando con reglas activas
 - ✅ Todas las métricas de GridBot en estado inicial
 - ✅ Sistema listo para métricas de producción
 
 ---
 
-**Fecha de creación:** 2025-09-18  
-**Versión:** GridBot v2.5 Production Reset  
+**Fecha de creación:** 2025-09-18
+**Versión:** GridBot v2.5 Production Reset
 **Autor:** SRE Team
