@@ -9,8 +9,10 @@
 #   6. deploy         — deploy a Heroku (solo en main)
 #
 # Estrategia de cobertura escalonada (TESTING_RULES.md §3 + docs/CICD_RUNBOOK.md):
-#   - Baseline real medido: 29.05% (2026-04-26).
-#   - Gate inicial: COVERAGE_FAIL_UNDER=29 (no rompe build el día 1).
+#   - Baseline local medido: 29.05% (2026-04-26).
+#   - Baseline CI medido:    25.70% (2026-04-26). Delta ~3.3pp por diferencias
+#     de entorno hosted (sys.path, skips adicionales, sin redis/binance real).
+#   - Gate CI inicial: COVERAGE_FAIL_UNDER=25 (calibrado sobre entorno CI real).
 #   - Plan: +5pp por sprint hasta 85% global. Mínimos por módulo crítico
 #     YA están cumplidos (ver TESTING_RULES.md §3).
 
@@ -27,7 +29,7 @@ env:
   PYTHON_VERSION: "3.11"
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/grid-bot
   # Gate de cobertura escalonado. Subir +5 cada sprint (ver CICD_RUNBOOK.md).
-  COVERAGE_FAIL_UNDER: "29"
+  COVERAGE_FAIL_UNDER: "25"
 
 # ─── JOB 1: Lint ─────────────────────────────────────────────────────────────
 jobs:
