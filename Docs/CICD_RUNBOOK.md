@@ -1,0 +1,277 @@
+# CI/CD Runbook — GridBot v2.5
+
+Pipeline de referencia para `.github/workflows/ci.yml`. Este documento describe
+cada job, cuándo falla, cómo se debuggea localmente y cómo se evoluciona el gate
+de cobertura.
+
+---
+
+## 1. Diagrama del pipeline
+
+```
+                          push / pull_request
+                                 │
+                                 ▼
+        ┌────────────────┬────────────────────┐
+        │   1. lint      │  2. security-scan  │   (paralelos)
+        │ pyflakes (★)   │  bandit (★)        │
+        │ ruff           │  pip-audit (★)     │
+        └───────┬────────┴──────────┬─────────┘
+                │                   │
+                ▼                   ▼
+            ┌────────────────────────┐
+            │    3. test (★)         │
+            │  Postgres + Redis      │
+            │  pytest --cov --gate   │
+            │  + QAA suite (★)       │
+            │  + Codecov upload      │
+            └──────────┬─────────────┘
+                       │
+                       ▼
+            ┌────────────────────────┐
+            │  4. migrations (★)     │
+            │  alembic upgrade head  │
+            └──────────┬─────────────┘
+                       │
+                       ▼ (solo en main / push)
+            ┌────────────────────────┐
+            │  5. docker             │
+            │  build & push GHCR     │
+            └──────────┬─────────────┘
+                       │
+                       ▼ (solo main)
+            ┌────────────────────────┐
+            │  6. deploy → Heroku    │
+            │  + alembic upgrade     │
+            └────────────────────────┘
+
+(★) = bloqueante. El resto sólo se ejecuta si los previos pasaron.
+```
+
+---
+
+## 2. Detalle por job
+
+### 2.1 `lint`
+
+- **Bloqueante en**: errores reales detectados por `pyflakes` (`undefined name`,
+  `invalid syntax`, `may be undefined`).
+- **No bloqueante en**: warnings de `ruff check` (se adopta gradualmente). Para
+  forzar el bloqueo, eliminar `|| true` del step de ruff.
+- **Cómo reproducir local**:
+  ```bash
+  pip install pyflakes ruff
+  python -m pyflakes app | tee pyflakes.log
+  ruff check app tests
+  ```
+
+### 2.2 `security-scan` (BLOQUEANTE)
+
+- **Bandit**: vulnerabilidades estáticas en `app/` con severidad MEDIA/ALTA y
+  confianza ≥ MEDIA. Skip explícito de `B101` (assert en tests) y `B601`
+  (paramiko, no usado).
+- **pip-audit**: CVEs en `requirements.txt`. Lista de CVEs ignorados con
+  justificación documentada en el propio workflow (campo `--ignore-vuln`).
+- **Cómo reproducir local**:
+  ```bash
+  pip install bandit pip-audit
+  bandit -r app --skip B101,B601 --severity-level medium --confidence-level medium -f txt
+  pip-audit -r requirements.txt
+  ```
+- **Falla típica**: nuevo CVE en un paquete. Procedimiento:
+  1. Verificar si hay versión parcheada → bumpear `requirements.txt`.
+  2. Si no hay parche y el riesgo es aceptable, agregar `--ignore-vuln <ID>` con
+     comentario que justifique (vector, exposición, plan).
+  3. Documentar en este runbook.
+
+### 2.3 `test` (BLOQUEANTE)
+
+- **Servicios**: Postgres 15 + Redis 7 como containers de servicios de GitHub Actions.
+- **Comando principal**:
+  ```bash
+  pytest tests/ -q --maxfail=10 --disable-warnings \
+    --cov=app --cov-report=xml:coverage.xml \
+    --cov-report=term-missing:skip-covered \
+    --cov-fail-under=${COVERAGE_FAIL_UNDER}
+  ```
+- **Gate escalonado**: la variable `COVERAGE_FAIL_UNDER` (env del workflow)
+  arranca en `29` (baseline real medido = 29.05 %). Plan:
+
+  | Fecha (objetivo)  | Gate | Justificación                              |
+  |-------------------|------|--------------------------------------------|
+  | 2026-04-26 (hoy)  | 29 % | Baseline real medido (29.05 %)             |
+  | 2026-05 (sprint)  | 35 % | Sumar P2 (middleware + scheduler)          |
+  | 2026-06           | 45 % | Sumar P3 (api routes + strategies)         |
+  | 2026-07           | 60 % | Cobertura cruzada de servicios             |
+  | 2026-08           | 75 % | Drift de tests pre-existentes resuelto     |
+  | 2026-09           | 85 % | Objetivo final (TESTING_RULES.md §3)       |
+
+  > Subir el gate **antes** de mergear PRs que añadan cobertura, no después.
+
+- **Step adicional** "QAA suite — línea de defensa": corre
+  `pytest tests/test_qaa_*.py -q --no-cov`. Es bloqueante e independiente del gate.
+- **Codecov**: subida no bloqueante (`fail_ci_if_error: false`). El badge en
+  `README.md` consume `CODECOV_TOKEN` (secret del repo).
+
+### 2.4 `migrations`
+
+- Aplica `alembic upgrade head` contra una base limpia y verifica que `alembic
+  current` esté en `(head)`.
+- Cubre las nuevas migraciones:
+  - `alembic/versions/20260421_schema_hardening_ingestion.py`
+  - `alembic/versions/20260421_trades_idempotency_columns.py`
+  - `alembic/versions/20260424_merge_heads_trades_order_idx.py`
+- **Cómo agregar una nueva migración**:
+  1. `alembic revision -m "descripcion" --autogenerate` (revisar el diff).
+  2. Editar la migración para que sea idempotente y reversible (`downgrade`).
+  3. Confirmar que `alembic upgrade head` funciona en local con la BD vacía.
+  4. Push → el job `migrations` la valida automáticamente.
+  5. Si hay heads divergentes, crear un merge (`alembic merge -m "..."`).
+
+### 2.5 `docker`
+
+- Build de la imagen y push a GHCR (`ghcr.io/<owner>/grid-bot:<tag>`).
+- Solo se ejecuta en eventos distintos de `pull_request`.
+- Tags: `branch`, `sha-<short>`, `latest` (sólo `main`).
+- Usa `cache-from`/`cache-to: type=gha` para builds incrementales.
+
+### 2.6 `deploy`
+
+- Sólo en `main` y eventos `push`.
+- Requiere `HEROKU_API_KEY` y `HEROKU_APP_NAME`.
+- Hace `docker tag` → `docker push registry.heroku.com/$APP/web` →
+  `heroku container:release web`.
+- Después del release, ejecuta `alembic upgrade head` en Heroku (no bloqueante:
+  `|| true`).
+
+---
+
+## 3. Secrets requeridos en GitHub
+
+| Secret | Uso | Dónde |
+|---|---|---|
+| `CODECOV_TOKEN` | Subir reportes de cobertura | Settings → Secrets → Actions |
+| `HEROKU_API_KEY` | Login a Container Registry de Heroku | idem |
+| `HEROKU_APP_NAME` | Nombre de la app destino | idem |
+| `GITHUB_TOKEN` | Autoprovisto, para GHCR push | (no se setea) |
+
+> Para variables públicas (no sensibles) usar `vars` en lugar de `secrets`.
+
+---
+
+## 4. Pre-commit local (`.pre-commit-config.yaml`)
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+Hooks activos:
+
+| Hook | Para qué |
+|---|---|
+| `check-added-large-files` | Bloquea archivos > 1 MB |
+| `end-of-file-fixer` / `trailing-whitespace` | Higiene |
+| `check-yaml` / `check-toml` / `check-merge-conflict` / `detect-private-key` | Higiene |
+| `ruff` (`--fix`) + `ruff-format` | Linting + formateo (rápido) |
+| `bandit` | Seguridad estática (mismo umbral que CI) |
+| `detect-secrets` | Bloquea commits con keys/tokens |
+
+> El baseline de `detect-secrets` está en `.secrets.baseline`. Para regenerarlo:
+>
+> ```bash
+> detect-secrets scan > .secrets.baseline
+> ```
+>
+> Revisar y commitear el archivo. Cualquier nueva detección bloquea el commit
+> hasta que se justifique con `# pragma: allowlist secret` o se actualice el
+> baseline.
+
+---
+
+## 5. Debug local de un fallo de CI
+
+### 5.1 Falla `lint`
+
+```bash
+python -m pyflakes app
+ruff check app tests --fix
+```
+
+### 5.2 Falla `security-scan`
+
+```bash
+bandit -r app --skip B101,B601 --severity-level medium --confidence-level medium -f txt
+pip-audit -r requirements.txt
+```
+
+### 5.3 Falla `test` por gate de cobertura
+
+```bash
+pytest -q --cov=app --cov-report=term-missing
+# El reporte muestra qué archivos están por debajo del umbral.
+# Identificá un módulo P1 (alto impacto) y subí su cobertura primero.
+```
+
+### 5.4 Falla `test` por test específico
+
+```bash
+# Reproducí el test exacto con verbose:
+pytest tests/test_<archivo>.py::<test> -vv -s
+
+# Asegurate de las env vars que usa CI (ver §3 de TDD_WORKFLOW.md).
+```
+
+### 5.5 Falla `migrations`
+
+```bash
+# Levantar BD limpia local
+docker compose --profile development up -d db
+DATABASE_URL=postgresql://gridbot:testpass@localhost:5432/gridbot_test alembic upgrade head
+DATABASE_URL=... alembic current
+```
+
+---
+
+## 6. Cómo agregar nuevos skills de Antigravity al pipeline
+
+1. Identificar el dolor (lentitud, falsos positivos, gap de cobertura).
+2. Revisar el catálogo de skills (carpeta `.cursor/skills/` o el sitio de
+   Antigravity).
+3. Documentar **antes** del cambio en este runbook (§7) qué skill se va a
+   adoptar y por qué.
+4. Si el skill exige un step nuevo en CI, mantenerlo no bloqueante (`|| true`)
+   por al menos 1 sprint para medir falsos positivos.
+5. Después del periodo de prueba, retirarle el `|| true` y documentar el cambio
+   en `AGENTS.md` (sección **Agentes de Calidad y CI/CD**).
+
+---
+
+## 7. Skills adoptados
+
+| Fase | Skill | Estado |
+|---|---|---|
+| Diagnóstico | `@systematic-debugging`, `@find-bugs` | Adoptado |
+| Reparación de tests | `@bug-hunter`, `@phase-gated-debugging` | Adoptado |
+| TDD | `@tdd-orchestrator`, `@test-driven-development` | Adoptado |
+| CI/CD | `@cicd-automation-workflow-automate`, `@github-actions-templates` | Adoptado |
+| Documentación | `@documentation-generation-doc-generate`, `@agents-md` | Adoptado |
+| Verificación | `@verification-before-completion`, `@lint-and-validate` | Adoptado |
+| Ops watch | Ver [`OPS_WATCH_ANTIGRAVITY.md`](OPS_WATCH_ANTIGRAVITY.md) | Adoptado |
+
+---
+
+## 8. Métricas del pipeline (objetivo 2026)
+
+| Métrica | Objetivo | Hoy |
+|---|---|---|
+| Duración total `lint + security + test` | < 8 min | ~6 min |
+| Duración `docker` | < 5 min | ~4 min |
+| Cobertura global | ≥ 85 % | 29 % (con plan a 85 %) |
+| QAA pass rate | 100 % | 100 % (170/170) |
+| Bandit findings (HIGH/CRIT) | 0 | 0 |
+| pip-audit CVEs sin justificar | 0 | 0 |
+
+Cualquier desviación se discute en el siguiente standup y se anota en
+`reports/ops_watch/LATEST.md`.
