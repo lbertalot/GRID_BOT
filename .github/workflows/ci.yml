@@ -1,11 +1,18 @@
 # ci-cd-pipeline-agent — Pipeline completo para GridBot
 #
 # Stages:
-#   1. lint       — pyflakes, bandit (seguridad estática)
-#   2. test       — pytest con PostgreSQL real + cobertura
-#   3. migrations — verifica que las migraciones Alembic son válidas
-#   4. docker     — build de imagen (push a GHCR en main)
-#   5. deploy     — deploy a Heroku (solo en main)
+#   1. lint           — pyflakes, ruff (linting)
+#   2. security-scan  — bandit (BLOQUEANTE), pip-audit (BLOQUEANTE)
+#   3. test           — pytest con PostgreSQL real + cobertura escalonada
+#   4. migrations     — verifica que las migraciones Alembic son válidas
+#   5. docker         — build de imagen (push a GHCR en main)
+#   6. deploy         — deploy a Heroku (solo en main)
+#
+# Estrategia de cobertura escalonada (TESTING_RULES.md §3 + docs/CICD_RUNBOOK.md):
+#   - Baseline real medido: 29.05% (2026-04-26).
+#   - Gate inicial: COVERAGE_FAIL_UNDER=29 (no rompe build el día 1).
+#   - Plan: +5pp por sprint hasta 85% global. Mínimos por módulo crítico
+#     YA están cumplidos (ver TESTING_RULES.md §3).
 
 name: CI / CD
 
@@ -19,11 +26,13 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/grid-bot
+  # Gate de cobertura escalonado. Subir +5 cada sprint (ver CICD_RUNBOOK.md).
+  COVERAGE_FAIL_UNDER: "29"
 
-# ─── JOB 1: Lint y seguridad estática ────────────────────────────────────────
+# ─── JOB 1: Lint ─────────────────────────────────────────────────────────────
 jobs:
   lint:
-    name: Lint & Static Security
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,45 +42,95 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Instalar herramientas de análisis
-        run: pip install pyflakes bandit pip-audit
+      - name: Instalar herramientas de lint
+        run: pip install pyflakes ruff
 
-      - name: pyflakes (warnings informativos + bloqueo ante errores reales)
+      - name: pyflakes (errores reales bloqueantes)
         run: |
-          # Ejecutamos pyflakes sobre app/ y guardamos el output.
-          # El exit code se ignora a propósito (|| true) porque pyflakes no
-          # distingue severidad: reporta imports no usados y f-strings sin
-          # placeholders como "errores" al mismo nivel que un undefined name.
-          # Solo bloqueamos el build ante errores realmente peligrosos:
-          #   - undefined name (NameError en runtime)
-          #   - invalid syntax (SyntaxError)
-          #   - may be undefined, or defined from star imports
+          # pyflakes no distingue severidad: reporta imports no usados al mismo
+          # nivel que un undefined name. Solo bloqueamos errores reales.
           python -m pyflakes app | tee pyflakes.log || true
           echo ""
           echo "── Errores bloqueantes (undefined / syntax) ──"
           if grep -E "undefined name|invalid syntax|may be undefined" pyflakes.log; then
             echo ""
-            echo "❌ Se encontraron errores reales de pyflakes. Corregir antes de mergear."
+            echo "❌ Errores reales de pyflakes. Corregir antes de mergear."
             exit 1
           fi
-          echo "✅ Sin errores bloqueantes. Los warnings informativos quedan para limpieza futura."
+          echo "✅ Sin errores bloqueantes."
 
-      - name: bandit (vulnerabilidades de seguridad en código)
+      - name: ruff check (best-effort; no bloqueante hasta que se adopte)
+        run: ruff check app tests || true
+
+# ─── JOB 2: Security scan (BLOQUEANTE) ───────────────────────────────────────
+  security-scan:
+    name: Security Scan (Bandit + pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar herramientas de seguridad
+        run: pip install bandit pip-audit
+
+      - name: Bandit (HIGH severity) — BLOQUEANTE
         run: |
+          # B101 (assert_used): permitido en tests/.
+          # B601 (paramiko_calls): no usamos paramiko.
+          # Severidad ALTA bloquea el build (FASE 6.4 — sin HIGH/CRITICAL).
+          bandit -r app \
+            --skip B101,B601 \
+            --severity-level high \
+            --confidence-level medium \
+            -f txt
+
+      - name: Bandit (MEDIUM severity) — informativo (no bloqueante)
+        run: |
+          # 12 hallazgos MEDIUM conocidos (ver TESTING_RULES.md §7 deuda):
+          #   - B108 hardcoded_tmp_directory (3x — paths /tmp legítimos)
+          #   - B310 urllib_urlopen (3x — URLs validadas internamente)
+          #   - B104 bind_all_interfaces (1x — uvicorn 0.0.0.0 esperado)
+          #   - B301 pickle (2x — pickle de datos confiables)
+          # Bloqueará en sprint 2026-06 cuando se documente cada caso con #nosec.
           bandit -r app \
             --skip B101,B601 \
             --severity-level medium \
             --confidence-level medium \
             -f txt || true
 
-      - name: pip-audit (CVEs en dependencias)
-        run: pip-audit -r requirements.txt --ignore-vuln GHSA-jfh8-c2jp-5 || true
+      - name: pip-audit (CVEs en dependencias) — BLOQUEANTE con allow-list
+        run: |
+          # Lista explícita de CVEs ignorados con justificación
+          # (ver TESTING_RULES.md §7 — Deuda de seguridad planificada):
+          #
+          # - GHSA-jfh8-c2jp-5r3q: vuln transitiva en pip < 25 sin patch upstream;
+          #   no afecta runtime (solo entorno de instalación).
+          #
+          # - PYSEC-2024-38 (fastapi 0.104.1): ReDoS en parser de Content-Type.
+          #   Mitigación: detrás de Nginx con rate-limit + WAF; upgrade a 0.109+
+          #   planificado para sprint 2026-05 (requiere validar compat con Pydantic v2).
+          #
+          # - CVE-2024-47874 (starlette 0.27.0): DoS vía multipart/form-data sin
+          #   Content-Length. GridBot no expone endpoints multipart sin auth +
+          #   request size cap. Upgrade a starlette 0.40.0+ con fastapi 0.109+.
+          #
+          # - CVE-2025-54121 (starlette 0.27.0): DoS por unbounded BodyParser en
+          #   uploads. Mismo mitigante (auth + límites Nginx) y mismo plan upgrade.
+          pip-audit -r requirements.txt \
+            --ignore-vuln GHSA-jfh8-c2jp-5r3q \
+            --ignore-vuln PYSEC-2024-38 \
+            --ignore-vuln CVE-2024-47874 \
+            --ignore-vuln CVE-2025-54121
 
-# ─── JOB 2: Tests con PostgreSQL real ────────────────────────────────────────
+# ─── JOB 3: Tests con PostgreSQL real ────────────────────────────────────────
   test:
-    name: Tests (PostgreSQL)
+    name: Tests (PostgreSQL) + Coverage Gate
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, security-scan]
 
     services:
       postgres:
@@ -112,7 +171,7 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-mock
 
-      - name: Correr tests
+      - name: Tests + Cobertura (gate escalonado)
         env:
           DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_test
           REDIS_URL: redis://localhost:6379/0
@@ -137,7 +196,19 @@ jobs:
             --disable-warnings \
             --cov=app \
             --cov-report=xml:coverage.xml \
-            --cov-report=term-missing:skip-covered
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=${COVERAGE_FAIL_UNDER}
+
+      - name: QAA suite — línea de defensa (bloqueante, 0 failures)
+        env:
+          DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_test
+          REDIS_URL: redis://localhost:6379/0
+          CI: "true"
+          PAPER_TRADING: "true"
+          INTEGRITY_GUARD_DISABLED: "1"
+          BINANCE_API_KEY: "ci_dummy_key"
+          BINANCE_SECRET_KEY: "ci_dummy_secret"
+        run: pytest tests/test_qaa_*.py -q --no-cov
 
       - name: Subir cobertura a Codecov
         if: always()
@@ -148,11 +219,11 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-# ─── JOB 3: Verificar migraciones Alembic ────────────────────────────────────
+# ─── JOB 4: Verificar migraciones Alembic ────────────────────────────────────
   migrations:
     name: Alembic Migrations Check
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, security-scan]
 
     services:
       postgres:
@@ -180,12 +251,17 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt
 
-      - name: Aplicar migraciones (upgrade head)
+      - name: Aplicar migraciones (upgrade head) — incluye nuevas migraciones
         env:
           DATABASE_URL: postgresql://gridbot:testpass@localhost:5432/gridbot_migrations
           BINANCE_API_KEY: "ci_dummy"
           BINANCE_SECRET_KEY: "ci_dummy"
-        run: alembic upgrade head
+        run: |
+          # Cubre las migraciones nuevas:
+          #   - 20260421_schema_hardening_ingestion.py
+          #   - 20260421_trades_idempotency_columns.py
+          #   - 20260424_merge_heads_trades_order_idx.py
+          alembic upgrade head
 
       - name: Verificar que no hay migraciones pendientes
         env:
@@ -195,10 +271,9 @@ jobs:
         run: |
           PENDING=$(alembic current 2>&1)
           echo "Estado Alembic: $PENDING"
-          # Verificar que el estado es 'head'
           alembic current | grep "(head)" || (echo "❌ Migraciones pendientes detectadas" && exit 1)
 
-# ─── JOB 4: Docker build (y push en main) ────────────────────────────────────
+# ─── JOB 5: Docker build (y push en main) ────────────────────────────────────
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
@@ -242,7 +317,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-# ─── JOB 5: Deploy a Heroku (solo en main) ───────────────────────────────────
+# ─── JOB 6: Deploy a Heroku (solo en main) ───────────────────────────────────
   deploy:
     name: Deploy to Heroku
     runs-on: ubuntu-latest
@@ -261,9 +336,7 @@ jobs:
             echo "⚠️  HEROKU_API_KEY o HEROKU_APP_NAME no configurados — deploy omitido"
             exit 0
           fi
-          # Instalar Heroku CLI
           curl https://cli-assets.heroku.com/install.sh | sh
-          # Login y deploy
           echo "$HEROKU_API_KEY" | docker login --username=_ \
             --password-stdin registry.heroku.com
           docker pull ${{ env.IMAGE_NAME }}:latest
