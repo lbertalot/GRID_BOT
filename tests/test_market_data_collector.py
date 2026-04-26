@@ -1,7 +1,6 @@
 import os
 import sys
 import pytest
-import asyncio
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -26,5 +25,3 @@ async def test_validate_order_parameters():
     res = await c.validate_order("BTCUSDT", 0.001, order_type="MARKET")
     assert isinstance(res, dict)
     assert "recommended_quantity" in res
-
-

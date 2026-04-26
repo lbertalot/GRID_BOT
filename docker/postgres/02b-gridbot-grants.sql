@@ -23,12 +23,9 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO griduser;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO griduser;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO griduser;
 
--- Defaults para objetos futuros creados por griduser o por postgres
+-- Defaults para objetos futuros creados por griduser (único superusuario en esta imagen;
+-- no existe el rol `postgres` del Docker oficial, evitar ALTER DEFAULT PRIVILEGES FOR ROLE postgres).
 ALTER DEFAULT PRIVILEGES FOR ROLE griduser IN SCHEMA public
     GRANT ALL ON TABLES TO griduser;
 ALTER DEFAULT PRIVILEGES FOR ROLE griduser IN SCHEMA public
-    GRANT ALL ON SEQUENCES TO griduser;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-    GRANT ALL ON TABLES TO griduser;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT ALL ON SEQUENCES TO griduser;

@@ -25,5 +25,3 @@ async def run_reconciliation_once() -> Dict[str, Any]:
     breakers = CircuitBreakers()
     svc = ReconciliationService(client_singleton.client, breakers)
     return await svc.run_reconciliation_cycle()
-
-

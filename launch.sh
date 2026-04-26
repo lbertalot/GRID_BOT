@@ -65,7 +65,7 @@ for i in {1..30}; do
         echo "⏳ Esperando API... (intento $i/30)"
         sleep 2
     fi
-    
+
     if [ $i -eq 30 ]; then
         echo "❌ ERROR: La API no está respondiendo después de 60 segundos."
         echo "   Revisa los logs con: docker-compose logs api"
@@ -83,7 +83,7 @@ for i in {1..15}; do
         echo "⏳ Esperando Prometheus... (intento $i/15)"
         sleep 2
     fi
-    
+
     if [ $i -eq 15 ]; then
         echo "⚠️  ADVERTENCIA: Prometheus no está respondiendo. El monitoreo puede estar limitado."
     fi
@@ -99,7 +99,7 @@ for i in {1..15}; do
         echo "⏳ Esperando Grafana... (intento $i/15)"
         sleep 2
     fi
-    
+
     if [ $i -eq 15 ]; then
         echo "⚠️  ADVERTENCIA: Grafana no está respondiendo. Los dashboards pueden no estar disponibles."
     fi

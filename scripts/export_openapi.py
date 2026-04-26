@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 from pathlib import Path
 from fastapi.openapi.utils import get_openapi

@@ -2,10 +2,10 @@
 
 ## 🚨 Situación Detectada
 
-**IP Externa Detectada:** `149.154.167.220`  
-**Organización:** Telegram Messenger Inc. (Londres, Reino Unido)  
-**Endpoint Atacado:** `/api/live/ws` (WebSocket Live de Grafana)  
-**Frecuencia:** Múltiples intentos cada 10-15 segundos  
+**IP Externa Detectada:** `149.154.167.220`
+**Organización:** Telegram Messenger Inc. (Londres, Reino Unido)
+**Endpoint Atacado:** `/api/live/ws` (WebSocket Live de Grafana)
+**Frecuencia:** Múltiples intentos cada 10-15 segundos
 
 ## 🔍 Análisis Técnico
 
@@ -21,7 +21,7 @@
 
 ### Implicaciones de Seguridad
 
-**✅ Nivel de Riesgo: BAJO**  
+**✅ Nivel de Riesgo: BAJO**
 - Las conexiones están siendo rechazadas (status 401)
 - No hay acceso no autorizado
 - Tu sistema está funcionando correctamente
@@ -98,6 +98,6 @@ location /api/live/ws {
 
 ---
 
-**Fecha de Análisis:** 2025-09-20  
-**Analista:** GridBot Security Monitor  
+**Fecha de Análisis:** 2025-09-20
+**Analista:** GridBot Security Monitor
 **Estado:** ✅ SEGURO - Sistema funcionando correctamente

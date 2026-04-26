@@ -101,5 +101,3 @@ Location: `app/services/grid_strategy.py`
 
 - `calculate_grid_levels(min_price, max_price, grids) -> List[float]`
 - `decide_grid_action(current_price, grid_levels, last_action=None) -> Dict`
-
-

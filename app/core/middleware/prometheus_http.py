@@ -1,5 +1,6 @@
 from time import perf_counter
 from typing import Callable
+import uuid
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -10,18 +11,18 @@ http_request_duration_seconds = Histogram(
     "http_request_duration_seconds",
     "HTTP request duration in seconds",
     ["method", "path", "status"],
-    buckets=(0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5)
+    buckets=(0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5),
 )
 
 http_requests_total = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "path", "status"]
+    "http_requests_total", "Total HTTP requests", ["method", "path", "status"]
 )
 
 
 class PrometheusHTTPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
+        correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
+        request.state.correlation_id = correlation_id
         start = perf_counter()
         response = await call_next(request)
         duration = perf_counter() - start
@@ -30,9 +31,9 @@ class PrometheusHTTPMiddleware(BaseHTTPMiddleware):
         route = getattr(request.scope.get("route"), "path", request.url.path)
         path = route
         status = str(response.status_code)
-        http_request_duration_seconds.labels(method=method, path=path, status=status).observe(duration)
+        http_request_duration_seconds.labels(
+            method=method, path=path, status=status
+        ).observe(duration)
         http_requests_total.labels(method=method, path=path, status=status).inc()
+        response.headers["X-Correlation-ID"] = correlation_id
         return response
-
-
-

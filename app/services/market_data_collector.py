@@ -39,52 +39,73 @@ class MarketDataCollector:
         # Cliente sync solo para metadata/validación (usado en to_thread) - inicialización lazy
         self._client = None
         self._validator = None
-        self._db_url = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
-    
+        self._db_url = os.getenv(
+            "DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"
+        )
+
     async def _ensure_client(self):
         """
         Inicializa el cliente de Binance de forma lazy (solo cuando se necesita).
-        
+
         ✅ Bug #3 Fix: Inicialización envuelta en asyncio.to_thread() para no bloquear event loop
         """
         if self._client is None:
+
             def _init():
-                api_key = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_SECRET_KEY")
+                api_key = os.getenv("BINANCE_API_KEY") or os.getenv(
+                    "BINANCE_SECRET_KEY"
+                )
                 api_secret = os.getenv("BINANCE_SECRET_KEY")
                 # Forzar testnet=false para producción - resolver errores -2015
                 client = Client(api_key, api_secret, testnet=False)
                 validator = OrderValidator(client)
                 return client, validator
-            
+
             # ✅ FIX: Ejecutar inicialización en thread separado
             self._client, self._validator = await asyncio.to_thread(_init)
             logger.debug("✅ Binance client inicializado (async)")
-        
+
         return self._client
 
     async def get_price(self, symbol: str) -> float:
         """Obtiene precio con caché TTL 5s y backoff."""
         return await self.binance.get_price(symbol)
 
-    async def get_klines(self, symbol: str, interval: str = "1m", limit: int = 120) -> List[List[Any]]:
+    async def get_klines(
+        self, symbol: str, interval: str = "1m", limit: int = 120
+    ) -> List[List[Any]]:
         """Obtiene klines con caché TTL 5s y backoff."""
         return await self.binance.get_klines(symbol, interval, limit)
 
-    async def validate_order(self, symbol: str, quantity: float, order_type: str = "MARKET", price: Optional[float] = None) -> Dict[str, Any]:
+    async def validate_order(
+        self,
+        symbol: str,
+        quantity: float,
+        order_type: str = "MARKET",
+        price: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """
         Valida y ajusta cantidad/precio usando reglas de Binance (stepSize/tickSize/minNotional).
-        
+
         ✅ Bug #3 Fix: Validación envuelta en asyncio.to_thread()
         """
-        await self._ensure_client()  # Inicializar cliente lazy si aún no existe (ahora es async)
-        
+        await (
+            self._ensure_client()
+        )  # Inicializar cliente lazy si aún no existe (ahora es async)
+
         # ✅ FIX: Ejecutar validación en thread separado
         return await asyncio.to_thread(
             self._validator.validate_order_parameters,
-            symbol, quantity, "BUY", order_type, price
+            symbol,
+            quantity,
+            "BUY",
+            order_type,
+            price,
         )  # side no afecta validación de cantidades
 
-    async def save_klines_to_db(self, symbol: str, interval: str, klines: List[List[Any]]) -> int:
+    async def save_klines_to_db(
+        self, symbol: str, interval: str, klines: List[List[Any]]
+    ) -> int:
         """Guarda klines en tabla klines_data (crea si no existe). Retorna filas insertadas."""
         if not klines:
             return 0
@@ -115,7 +136,10 @@ class MarketDataCollector:
                 """
                 DELETE FROM klines_data WHERE symbol=$1 AND interval=$2 AND open_time BETWEEN $3 AND $4
                 """,
-                symbol, interval, first_open, last_close
+                symbol,
+                interval,
+                first_open,
+                last_close,
             )
 
             inserted = 0
@@ -133,7 +157,7 @@ class MarketDataCollector:
                     float(k[3]),
                     float(k[4]),
                     float(k[5]),
-                    datetime.fromtimestamp(k[6] / 1000)
+                    datetime.fromtimestamp(k[6] / 1000),
                 )
                 inserted += 1
             return inserted
@@ -148,5 +172,3 @@ class MarketDataCollector:
 # Instancia global opcional (evitar efectos en exportación de OpenAPI/CI)
 if os.getenv("EXPORT_OPENAPI", "0") != "1":
     market_data_collector = MarketDataCollector()
-
-

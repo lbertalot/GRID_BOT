@@ -1,4 +1,3 @@
-import types
 from unittest.mock import patch
 from app.services.binance_service import BinanceService
 
@@ -22,5 +21,3 @@ def test_get_account_retries_with_backoff(monkeypatch):
         data = svc.get_account_info()
         assert "balances" in data
         assert calls["n"] >= 3
-
-

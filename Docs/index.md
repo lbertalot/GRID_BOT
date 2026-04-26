@@ -26,5 +26,3 @@ make dry-run SYMBOL=BTCUSDT QTY=0.0002 SIDE=BUY TYPE=MARKET
 - FSD: especificaciones funcionales
 - OpenAPI: esquema de endpoints
 - Notas de versión: cambios relevantes por release
-
-

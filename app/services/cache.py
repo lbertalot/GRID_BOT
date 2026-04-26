@@ -24,7 +24,9 @@ class AsyncCache:
 
         if redis_url and Redis is not None:
             try:
-                self._redis = Redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+                self._redis = Redis.from_url(
+                    redis_url, encoding="utf-8", decode_responses=True
+                )
                 self._use_redis = True
             except Exception:
                 self._use_redis = False
@@ -78,8 +80,8 @@ _global_cache: Optional[AsyncCache] = None
 def get_async_cache() -> AsyncCache:
     global _global_cache
     if _global_cache is None:
-        redis_url = os.getenv("REDIS_URL") or os.getenv("redis_url") or os.getenv("REDIS_URI")
+        redis_url = (
+            os.getenv("REDIS_URL") or os.getenv("redis_url") or os.getenv("REDIS_URI")
+        )
         _global_cache = AsyncCache(redis_url=redis_url)
     return _global_cache
-
-

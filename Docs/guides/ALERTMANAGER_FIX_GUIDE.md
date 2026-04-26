@@ -1,7 +1,7 @@
 # 🚨 GridBot v2.5 - Guía de Solución Alertmanager
 
-**Fecha**: 2026-01-03  
-**Problema**: Alertmanager no puede enviar notificaciones a Telegram  
+**Fecha**: 2026-01-03
+**Problema**: Alertmanager no puede enviar notificaciones a Telegram
 **Error**: `context deadline exceeded`
 
 ---
@@ -13,7 +13,7 @@
 **Síntoma**:
 ```
 level=ERROR msg="Notify for alerts failed"
-err="telegram.warning/webhook[0]: notify retry canceled after 1 attempts: 
+err="telegram.warning/webhook[0]: notify retry canceled after 1 attempts:
 context deadline exceeded"
 ```
 
@@ -32,7 +32,7 @@ receivers:
     webhook_configs:
       - url: 'http://api:8000/api/v1/alerts/telegram/critical'
         send_resolved: true
-  
+
   - name: 'telegram.warning'
     webhook_configs:
       - url: 'http://api:8000/api/v1/alerts/telegram/warning'
@@ -47,8 +47,8 @@ receivers:
 
 ### Opción 1: Implementar Endpoints de Alertas (RECOMENDADO) ⭐
 
-**Tiempo**: 15 minutos  
-**Impacto**: Sistema completo de alertas funcionando  
+**Tiempo**: 15 minutos
+**Impacto**: Sistema completo de alertas funcionando
 **Prioridad**: ALTA
 
 #### Paso 1: Crear el router de alertas
@@ -76,11 +76,11 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessag
 
 async def send_telegram_message(message: str, severity: str = "info") -> bool:
     """Envía mensaje a Telegram con formato según severidad"""
-    
+
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         logger.warning("Telegram no configurado (falta BOT_TOKEN o CHAT_ID)")
         return False
-    
+
     # Emojis según severidad
     emoji_map = {
         "critical": "🚨",
@@ -89,26 +89,26 @@ async def send_telegram_message(message: str, severity: str = "info") -> bool:
         "resolved": "✅"
     }
     emoji = emoji_map.get(severity, "📢")
-    
+
     formatted_message = f"{emoji} {message}"
-    
+
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": formatted_message,
         "parse_mode": "HTML"
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(TELEGRAM_API_URL, json=payload)
-            
+
             if response.status_code == 200:
                 logger.info(f"✅ Alerta enviada a Telegram: {severity}")
                 return True
             else:
                 logger.error(f"❌ Error enviando a Telegram: {response.status_code} - {response.text}")
                 return False
-                
+
     except Exception as e:
         logger.error(f"❌ Excepción enviando a Telegram: {e}")
         return False
@@ -116,19 +116,19 @@ async def send_telegram_message(message: str, severity: str = "info") -> bool:
 
 def format_alert_message(alert: Dict[str, Any], severity: str) -> str:
     """Formatea la alerta en mensaje legible"""
-    
+
     labels = alert.get("labels", {})
     annotations = alert.get("annotations", {})
     status = alert.get("status", "firing")
-    
+
     alertname = labels.get("alertname", "Unknown")
     instance = labels.get("instance", "unknown")
     summary = annotations.get("summary", "Sin descripción")
     description = annotations.get("description", "")
-    
+
     # Emoji de estado
     status_emoji = "✅" if status == "resolved" else "🔥"
-    
+
     # Construir mensaje
     lines = [
         f"<b>{status_emoji} ALERTA {severity.upper()}</b>",
@@ -138,15 +138,15 @@ def format_alert_message(alert: Dict[str, Any], severity: str) -> str:
         "",
         f"<b>Resumen:</b> {summary}"
     ]
-    
+
     if description:
         lines.append(f"<b>Detalle:</b> {description}")
-    
+
     # Agregar timestamp
     starts_at = alert.get("startsAt", "")
     if starts_at:
         lines.append(f"<b>Inicio:</b> {starts_at}")
-    
+
     return "\n".join(lines)
 
 
@@ -158,15 +158,15 @@ async def handle_critical_alert(request: Request):
     try:
         payload = await request.json()
         alerts = payload.get("alerts", [])
-        
+
         logger.info(f"📥 Recibidas {len(alerts)} alerta(s) CRÍTICA(S)")
-        
+
         for alert in alerts:
             message = format_alert_message(alert, "critical")
             await send_telegram_message(message, severity="critical")
-        
+
         return {"status": "ok", "alerts_processed": len(alerts)}
-        
+
     except Exception as e:
         logger.error(f"❌ Error procesando alerta crítica: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -180,15 +180,15 @@ async def handle_warning_alert(request: Request):
     try:
         payload = await request.json()
         alerts = payload.get("alerts", [])
-        
+
         logger.info(f"📥 Recibidas {len(alerts)} alerta(s) WARNING")
-        
+
         for alert in alerts:
             message = format_alert_message(alert, "warning")
             await send_telegram_message(message, severity="warning")
-        
+
         return {"status": "ok", "alerts_processed": len(alerts)}
-        
+
     except Exception as e:
         logger.error(f"❌ Error procesando alerta warning: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -206,12 +206,12 @@ async def test_telegram():
             "bot_token": bool(TELEGRAM_BOT_TOKEN),
             "chat_id": bool(TELEGRAM_CHAT_ID)
         }
-    
+
     success = await send_telegram_message(
         "🧪 Test de alertas de GridBot v2.5\n\nSi ves este mensaje, Telegram funciona correctamente!",
         severity="info"
     )
-    
+
     return {
         "status": "ok" if success else "error",
         "message": "Test enviado" if success else "Error enviando test",
@@ -257,8 +257,8 @@ curl http://localhost:8000/api/v1/alerts/telegram/test
 
 ### Opción 2: Usar Script Python Directo (TEMPORAL)
 
-**Tiempo**: 5 minutos  
-**Impacto**: Alertas funcionan pero fuera de la API  
+**Tiempo**: 5 minutos
+**Impacto**: Alertas funcionan pero fuera de la API
 **Prioridad**: BAJA
 
 Configurar Alertmanager para usar un script Python standalone:
@@ -283,12 +283,12 @@ def send_telegram(message):
 if __name__ == "__main__":
     data = json.load(sys.stdin)
     alerts = data.get("alerts", [])
-    
+
     for alert in alerts:
         alertname = alert.get("labels", {}).get("alertname", "Unknown")
         status = alert.get("status", "firing")
         summary = alert.get("annotations", {}).get("summary", "")
-        
+
         message = f"🚨 <b>{alertname}</b>\nEstado: {status}\n{summary}"
         send_telegram(message)
 ```
@@ -299,8 +299,8 @@ if __name__ == "__main__":
 
 ### Opción 3: Silenciar Alertas Temporalmente (URGENTE)
 
-**Tiempo**: 1 minuto  
-**Impacto**: Detiene el spam de errores en logs  
+**Tiempo**: 1 minuto
+**Impacto**: Detiene el spam de errores en logs
 **Prioridad**: URGENTE si los logs molestan
 
 ```bash
@@ -396,10 +396,8 @@ La configuración actual de Alertmanager **espera** esos endpoints, pero **no ex
 
 ---
 
-**Preparado por**: Cursor AI Agent  
-**Fecha**: 2026-01-03  
+**Preparado por**: Cursor AI Agent
+**Fecha**: 2026-01-03
 **Siguiente Paso**: Implementar Opción 1 o silenciar con Opción 3
 
 ---
-
-

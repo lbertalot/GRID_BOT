@@ -189,7 +189,7 @@ class CircuitBreaker:
         self.daily_loss_limit = 0.05  # 5% máximo pérdida diaria
         self.total_loss_limit = 0.10  # 10% máximo pérdida total
         self.trade_loss_limit = 0.02  # 2% máximo pérdida por trade
-        
+
     def check_limits(self, current_loss, daily_loss, total_loss):
         if daily_loss > self.daily_loss_limit:
             return False, "Límite de pérdida diaria excedido"

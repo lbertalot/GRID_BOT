@@ -25,4 +25,3 @@ No deprecar ninguno. Para evitar confusión futura, considerar renombrar a:
 ## Estado de Auditoría
 
 **Hallazgo Auditado**: RESUELTO - No es un duplicado, es diseño intencional.
-

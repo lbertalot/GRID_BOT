@@ -59,4 +59,4 @@ inhibit_rules:
 # Configuración TLS para el servidor Alertmanager
 tls_config:
   cert_file: /etc/alertmanager/ssl/server-cert.pem
-  key_file: /etc/alertmanager/ssl/server-key.pem 
+  key_file: /etc/alertmanager/ssl/server-key.pem

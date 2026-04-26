@@ -7,7 +7,6 @@ import asyncio
 from sqlalchemy import create_engine, text
 import asyncpg
 import logging
-from datetime import datetime
 import os
 
 # Configurar logging
@@ -15,7 +14,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuración de la base de datos
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"
+)
 
 # Convertir formato postgres:// a postgresql:// (Heroku usa postgres://)
 if DATABASE_URL.startswith("postgres://"):
@@ -51,33 +52,37 @@ VALUES (0, 0, 0, 0.0, 0.0, 0.0)
 ON CONFLICT DO NOTHING;
 """
 
+
 async def init_database():
     """Inicializar la base de datos"""
     try:
         logger.info("Conectando a la base de datos...")
         conn = await asyncpg.connect(DATABASE_URL)
-        
-        logger.info("Esquema gestionado por Alembic. Omitiendo creación manual de tablas.")
-        
+
+        logger.info(
+            "Esquema gestionado por Alembic. Omitiendo creación manual de tablas."
+        )
+
         logger.info("Insertando datos iniciales...")
         await conn.execute(INSERT_INITIAL_DATA_SQL)
-        
+
         logger.info("Verificando tablas creadas...")
         tables = await conn.fetch("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
             AND table_name IN ('grid_config', 'asset_limits', 'trades', 'performance_metrics', 'alerts', 'system_config')
         """)
-        
+
         logger.info(f"Tablas creadas: {[table['table_name'] for table in tables]}")
-        
+
         await conn.close()
         logger.info("Base de datos inicializada correctamente")
-        
+
     except Exception as e:
         logger.error(f"Error inicializando base de datos: {e}")
         raise
+
 
 def init_db() -> bool:
     """Wrapper síncrono para crear tablas mínimas en contextos sync (tests/app startup)."""
@@ -88,7 +93,8 @@ def init_db() -> bool:
         # Ejecutar el SQL de creación mínimo vía asyncpg es complejo en sync; crear tablas clave mínimas aquí
         # Se confía en rutas de sincronización para completar asset_limits.
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS trades (
                     id SERIAL PRIMARY KEY,
                     symbol VARCHAR(20) NOT NULL,
@@ -101,11 +107,13 @@ def init_db() -> bool:
                     order_id VARCHAR(100),
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """))
+            """)
+            )
         return True
     except Exception as e:
         logger.error(f"init_db() fallo: {e}")
         return False
+
 
 async def check_database_connection():
     """Verificar conexión a la base de datos"""
@@ -119,27 +127,31 @@ async def check_database_connection():
         logger.error(f"Error conectando a la base de datos: {e}")
         return False
 
+
 async def main():
     """Función principal"""
     logger.info("Iniciando inicialización de base de datos...")
-    
+
     # Esperar a que la base de datos esté disponible
     max_retries = 30
     retry_count = 0
-    
+
     while retry_count < max_retries:
         if await check_database_connection():
             break
         retry_count += 1
         logger.info(f"Reintentando conexión... ({retry_count}/{max_retries})")
         await asyncio.sleep(2)
-    
+
     if retry_count >= max_retries:
-        logger.error("No se pudo conectar a la base de datos después de múltiples intentos")
+        logger.error(
+            "No se pudo conectar a la base de datos después de múltiples intentos"
+        )
         return
-    
+
     # Inicializar base de datos
     await init_database()
 
+
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

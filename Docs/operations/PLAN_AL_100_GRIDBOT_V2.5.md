@@ -1,6 +1,6 @@
 # Plan para que GridBot v2.5 funcione al 100% en producción
 
-**Basado en:** [VERIFICACION_GRIDBOT_V2.5_EN_PRODUCCION.md](./VERIFICACION_GRIDBOT_V2.5_EN_PRODUCCION.md)  
+**Basado en:** [VERIFICACION_GRIDBOT_V2.5_EN_PRODUCCION.md](./VERIFICACION_GRIDBOT_V2.5_EN_PRODUCCION.md)
 **Objetivo:** Activar y verificar todos los componentes descritos en la oferta pública de GridBot v2.5 (incluido ML para régimen) y asegurar operación estable y observable.
 
 ---

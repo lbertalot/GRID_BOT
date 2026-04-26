@@ -332,5 +332,3 @@ curl http://localhost:8000/integrity/status
 ## Contacto y soporte
 - Alertas por Telegram (configura `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`).
 - Revisa `logs/` y `reports/` para auditorías y monitoreo continuo.
-
-

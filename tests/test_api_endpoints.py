@@ -38,7 +38,13 @@ def test_run_grid_authenticated():
 
 def test_strategy_scalping_live():
     url = f"{BASE_URL}/api/strategies/strategy/scalping"
-    payload = {"symbol": "BTCUSDT", "interval": "1m", "limit": 3, "balances": {"USDT": 100}, "params": {}}
+    payload = {
+        "symbol": "BTCUSDT",
+        "interval": "1m",
+        "limit": 3,
+        "balances": {"USDT": 100},
+        "params": {},
+    }
     r = requests.post(url, json=payload, timeout=20)
     assert r.status_code in (200, 400)
     if r.status_code == 200:
@@ -48,7 +54,13 @@ def test_strategy_scalping_live():
 def test_strategy_backtest_scalping_live():
     url = f"{BASE_URL}/api/strategies/strategy/backtest"
     params = {"strategy": "scalping"}
-    payload = {"symbol": "BTCUSDT", "interval": "1m", "limit": 20, "balances": {"USDT": 100}, "params": {}}
+    payload = {
+        "symbol": "BTCUSDT",
+        "interval": "1m",
+        "limit": 20,
+        "balances": {"USDT": 100},
+        "params": {},
+    }
     r = requests.post(url, params=params, json=payload, timeout=30)
     assert r.status_code in (200, 400)
     if r.status_code == 200:

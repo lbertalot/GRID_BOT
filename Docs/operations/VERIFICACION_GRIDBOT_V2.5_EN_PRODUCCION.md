@@ -1,6 +1,6 @@
 # Verificación: GridBot v2.5 en producción (grid-bot-ia-eu)
 
-**Fecha:** 2026-02-17  
+**Fecha:** 2026-02-17
 **App:** https://YOUR-APP-NAME.herokuapp.com/
 
 Este documento cruza la descripción pública de GridBot v2.5 con el código y la configuración en producción.

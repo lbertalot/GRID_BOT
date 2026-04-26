@@ -9,15 +9,67 @@ este paso en runtime es necesario para entornos que ya tenían la BD.
 
 Idempotente: cada GRANT/ALTER es seguro de repetir.
 """
+
 from __future__ import annotations
 
 import os
 import sys
+import time
 
 try:
     import psycopg2  # type: ignore
 except Exception as e:  # pragma: no cover
     print(f"❌ psycopg2 no disponible: {e}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _normalize_dsn(dsn: str) -> str:
+    if dsn.startswith("postgresql+psycopg2://"):
+        return dsn.replace("postgresql+psycopg2://", "postgresql://", 1)
+    if dsn.startswith("postgresql+asyncpg://"):
+        return dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
+    return dsn
+
+
+def wait_for_postgres_ready(
+    dsn: str,
+    *,
+    max_wait_sec: float,
+    interval_sec: float,
+) -> None:
+    """
+    Espera hasta que Postgres acepte TCP y responda a SELECT 1.
+
+    Tras el primer arranque con volumen vacío, el entrypoint de Docker puede
+    apagar el servidor temporal al terminar initdb.d; el healthcheck puede
+    marcar healthy demasiado pronto y ensure_pg_grants vería Connection refused.
+    """
+    deadline = time.monotonic() + max_wait_sec
+    attempt = 0
+    last_err: Exception | None = None
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            conn = psycopg2.connect(dsn, connect_timeout=5)
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            conn.close()
+            if attempt > 1:
+                print(f"✅ Postgres listo tras {attempt} intento(s)")
+            return
+        except Exception as e:
+            last_err = e
+            if attempt == 1 or attempt % 10 == 0:
+                print(
+                    f"⏳ Postgres aún no acepta conexiones: {e!s} (intento {attempt})"
+                )
+            time.sleep(interval_sec)
+
+    print(
+        f"❌ Timeout ({max_wait_sec:g}s) esperando Postgres: {last_err!s}",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 
@@ -27,11 +79,12 @@ def main() -> int:
         print("❌ DATABASE_URL no definida", file=sys.stderr)
         return 1
 
-    # SQLAlchemy-style -> libpq-style
-    if dsn.startswith("postgresql+psycopg2://"):
-        dsn = dsn.replace("postgresql+psycopg2://", "postgresql://", 1)
-    elif dsn.startswith("postgresql+asyncpg://"):
-        dsn = dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
+    dsn = _normalize_dsn(dsn)
+
+    max_wait = float(os.environ.get("OPS_PG_WAIT_MAX_SEC", "120"))
+    interval = float(os.environ.get("OPS_PG_WAIT_INTERVAL_SEC", "2"))
+    print("⏳ Esperando a que Postgres acepte conexiones (post-init / reinicio)…")
+    wait_for_postgres_ready(dsn, max_wait_sec=max_wait, interval_sec=interval)
 
     print("🔐 Asegurando permisos en schema public para griduser…")
 
@@ -50,7 +103,7 @@ def main() -> int:
     ]
 
     try:
-        conn = psycopg2.connect(dsn)
+        conn = psycopg2.connect(dsn, connect_timeout=30)
         conn.autocommit = True
         with conn.cursor() as cur:
             for stmt in stmts:

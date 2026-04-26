@@ -3,6 +3,7 @@ Modelo PortfolioSnapshot — registra el valor total del portafolio cada 15 minu
 Usado por performance_analyzer.py para calcular métricas reales (retorno, volatilidad,
 drawdown) en lugar de datos simulados.
 """
+
 from sqlalchemy import Column, Integer, Float, DateTime, String, Index
 from sqlalchemy.sql import func
 from app.models.base import Base

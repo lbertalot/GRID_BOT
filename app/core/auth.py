@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Depends, Request
 import os
-from typing import Optional
+
 
 def get_api_key(request: Request) -> str:
     """
@@ -15,16 +15,20 @@ def get_api_key(request: Request) -> str:
     token = header.split(" ", 1)[1].strip()
     valid_api_key = os.getenv("API_KEY") or "gridbot_api_key_2024_secure_12345"
     if not valid_api_key:
-        raise HTTPException(status_code=500, detail="API key no configurado en el servidor")
+        raise HTTPException(
+            status_code=500, detail="API key no configurado en el servidor"
+        )
     if token != valid_api_key:
         raise HTTPException(status_code=401, detail="API key inválido")
     return token
+
 
 def require_auth(api_key: str = Depends(get_api_key)) -> str:
     """
     Dependencia para endpoints que requieren autenticación.
     """
-    return api_key 
+    return api_key
+
 
 # Backwards-compatible alias expected by tests and routes
 get_api_key_user = require_auth

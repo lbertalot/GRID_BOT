@@ -16,4 +16,3 @@ def test_compute_win_loss_and_sharpe():
     m = compute_win_loss_and_sharpe(trades)
     assert 0.0 <= m["win_ratio"] <= 1.0
     assert isinstance(m["sharpe"], float)
-

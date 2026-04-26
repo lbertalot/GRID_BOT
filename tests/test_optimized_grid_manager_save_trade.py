@@ -1,6 +1,7 @@
 """
 Regresión: _save_trade_to_db no debe fallar en SELL con BUY abierta (antes: trade indefinido).
 """
+
 import os
 import sys
 import pytest
@@ -10,16 +11,26 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from app.core.optimized_grid_manager import OptimizedGridManager, GridManagerConfig, AssetConfig
+from app.core.optimized_grid_manager import (
+    OptimizedGridManager,
+    GridManagerConfig,
+    AssetConfig,
+)
 
 
 def _minimal_config() -> GridManagerConfig:
     assets = {
         "BTCUSDT": AssetConfig(
-            symbol="BTCUSDT", min_price=10000.0, max_price=200000.0, grids=10, quantity=0.0001
+            symbol="BTCUSDT",
+            min_price=10000.0,
+            max_price=200000.0,
+            grids=10,
+            quantity=0.0001,
         ),
     }
-    return GridManagerConfig(assets=assets, update_interval=60, min_notional_threshold=10.0)
+    return GridManagerConfig(
+        assets=assets, update_interval=60, min_notional_threshold=10.0
+    )
 
 
 @pytest.mark.asyncio

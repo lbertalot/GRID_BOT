@@ -22,6 +22,7 @@ Uso típico (desde RiskManager):
     max_dd      = metricas["max_drawdown"]
     sharpe      = metricas["sharpe_ratio"]
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,11 +41,12 @@ from app.core.trace_decorator import traced
 logger = logging.getLogger(__name__)
 
 # ── Constantes globales ────────────────────────────────────────────────────────
-_ANN_FACTOR: int = 365   # días/año para crypto (24/7)
-_MIN_DIAS: int = 10      # mínimo de días con trades cerrados para cálculos válidos
+_ANN_FACTOR: int = 365  # días/año para crypto (24/7)
+_MIN_DIAS: int = 10  # mínimo de días con trades cerrados para cálculos válidos
 
 
 # ── Helpers de acceso a DB ─────────────────────────────────────────────────────
+
 
 def _fetch_daily_pnl_series(
     db: Session,
@@ -67,16 +69,13 @@ def _fetch_daily_pnl_series(
     """
     desde = datetime.utcnow() - timedelta(days=dias)
 
-    query = (
-        db.query(
-            func.date(Trade.timestamp).label("fecha"),
-            func.sum(Trade.profit_loss).label("pnl_diario"),
-        )
-        .filter(
-            Trade.profit_loss.isnot(None),
-            Trade.exit_price.isnot(None),
-            Trade.timestamp >= desde,
-        )
+    query = db.query(
+        func.date(Trade.timestamp).label("fecha"),
+        func.sum(Trade.profit_loss).label("pnl_diario"),
+    ).filter(
+        Trade.profit_loss.isnot(None),
+        Trade.exit_price.isnot(None),
+        Trade.timestamp >= desde,
     )
 
     if symbol:
@@ -84,8 +83,7 @@ def _fetch_daily_pnl_series(
 
     try:
         rows = (
-            query
-            .group_by(func.date(Trade.timestamp))
+            query.group_by(func.date(Trade.timestamp))
             .order_by(func.date(Trade.timestamp).asc())
             .all()
         )
@@ -105,6 +103,7 @@ def _fetch_daily_pnl_series(
 
 
 # ── Motor de cálculo ───────────────────────────────────────────────────────────
+
 
 class RiskMetricsEngine:
     """Motor de cálculo de métricas de riesgo usando datos reales de PostgreSQL.
@@ -164,9 +163,7 @@ class RiskMetricsEngine:
 
     # ── Sharpe Ratio ──────────────────────────────────────────────────────────
 
-    def calcular_sharpe(
-        self, serie_pnl: pd.Series, portfolio_value: float
-    ) -> float:
+    def calcular_sharpe(self, serie_pnl: pd.Series, portfolio_value: float) -> float:
         """Sharpe Ratio anualizado: (retorno_excedente_anual) / volatilidad_anual.
 
         Para crypto rf_rate=0.0 porque no existe alternativa libre de riesgo equivalente.
@@ -252,9 +249,7 @@ class RiskMetricsEngine:
         var_usdt = -np.percentile(serie_pnl.values, (1 - confianza) * 100)
         return float(var_usdt) if np.isfinite(var_usdt) else 0.0
 
-    def calcular_cvar(
-        self, serie_pnl: pd.Series, confianza: float = 0.95
-    ) -> float:
+    def calcular_cvar(self, serie_pnl: pd.Series, confianza: float = 0.95) -> float:
         """CVaR / Expected Shortfall: pérdida *esperada* dado que se superó el VaR.
 
         Captura el riesgo de cola mejor que el VaR solo. Siempre >= VaR.

@@ -13,14 +13,17 @@ async def sync_binance_account():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/balances")
@@ -30,14 +33,17 @@ async def sync_binance_balances():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/symbols")
@@ -47,14 +53,17 @@ async def sync_binance_symbols():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/trades")
@@ -64,14 +73,17 @@ async def sync_binance_trades():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/klines")
@@ -81,14 +93,17 @@ async def sync_binance_klines():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/performance")
@@ -98,14 +113,17 @@ async def sync_binance_performance():
         return {
             "status": "success",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/sync/full")
@@ -116,14 +134,17 @@ async def sync_binance_full():
             "status": "success",
             "message": "Sincronización completa finalizada",
             "data": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.get("/data/account")
@@ -131,11 +152,14 @@ async def get_binance_account_data():
     try:
         import asyncpg
         import os
-        conn = await asyncpg.connect(os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"))
+
+        conn = await asyncpg.connect(
+            os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+        )
         rows = await conn.fetch(
             """
-            SELECT key, value, description 
-            FROM system_config 
+            SELECT key, value, description
+            FROM system_config
             WHERE key IN ('account_type', 'maker_commission', 'taker_commission')
             ORDER BY key
             """
@@ -144,16 +168,19 @@ async def get_binance_account_data():
         return {
             "status": "success",
             "data": {
-                "account_info": {row['key']: row['value'] for row in rows},
-                "timestamp": datetime.now().isoformat()
-            }
+                "account_info": {row["key"]: row["value"] for row in rows},
+                "timestamp": datetime.now().isoformat(),
+            },
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.get("/data/balances")
@@ -161,11 +188,14 @@ async def get_binance_balances_data():
     try:
         import asyncpg
         import os
-        conn = await asyncpg.connect(os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"))
+
+        conn = await asyncpg.connect(
+            os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+        )
         rows = await conn.fetch(
             """
             SELECT symbol, min_qty, max_qty, step_size, tick_size, created_at
-            FROM asset_limits 
+            FROM asset_limits
             ORDER BY symbol
             """
         )
@@ -175,15 +205,18 @@ async def get_binance_balances_data():
             "data": {
                 "balances": [dict(r) for r in rows],
                 "count": len(rows),
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.get("/data/trades")
@@ -191,12 +224,15 @@ async def get_binance_trades_data():
     try:
         import asyncpg
         import os
-        conn = await asyncpg.connect(os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"))
+
+        conn = await asyncpg.connect(
+            os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+        )
         rows = await conn.fetch(
             """
             SELECT symbol, side, quantity, entry_price, timestamp, strategy
-            FROM trades 
-            ORDER BY timestamp DESC 
+            FROM trades
+            ORDER BY timestamp DESC
             LIMIT 20
             """
         )
@@ -206,15 +242,18 @@ async def get_binance_trades_data():
             "data": {
                 "trades": [dict(r) for r in rows],
                 "count": len(rows),
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.get("/data/performance")
@@ -222,13 +261,16 @@ async def get_binance_performance_data():
     try:
         import asyncpg
         import os
+
         row = None
-        conn = await asyncpg.connect(os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot"))
+        conn = await asyncpg.connect(
+            os.getenv("DATABASE_URL", "postgresql://griduser:gridpass@db:5432/gridbot")
+        )
         row = await conn.fetchrow(
             """
             SELECT total_trades, winning_trades, losing_trades, total_profit, total_loss, win_rate, timestamp
-            FROM performance_metrics 
-            ORDER BY timestamp DESC 
+            FROM performance_metrics
+            ORDER BY timestamp DESC
             LIMIT 1
             """
         )
@@ -237,14 +279,15 @@ async def get_binance_performance_data():
             "status": "success",
             "data": {
                 "performance": dict(row) if row else {},
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
-
-
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )

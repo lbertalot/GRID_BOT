@@ -40,7 +40,9 @@ async def start_user_stream_and_track(api_key: str) -> None:
                 "fees": 0.0,
                 "exchange_status": evt.get("X"),
             }
-            asyncio.create_task(tracker.update_operation_status(client_order_id, status, result))
+            asyncio.create_task(
+                tracker.update_operation_status(client_order_id, status, result)
+            )
         except Exception:
             pass
 
@@ -48,5 +50,3 @@ async def start_user_stream_and_track(api_key: str) -> None:
     # El handler nuevo expone `on_fill` (ejecuciones). Lo usamos como adapter del
     # callback `_on_event` para mantener la semántica de tracking existente.
     await stream.start(on_fill=_on_event)
-
-

@@ -13,5 +13,3 @@
 | -1021 | Timestamp out of sync | TZ no UTC/sincronización | Forzar `TZ=UTC`, verificar hora contenedor |
 | -1013 | Filter failure LOT_SIZE | Cantidad inválida | Ajustar a `step_size` y `minQty` |
 | -1111 | Precision overflow | Decimales excedidos | Redondear según filtros de `exchange_info` |
-
-

@@ -290,10 +290,10 @@
 
                 // Actualizar métricas
                 updateMetrics(metrics, portfolio);
-                
+
                 // Actualizar gráficos
                 updateCharts(allocation);
-                
+
                 // Actualizar lista de distribución
                 updateAllocationList(allocation);
 
@@ -329,7 +329,7 @@
         function updateCharts(allocation) {
             // Gráfico de distribución del portafolio
             const allocationCtx = document.getElementById('allocation-chart').getContext('2d');
-            
+
             if (allocationChart) {
                 allocationChart.destroy();
             }
@@ -361,7 +361,7 @@
 
             // Gráfico de rendimiento (simulado)
             const performanceCtx = document.getElementById('performance-chart').getContext('2d');
-            
+
             if (performanceChart) {
                 performanceChart.destroy();
             }
@@ -420,4 +420,4 @@
         setInterval(loadDashboard, 30000);
     </script>
 </body>
-</html> 
+</html>

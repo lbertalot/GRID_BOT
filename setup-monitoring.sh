@@ -16,9 +16,9 @@ wait_for_service() {
     local service_name=$2
     local max_attempts=30
     local attempt=1
-    
+
     echo "⏳ Esperando que $service_name esté disponible..."
-    
+
     while [ $attempt -le $max_attempts ]; do
         if curl -s "$url" > /dev/null 2>&1; then
             echo "✅ $service_name está disponible."
@@ -28,7 +28,7 @@ wait_for_service() {
         sleep 2
         ((attempt++))
     done
-    
+
     echo "❌ ERROR: $service_name no está disponible después de $max_attempts intentos"
     return 1
 }
@@ -37,26 +37,26 @@ wait_for_service() {
 import_grafana_dashboard() {
     local dashboard_file=$1
     local dashboard_name=$2
-    
+
     echo "📊 Importando dashboard: $dashboard_name"
-    
+
     # Obtener el token de API de Grafana (usando credenciales por defecto)
     local grafana_url="http://localhost:3000"
     local username="admin"
     local password="gridbot123"
-    
+
     # Crear token de API
     local api_key=$(curl -s -X POST \
         -H "Content-Type: application/json" \
         -d '{"name":"gridbot-monitoring","role":"Admin"}' \
         "$grafana_url/api/auth/keys" \
         -u "$username:$password" 2>/dev/null | jq -r '.key' 2>/dev/null || echo "")
-    
+
     if [ -z "$api_key" ] || [ "$api_key" = "null" ]; then
         echo "⚠️  No se pudo crear token de API, usando importación manual"
         return 1
     fi
-    
+
     # Importar dashboard
     local dashboard_json=$(cat "$dashboard_file")
     local import_response=$(curl -s -X POST \
@@ -64,7 +64,7 @@ import_grafana_dashboard() {
         -H "Content-Type: application/json" \
         -d "$dashboard_json" \
         "$grafana_url/api/dashboards/db" 2>/dev/null)
-    
+
     if echo "$import_response" | jq -e '.id' > /dev/null 2>&1; then
         local dashboard_id=$(echo "$import_response" | jq -r '.id')
         echo "✅ Dashboard importado exitosamente (ID: $dashboard_id)"
@@ -109,7 +109,7 @@ if [ -f "gridbot.rules.yml" ]; then
     # Copiar reglas a Prometheus
     docker cp gridbot.rules.yml gridbot_prometheus:/etc/prometheus/rules/
     echo "✅ Reglas de alerta copiadas a Prometheus."
-    
+
     # Recargar configuración de Prometheus
     curl -X POST http://localhost:9090/-/reload
     echo "✅ Configuración de Prometheus recargada."

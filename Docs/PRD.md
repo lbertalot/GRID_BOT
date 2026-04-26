@@ -1,7 +1,7 @@
 # 📄 Product Requirements Document (PRD) – Trading Backend
 
 ## 1. Executive Summary
-Sistema algorítmico de trading para Binance.  
+Sistema algorítmico de trading para Binance.
 Objetivo: ejecución robusta y aprendizaje continuo con PnL positivo y control de riesgos.
 
 ## 2. Contexto y Benchmark

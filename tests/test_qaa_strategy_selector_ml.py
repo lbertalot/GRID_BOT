@@ -20,8 +20,7 @@ HALLAZGOS:
 import os
 import sys
 import pytest
-from datetime import datetime
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import patch
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
@@ -38,7 +37,6 @@ from app.services.strategy_selector import (
     StrategySelector,
     StrategyType,
     StrategySpec,
-    StrategyParams,
     AccountState,
     VolatilityLevel,
 )
@@ -47,6 +45,7 @@ from app.services.strategy_selector import (
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 def _make_account_state(**overrides):
     defaults = {
@@ -76,6 +75,7 @@ def _make_regime_prediction(**overrides):
 # TEST GROUP 1: Selección por régimen
 # ===========================================================================
 
+
 class TestStrategySelectionByRegime:
     """Tests de selección de estrategia por régimen de mercado."""
 
@@ -103,7 +103,11 @@ class TestStrategySelectionByRegime:
         account = _make_account_state(risk_score=0.5)
         result = selector.select_strategy(prediction, "BTCUSDT", account)
         # Puede ser DCA o GRID dependiendo de confidence
-        assert result.strategy_name in [StrategyType.DCA, StrategyType.GRID_TRADING, StrategyType.SCALPING]
+        assert result.strategy_name in [
+            StrategyType.DCA,
+            StrategyType.GRID_TRADING,
+            StrategyType.SCALPING,
+        ]
 
     def test_bear_trend_selects_hold(self, selector):
         """BEAR_TREND debe seleccionar HOLD."""
@@ -140,6 +144,7 @@ class TestStrategySelectionByRegime:
 # TEST GROUP 2: Emergency Stop
 # ===========================================================================
 
+
 class TestEmergencyStopStrategy:
     """Tests de selección de estrategia durante emergency stop."""
 
@@ -158,17 +163,18 @@ class TestEmergencyStopStrategy:
         account = _make_account_state()
         result = selector.select_strategy(prediction, "BTCUSDT", account)
 
-        assert result.strategy_name == StrategyType.HOLD, (
-            f"Emergency stop pero seleccionó {result.strategy_name.value}"
-        )
-        assert result.confidence == 1.0, (
-            f"Confidence debería ser 1.0 en emergency stop, no {result.confidence}"
-        )
+        assert (
+            result.strategy_name == StrategyType.HOLD
+        ), f"Emergency stop pero seleccionó {result.strategy_name.value}"
+        assert (
+            result.confidence == 1.0
+        ), f"Confidence debería ser 1.0 en emergency stop, no {result.confidence}"
 
 
 # ===========================================================================
 # TEST GROUP 3: Fallback seguro
 # ===========================================================================
+
 
 class TestFallbackSafety:
     """Tests de comportamiento seguro ante fallos."""
@@ -185,10 +191,12 @@ class TestFallbackSafety:
         with patch.object(
             selector, "_determine_volatility_level", side_effect=Exception("ML crash")
         ):
-            result = selector.select_strategy(prediction, "BTCUSDT", _make_account_state())
-            assert result.strategy_name == StrategyType.HOLD, (
-                "Excepción en selección debe producir HOLD"
+            result = selector.select_strategy(
+                prediction, "BTCUSDT", _make_account_state()
             )
+            assert (
+                result.strategy_name == StrategyType.HOLD
+            ), "Excepción en selección debe producir HOLD"
 
     def test_invalid_regime_returns_hold(self):
         """Régimen no mapeado debe retornar HOLD como fallback."""
@@ -218,6 +226,7 @@ class TestFallbackSafety:
 # TEST GROUP 4: Confidence adjustments
 # ===========================================================================
 
+
 class TestConfidenceAdjustments:
     """Tests de ajustes de confianza."""
 
@@ -237,7 +246,9 @@ class TestConfidenceAdjustments:
         account_high_risk = _make_account_state(risk_score=0.9)
 
         result_normal = selector.select_strategy(prediction, "BTCUSDT", account_normal)
-        result_risky = selector.select_strategy(prediction, "BTCUSDT", account_high_risk)
+        result_risky = selector.select_strategy(
+            prediction, "BTCUSDT", account_high_risk
+        )
 
         assert result_risky.confidence <= result_normal.confidence, (
             f"Risk alto ({result_risky.confidence}) no redujo confidence "
@@ -270,9 +281,7 @@ class TestConfidenceAdjustments:
         )
         account = _make_account_state()
         result = selector.select_strategy(prediction, "BTCUSDT", account)
-        assert result.confidence <= 1.0, (
-            f"Confidence {result.confidence} excede 1.0"
-        )
+        assert result.confidence <= 1.0, f"Confidence {result.confidence} excede 1.0"
 
     def test_confidence_never_negative(self, selector):
         """Confidence nunca debe ser negativa."""
@@ -282,14 +291,13 @@ class TestConfidenceAdjustments:
         )
         account = _make_account_state(risk_score=0.99, daily_pnl=-0.10)
         result = selector.select_strategy(prediction, "BTCUSDT", account)
-        assert result.confidence >= 0.0, (
-            f"Confidence {result.confidence} es negativa"
-        )
+        assert result.confidence >= 0.0, f"Confidence {result.confidence} es negativa"
 
 
 # ===========================================================================
 # TEST GROUP 5: Volatility level determination
 # ===========================================================================
+
 
 class TestVolatilityLevel:
     """Tests de determinación de nivel de volatilidad."""
@@ -332,12 +340,13 @@ class TestVolatilityLevel:
 # TEST GROUP 6: MLEngine fallback
 # ===========================================================================
 
+
 class TestMLEngineFallback:
     """Tests de fallback del motor ML."""
 
     def test_ml_engine_fallback_when_river_not_available(self):
         """MLEngine debe funcionar sin River instalado."""
-        from app.services.ml_engine import MLEngine, RegimePrediction as MLPred
+        from app.services.ml_engine import MLEngine
 
         engine = MLEngine()
         # Si River no está disponible, pipeline será None
@@ -348,7 +357,7 @@ class TestMLEngineFallback:
     @pytest.mark.asyncio
     async def test_ml_engine_predict_without_training(self):
         """Predicción sin entrenamiento debe retornar fallback seguro."""
-        from app.services.ml_engine import MLEngine, RegimePrediction as MLPred
+        from app.services.ml_engine import MLEngine
 
         engine = MLEngine()
         if engine.pipeline is None:
@@ -382,15 +391,17 @@ class TestMLEngineFallback:
         klines = []
         for i in range(20):
             price = 50000 + i * 100
-            klines.append([
-                1000000 + i * 60000,
-                str(price),
-                str(price * 1.01),
-                str(price * 0.99),
-                str(price + 50),
-                str(1000 + i * 10),
-                1000000 + (i + 1) * 60000,
-            ])
+            klines.append(
+                [
+                    1000000 + i * 60000,
+                    str(price),
+                    str(price * 1.01),
+                    str(price * 0.99),
+                    str(price + 50),
+                    str(1000 + i * 10),
+                    1000000 + (i + 1) * 60000,
+                ]
+            )
         features = await engine.compute_features_from_klines(klines)
         assert isinstance(features["volatility"], float)
         assert isinstance(features["rsi"], float)
@@ -427,6 +438,7 @@ class TestMLEngineFallback:
 # ===========================================================================
 # TEST GROUP 7: Strategy params validation
 # ===========================================================================
+
 
 class TestStrategyParamsValidation:
     """Tests de validación de parámetros de estrategia."""

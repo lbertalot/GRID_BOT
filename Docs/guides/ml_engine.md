@@ -50,5 +50,3 @@ Integration notes
 - `MarketDataCollector` handles caching and rate-limiting to minimize exchange load.
 - Drift handling: `ADWIN` reset of the metric on detected change; you can externalize this signal to adjust strategy confidence.
 - This engine produces a simplified prediction. If you need long/short horizon regimes for `StrategySelector`, use `HybridMLEngine`.
-
-

@@ -15,13 +15,11 @@ Compatibilidad:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from app.core.risk_manager import RegimePrediction as RiskRegimePrediction
@@ -63,7 +61,9 @@ class MLEngine:
     """
 
     def __init__(self, model_path: Optional[str] = None):
-        self.model_path = model_path or os.getenv("ML_MODEL_PATH", "data/ml/regime_model.joblib")
+        self.model_path = model_path or os.getenv(
+            "ML_MODEL_PATH", "data/ml/regime_model.joblib"
+        )
         self.metric = None
         self.drift_detector = ADWIN() if ADWIN else None
         self.pipeline = None
@@ -97,10 +97,18 @@ class MLEngine:
         model_dir.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(joblib.dump, self.pipeline, self.model_path)
 
-    async def compute_features_from_klines(self, klines: List[List[Any]]) -> Dict[str, float]:
+    async def compute_features_from_klines(
+        self, klines: List[List[Any]]
+    ) -> Dict[str, float]:
         """Extrae features a partir de klines: volatilidad, spread, volumen, RSI, ATR."""
         if not klines:
-            return {"volatility": 0.0, "spread": 0.0, "volume": 0.0, "rsi": 50.0, "atr": 0.0}
+            return {
+                "volatility": 0.0,
+                "spread": 0.0,
+                "volume": 0.0,
+                "rsi": 50.0,
+                "atr": 0.0,
+            }
 
         closes = [float(k[4]) for k in klines]
         highs = [float(k[2]) for k in klines]
@@ -114,7 +122,17 @@ class MLEngine:
             cur = closes[i]
             if prev > 0:
                 returns.append((cur - prev) / prev)
-        volatility = float((sum((x - (sum(returns) / len(returns))) ** 2 for x in returns) / max(1, len(returns))) ** 0.5) if returns else 0.0
+        volatility = (
+            float(
+                (
+                    sum((x - (sum(returns) / len(returns))) ** 2 for x in returns)
+                    / max(1, len(returns))
+                )
+                ** 0.5
+            )
+            if returns
+            else 0.0
+        )
 
         # Spread medio relativo
         spreads = []
@@ -157,7 +175,9 @@ class MLEngine:
         closes = [float(k[4]) for k in klines]
         return 1 if closes[-1] > closes[0] else 0
 
-    async def train_on_symbol(self, symbol: str, interval: str = "1m", limit: int = 60) -> None:
+    async def train_on_symbol(
+        self, symbol: str, interval: str = "1m", limit: int = 60
+    ) -> None:
         """Entrena incrementalmente con klines recientes de un símbolo.
         Usa etiqueta heurística derivada de la tendencia reciente.
         """
@@ -172,7 +192,9 @@ class MLEngine:
             try:
                 self.drift_detector.update(x["volatility"])  # señal simple
                 if self.drift_detector.change_detected:
-                    logger.info("Cambio de régimen detectado por ADWIN; reiniciando métrica")
+                    logger.info(
+                        "Cambio de régimen detectado por ADWIN; reiniciando métrica"
+                    )
                     self.metric = rv_metrics.LogLoss()
             except Exception:
                 pass
@@ -181,11 +203,15 @@ class MLEngine:
         try:
             self.pipeline = self.pipeline.learn_one(x, y)
             if self.metric is not None:
-                self.metric = self.metric.update(y, self.pipeline.predict_proba_one(x).get(True, 0.5))
+                self.metric = self.metric.update(
+                    y, self.pipeline.predict_proba_one(x).get(True, 0.5)
+                )
         except Exception as e:
             logger.warning(f"Error entrenando modelo online: {e}")
 
-    async def predict_regime(self, symbol: str, interval: str = "1m", limit: int = 60) -> RegimePrediction:
+    async def predict_regime(
+        self, symbol: str, interval: str = "1m", limit: int = 60
+    ) -> RegimePrediction:
         """Predice régimen (0/1) y probabilidad para un símbolo.
         Si el modelo no está disponible, retorna valores por defecto.
         """
@@ -202,11 +228,16 @@ class MLEngine:
             return RegimePrediction(label=0, proba=0.5)
 
 
-def ml_prediction_to_regime_prediction(ml_pred: RegimePrediction) -> "RiskRegimePrediction":
+def ml_prediction_to_regime_prediction(
+    ml_pred: RegimePrediction,
+) -> "RiskRegimePrediction":
     """Convierte la salida de MLEngine.predict_regime a RegimePrediction del risk_manager.
     label 0 -> RANGE, label 1 -> BULL_TREND; proba se usa como confianza.
     """
-    from app.core.risk_manager import MarketRegime, RegimePrediction as RiskRegimePrediction
+    from app.core.risk_manager import (
+        MarketRegime,
+        RegimePrediction as RiskRegimePrediction,
+    )
 
     long_regime = MarketRegime.RANGE if ml_pred.label == 0 else MarketRegime.BULL_TREND
     short_regime = long_regime
@@ -217,5 +248,3 @@ def ml_prediction_to_regime_prediction(ml_pred: RegimePrediction) -> "RiskRegime
         long_conf=conf,
         short_conf=conf,
     )
-
-

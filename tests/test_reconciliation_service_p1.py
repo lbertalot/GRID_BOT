@@ -16,6 +16,7 @@ Política:
   - 100% offline (TESTING_RULES §1).
   - Decimal y casts explícitos para precios.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
