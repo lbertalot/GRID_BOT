@@ -1,3 +1,12 @@
+# GridBot
+
+[![CI / CD](https://github.com/lbertalot/GRID_BOT/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lbertalot/GRID_BOT/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/lbertalot/GRID_BOT/branch/main/graph/badge.svg)](https://codecov.io/gh/lbertalot/GRID_BOT)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](#)
+
+> Para el flujo TDD ver [`docs/TDD_WORKFLOW.md`](docs/TDD_WORKFLOW.md) y para el pipeline ver [`docs/CICD_RUNBOOK.md`](docs/CICD_RUNBOOK.md).
+
 ### Ejecutar tests en Docker
 
 1. Levantar servicios

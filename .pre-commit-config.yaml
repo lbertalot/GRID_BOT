@@ -1,5 +1,16 @@
-# Hooks locales: instalar con `pip install pre-commit && pre-commit install`
+# Hooks locales — Calidad y seguridad antes del commit
+#
+# Instalación (una sola vez por desarrollador):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Ejecución manual sobre todo el repo:
+#   pre-commit run --all-files
+#
+# Ver docs/CICD_RUNBOOK.md para el flujo completo.
+
 repos:
+  # ── Higiene básica ──────────────────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -7,3 +18,50 @@ repos:
         args: ["--maxkb=1000"]
       - id: end-of-file-fixer
       - id: trailing-whitespace
+      - id: check-yaml
+        # excluir templates/jinja con sintaxis no estándar
+        exclude: ^docker/grafana/dashboards/.*$
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # ── ruff: linting + formatting (rápido) ─────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(app|tests|scripts)/
+      - id: ruff-format
+        files: ^(app|tests|scripts)/
+
+  # ── Bandit: seguridad estática (mismo umbral que CI) ────────────────────
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args:
+          - "-r"
+          - "app"
+          - "--skip"
+          - "B101,B601"
+          - "--severity-level"
+          - "medium"
+          - "--confidence-level"
+          - "medium"
+        # bandit ya recorre el directorio; pre-commit no debe pasarle archivos
+        pass_filenames: false
+
+  # ── detect-secrets: bloquear commits con keys/tokens reales ─────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: |
+          (?x)^(
+            \.secrets\.baseline|
+            tests/.*|
+            docker/.*|
+            scripts/archive/.*
+          )$
