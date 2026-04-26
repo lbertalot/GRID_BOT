@@ -12,6 +12,7 @@ Política:
   - Sin lógica de negocio modificada (TESTING_RULES §1).
   - Decimal en cálculos monetarios (AGENTS.md §Estilo).
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -62,7 +63,9 @@ def executor_with_mocks() -> tuple[TradeExecutor, MagicMock, MagicMock]:
     executor = TradeExecutor()
     mock_client = MagicMock()
     executor.binance_client = mock_client
-    with patch("app.services.trade_executor.BalanceService.update_balance") as mock_update:
+    with patch(
+        "app.services.trade_executor.BalanceService.update_balance"
+    ) as mock_update:
         with patch("app.services.trade_executor.SessionLocal") as mock_session:
             mock_session.return_value = MagicMock()
             yield executor, mock_client, mock_update
@@ -149,7 +152,9 @@ def test_execute_order_reintenta_en_error_1021(executor_with_mocks):
 def test_execute_order_otros_errores_no_reintentan(executor_with_mocks):
     """Errores distintos a -1021 deben re-elevarse sin reintento."""
     executor, mock_client, _ = executor_with_mocks
-    mock_client.create_order.side_effect = Exception("APIError(code=-2010): insufficient balance")
+    mock_client.create_order.side_effect = Exception(
+        "APIError(code=-2010): insufficient balance"
+    )
 
     with pytest.raises(Exception, match="-2010"):
         executor.execute_order("BTCUSDT", "BUY", "MARKET", "0.001")
@@ -176,7 +181,9 @@ def test_execute_order_status_new_no_actualiza_balance(executor_with_mocks):
 def test_execute_order_partially_filled_actualiza_balance(executor_with_mocks):
     """PARTIALLY_FILLED sí debe propagar la actualización contable."""
     executor, mock_client, mock_update = executor_with_mocks
-    mock_client.create_order.return_value = _make_filled_order(status="PARTIALLY_FILLED")
+    mock_client.create_order.return_value = _make_filled_order(
+        status="PARTIALLY_FILLED"
+    )
 
     executor.execute_order("BTCUSDT", "BUY", "MARKET", "0.001")
 
@@ -199,7 +206,12 @@ def test_buy_actualiza_balances_con_decimal_y_comision(executor_with_mocks):
     mock_client.create_order.return_value = _make_filled_order(
         executed_qty="0.001",
         fills=[
-            {"qty": "0.001", "price": "50000.00", "commission": "0.05", "commissionAsset": "USDT"}
+            {
+                "qty": "0.001",
+                "price": "50000.00",
+                "commission": "0.05",
+                "commissionAsset": "USDT",
+            }
         ],
     )
 
@@ -227,7 +239,12 @@ def test_sell_actualiza_balances_con_decimal_y_comision(executor_with_mocks):
     mock_client.create_order.return_value = _make_filled_order(
         executed_qty="0.001",
         fills=[
-            {"qty": "0.001", "price": "50000.00", "commission": "0.05", "commissionAsset": "USDT"}
+            {
+                "qty": "0.001",
+                "price": "50000.00",
+                "commission": "0.05",
+                "commissionAsset": "USDT",
+            }
         ],
     )
 
@@ -248,8 +265,18 @@ def test_buy_multiples_fills_promedia_precio_ponderado(executor_with_mocks):
     mock_client.create_order.return_value = _make_filled_order(
         executed_qty="0.001",
         fills=[
-            {"qty": "0.0006", "price": "50000.00", "commission": "0.03", "commissionAsset": "USDT"},
-            {"qty": "0.0004", "price": "51000.00", "commission": "0.02", "commissionAsset": "USDT"},
+            {
+                "qty": "0.0006",
+                "price": "50000.00",
+                "commission": "0.03",
+                "commissionAsset": "USDT",
+            },
+            {
+                "qty": "0.0004",
+                "price": "51000.00",
+                "commission": "0.02",
+                "commissionAsset": "USDT",
+            },
         ],
     )
 
@@ -270,9 +297,7 @@ def test_execute_order_update_balance_false_no_toca_db(executor_with_mocks):
     executor, mock_client, mock_update = executor_with_mocks
     mock_client.create_order.return_value = _make_filled_order()
 
-    executor.execute_order(
-        "BTCUSDT", "BUY", "MARKET", "0.001", update_balance=False
-    )
+    executor.execute_order("BTCUSDT", "BUY", "MARKET", "0.001", update_balance=False)
 
     mock_update.assert_not_called()
 

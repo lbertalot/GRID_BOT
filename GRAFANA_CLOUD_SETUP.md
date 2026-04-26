@@ -254,4 +254,3 @@ Para configurar Grafana Cloud rápidamente:
 5. **Explore** → Query: gridbot_api_requests_total
 
 ¡Listo! Las métricas deberían aparecer automáticamente.
-

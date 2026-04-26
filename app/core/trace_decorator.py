@@ -36,11 +36,13 @@ def traced(
         span_name: Nombre del span. Si None, usa <module>.<funcname>.
         attributes: Atributos adicionales a agregar al span.
     """
+
     def decorator(fn: Callable) -> Callable:
         name = span_name or f"{fn.__module__}.{fn.__qualname__}"
         extra_attrs = attributes or {}
 
         if inspect.iscoroutinefunction(fn):
+
             @functools.wraps(fn)
             async def async_wrapper(*args, **kwargs):
                 tracer = _get_tracer()
@@ -51,8 +53,10 @@ def traced(
                     except Exception as exc:
                         _record_error(span, exc)
                         raise
+
             return async_wrapper
         else:
+
             @functools.wraps(fn)
             def sync_wrapper(*args, **kwargs):
                 tracer = _get_tracer()
@@ -63,6 +67,7 @@ def traced(
                     except Exception as exc:
                         _record_error(span, exc)
                         raise
+
             return sync_wrapper
 
     return decorator
@@ -70,6 +75,7 @@ def traced(
 
 def _get_tracer():
     from app.core.tracing import get_tracer
+
     return get_tracer("gridbot")
 
 
@@ -84,6 +90,7 @@ def _set_attributes(span, attrs: dict) -> None:
 def _record_error(span, exc: Exception) -> None:
     try:
         from opentelemetry.trace import StatusCode
+
         span.set_status(StatusCode.ERROR, str(exc))
         span.record_exception(exc)
     except Exception:

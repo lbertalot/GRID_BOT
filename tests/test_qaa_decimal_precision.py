@@ -19,8 +19,7 @@ import os
 import sys
 import ast
 import pytest
-from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP, getcontext, InvalidOperation
-from pathlib import Path
+from decimal import Decimal, ROUND_DOWN, getcontext, InvalidOperation
 from typing import List
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -33,6 +32,7 @@ os.environ.setdefault("SKIP_API_HEALTHCHECK", "1")
 # ===========================================================================
 # TEST GROUP 1: Auditoría estática - Detección de float en cálculos monetarios
 # ===========================================================================
+
 
 class TestStaticFloatAudit:
     """
@@ -69,11 +69,13 @@ class TestStaticFloatAudit:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name) and node.func.id == "float":
-                    results.append({
-                        "file": filepath,
-                        "line": node.lineno,
-                        "col": node.col_offset,
-                    })
+                    results.append(
+                        {
+                            "file": filepath,
+                            "line": node.lineno,
+                            "col": node.col_offset,
+                        }
+                    )
         return results
 
     def test_detect_float_in_order_validation(self):
@@ -88,7 +90,7 @@ class TestStaticFloatAudit:
             msg = (
                 f"⚠️ HALLAZGO: {len(findings)} llamadas a float() encontradas "
                 f"en order_validation.py:\n" + "\n".join(lines) + "\n"
-                f"Recomendación: usar Decimal(str(...)) en lugar de float()"
+                "Recomendación: usar Decimal(str(...)) en lugar de float()"
             )
             # Registrar como advertencia, no como fallo inmediato
             assert True, msg
@@ -127,6 +129,7 @@ class TestStaticFloatAudit:
 # TEST GROUP 2: Precisión de Decimal en operaciones financieras
 # ===========================================================================
 
+
 class TestDecimalPrecision:
     """Tests de precisión de cálculos con Decimal."""
 
@@ -143,9 +146,7 @@ class TestDecimalPrecision:
         qty = 0.00021
         result = price * qty
         expected = 10.5000021
-        assert result != expected, (
-            "Si float es exacto aquí, probar con otros valores"
-        )
+        assert result != expected, "Si float es exacto aquí, probar con otros valores"
 
     def test_decimal_division_controlled_precision(self):
         """División Decimal debe mantener precisión configurable."""
@@ -153,9 +154,7 @@ class TestDecimalPrecision:
         a = Decimal("10.00")
         b = Decimal("3.00")
         result = a / b
-        assert str(result).startswith("3.33333333"), (
-            f"Precisión insuficiente: {result}"
-        )
+        assert str(result).startswith("3.33333333"), f"Precisión insuficiente: {result}"
 
     def test_cumulative_float_error(self):
         """
@@ -172,30 +171,26 @@ class TestDecimalPrecision:
             total_decimal += increment_d
 
         diff = abs(total_float - float(total_decimal))
-        assert diff > 1e-14, (
-            "Error acumulativo de float demasiado pequeño para este test"
-        )
-        assert diff < 1e-10, (
-            f"Error acumulativo excesivo: {diff}"
-        )
+        assert (
+            diff > 1e-14
+        ), "Error acumulativo de float demasiado pequeño para este test"
+        assert diff < 1e-10, f"Error acumulativo excesivo: {diff}"
 
     def test_decimal_for_commission_calculation(self):
         """Comisiones deben calcularse con Decimal."""
         trade_value = Decimal("10500.50")
         commission_rate = Decimal("0.001")  # 0.1% Binance fee
         commission = trade_value * commission_rate
-        assert commission == Decimal("10.50050"), (
-            f"Comisión incorrecta: {commission}"
-        )
+        assert commission == Decimal("10.50050"), f"Comisión incorrecta: {commission}"
 
     def test_decimal_round_down_for_quantities(self):
         """Cantidades siempre deben redondearse DOWN, nunca UP."""
         qty = Decimal("0.123456789")
         step = Decimal("0.00001")
         rounded = (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
-        assert rounded == Decimal("0.12345"), (
-            f"Redondeo incorrecto: {rounded}. Debe ser ROUND_DOWN."
-        )
+        assert rounded == Decimal(
+            "0.12345"
+        ), f"Redondeo incorrecto: {rounded}. Debe ser ROUND_DOWN."
 
     def test_decimal_round_down_never_exceeds_original(self):
         """El resultado de ROUND_DOWN nunca debe exceder el valor original."""
@@ -208,9 +203,7 @@ class TestDecimalPrecision:
         step = Decimal("0.00001")
         for val in test_values:
             rounded = (val / step).to_integral_value(rounding=ROUND_DOWN) * step
-            assert rounded <= val, (
-                f"ROUND_DOWN excedió original: {rounded} > {val}"
-            )
+            assert rounded <= val, f"ROUND_DOWN excedió original: {rounded} > {val}"
 
     def test_negative_decimal_handling(self):
         """Verificar comportamiento con Decimales negativos."""
@@ -230,6 +223,7 @@ class TestDecimalPrecision:
 # ===========================================================================
 # TEST GROUP 3: Hallazgo - trade_executor.py hardcodea USDT como quote asset
 # ===========================================================================
+
 
 class TestTradeExecutorAssetParsing:
     """
@@ -251,14 +245,18 @@ class TestTradeExecutorAssetParsing:
     SYMBOL_CASES = [
         ("BTCUSDT", "BTC", "USDT", True),
         ("ETHUSDT", "ETH", "USDT", True),
-        ("ETHBTC", "ETH", "BTC", False),    # BTC = 3 chars, FALLA
-        ("BTCEUR", "BTC", "EUR", False),      # EUR = 3 chars, FALLA
+        ("ETHBTC", "ETH", "BTC", False),  # BTC = 3 chars, FALLA
+        ("BTCEUR", "BTC", "EUR", False),  # EUR = 3 chars, FALLA
         ("SHIBUSDT", "SHIB", "USDT", True),
         ("BTCBUSD", "BTC", "BUSD", True),
     ]
 
-    @pytest.mark.parametrize("symbol,expected_base,expected_quote,should_work", SYMBOL_CASES)
-    def test_asset_extraction_from_symbol(self, symbol, expected_base, expected_quote, should_work):
+    @pytest.mark.parametrize(
+        "symbol,expected_base,expected_quote,should_work", SYMBOL_CASES
+    )
+    def test_asset_extraction_from_symbol(
+        self, symbol, expected_base, expected_quote, should_work
+    ):
         """Verifica extracción de base/quote del símbolo."""
         # Reproduce la lógica de trade_executor.py línea 187
         base_asset = symbol[:-4]
@@ -274,7 +272,7 @@ class TestTradeExecutorAssetParsing:
                 f"obtuvo '{quote_asset}', esperaba '{expected_quote}'"
             )
         else:
-            is_wrong = (base_asset != expected_base or quote_asset != expected_quote)
+            is_wrong = base_asset != expected_base or quote_asset != expected_quote
             assert is_wrong, (
                 f"SORPRESA: La lógica hardcoded funciona para {symbol}, "
                 f"pero no debería para pares con quote != 4 chars"
@@ -299,6 +297,7 @@ class TestTradeExecutorAssetParsing:
 # ===========================================================================
 # TEST GROUP 4: Precision edge cases
 # ===========================================================================
+
 
 class TestPrecisionEdgeCases:
     """Tests de casos extremos de precisión."""
@@ -345,6 +344,6 @@ class TestPrecisionEdgeCases:
         bad_way = Decimal(0.1)  # Hereda imprecisión de float
         good_way = Decimal(str(0.1))  # Exacto
         assert good_way == Decimal("0.1")
-        assert bad_way != Decimal("0.1"), (
-            "Decimal(float) es inexacto; siempre usar Decimal(str(float))"
-        )
+        assert bad_way != Decimal(
+            "0.1"
+        ), "Decimal(float) es inexacto; siempre usar Decimal(str(float))"

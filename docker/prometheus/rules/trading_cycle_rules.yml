@@ -48,4 +48,3 @@ groups:
         annotations:
           summary: "Errores de API de Binance elevados"
           description: "Tasa > 1 error/min en 5m"
-

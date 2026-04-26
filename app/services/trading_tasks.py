@@ -5,8 +5,8 @@ Tareas de trading mejoradas con logging detallado y validaciones robustas
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from datetime import datetime
+from typing import Dict, Optional, Any
 from celery import shared_task
 from app.core.celery_app import celery_app
 import os
@@ -31,9 +31,14 @@ from app.core.metrics import (
 from app.services.market_data_collector import MarketDataCollector
 from app.services.ml_engine import MLEngine, ml_prediction_to_regime_prediction
 from app.services.strategy_selector import StrategySelector, AccountState
-from app.core.risk_manager import RiskManager, PositionSizeParams
+from app.core.risk_manager import RiskManager
 from app.services.cache import get_async_cache
-from app.core.metrics import dust_assets_count, dust_value_usd, dust_swept_usd_total, last_dust_sweep_timestamp
+from app.core.metrics import (
+    dust_assets_count,
+    dust_value_usd,
+    dust_swept_usd_total,
+    last_dust_sweep_timestamp,
+)
 from app.services.auto_rebalancer_v2 import auto_rebalancer_v2
 from app.services.trade_executor import get_trade_executor
 from app.core.distributed_lock import with_distributed_lock
@@ -51,9 +56,10 @@ MIN_NOTIONAL_USDT = 10.5
 SAFE_MIN_USDT = 15.0  # Reducido de 20.0 a 15.0 para permitir trading con menos liquidez
 
 # Modo de calibración para validar nuevos parámetros sin riesgo
-CALIBRATION_MODE = os.getenv('CALIBRATION_MODE', 'false').lower() == 'true'
+CALIBRATION_MODE = os.getenv("CALIBRATION_MODE", "false").lower() == "true"
 BALANCES_CACHE_KEY = "balances:last"
 BALANCES_TTL = 300
+
 
 async def _get_cycle_state() -> Dict[str, Any]:
     """Obtiene el estado actual del ciclo desde cache"""
@@ -61,18 +67,22 @@ async def _get_cycle_state() -> Dict[str, Any]:
     if not raw:
         return {"started_at": None, "decision": None}
     import json
+
     try:
         return json.loads(raw)
     except Exception:
         return {"started_at": None, "decision": None}
 
+
 async def _set_cycle_state(state: Dict[str, Any]) -> None:
     """Guarda el estado del ciclo en cache"""
     await _CACHE.set(_CYCLE_KEY, state, ttl_seconds=_CYCLE_TTL)
 
+
 def _now_ts() -> float:
     """Obtiene timestamp actual en UTC"""
     return datetime.utcnow().timestamp()
+
 
 async def _get_cached_balances() -> Optional[Dict[str, float]]:
     """Obtiene balances desde cache"""
@@ -80,19 +90,22 @@ async def _get_cached_balances() -> Optional[Dict[str, float]]:
     if not raw:
         return None
     import json
+
     try:
         return json.loads(raw)
     except Exception:
         return None
 
+
 async def _set_cached_balances(balances: Dict[str, float]) -> None:
     """Guarda balances en cache"""
     await _CACHE.set(BALANCES_CACHE_KEY, balances, ttl_seconds=BALANCES_TTL)
 
+
 async def _fetch_balances_with_retry(
     manager: Any,  # OptimizedGridManager
-    retries: int = 3, 
-    delay_seconds: float = 1.0
+    retries: int = 3,
+    delay_seconds: float = 1.0,
 ) -> Dict[str, float]:
     last_err: Optional[Exception] = None
     for i in range(retries):
@@ -103,7 +116,9 @@ async def _fetch_balances_with_retry(
                 return b
         except Exception as e:
             last_err = e
-            logger.warning(f"[Cycle] Fallo obteniendo balances (intento {i+1}/{retries}): {e}")
+            logger.warning(
+                f"[Cycle] Fallo obteniendo balances (intento {i+1}/{retries}): {e}"
+            )
         await asyncio.sleep(delay_seconds)
     # Fallback a caché
     cached = await _get_cached_balances()
@@ -114,12 +129,13 @@ async def _fetch_balances_with_retry(
         raise last_err
     return {}
 
+
 @celery_app.task
 @with_distributed_lock("trading_cycle", timeout=300, blocking=False)
 def trading_cycle_tick() -> Dict[str, Any]:
     """
     Tick cada 60s que orquesta un ciclo de 5 minutos (4m evaluación, 1m ejecución).
-    
+
     Con lock distribuido para prevenir ejecuciones concurrentes.
     Si un ciclo anterior aún está corriendo, este ciclo se omite automáticamente.
     """
@@ -151,19 +167,25 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 ml = MLEngine()
                 # Universo temporal restringido para ejecuciones seguras
                 symbols = ["ETHUSDT"]
-                
+
                 # Verificar blacklist antes de procesar símbolos
                 filtered_symbols = []
                 for symbol in symbols:
-                    should_block, reason = strategy_blacklist.should_block_trading(symbol, "GridTrading")
+                    should_block, reason = strategy_blacklist.should_block_trading(
+                        symbol, "GridTrading"
+                    )
                     if should_block:
-                        logger.warning(f"🚫 Símbolo {symbol} bloqueado por blacklist: {reason}")
+                        logger.warning(
+                            f"🚫 Símbolo {symbol} bloqueado por blacklist: {reason}"
+                        )
                     else:
                         filtered_symbols.append(symbol)
-                
+
                 symbols = filtered_symbols
                 if not symbols:
-                    logger.warning("[Cycle] Todos los símbolos están en blacklist, omitiendo ejecución")
+                    logger.warning(
+                        "[Cycle] Todos los símbolos están en blacklist, omitiendo ejecución"
+                    )
                     return
                 decisions = state.get("decision") or {}
                 # Estado de cuenta (equity, balance, exposición)
@@ -171,8 +193,12 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 available_balance = 0.0
                 total_exposure = 0.0
                 try:
-                    mgr = await create_optimized_grid_manager('grid_config_optimized.json')
-                    balances = await _fetch_balances_with_retry(mgr, retries=3, delay_seconds=1.5)
+                    mgr = await create_optimized_grid_manager(
+                        "grid_config_optimized.json"
+                    )
+                    balances = await _fetch_balances_with_retry(
+                        mgr, retries=3, delay_seconds=1.5
+                    )
                     summary = await fund_manager.get_trading_summary(balances)
                     total_equity = float(summary.get("total_value_usdt", 0.0) or 0.0)
                     available_balance = float(summary.get("usdt_balance", 0.0) or 0.0)
@@ -183,15 +209,27 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 breakers_block = False
                 try:
                     # Verificar y activar circuit breakers automáticamente
-                    activation_results = await auto_circuit_breaker.check_and_activate_breakers()
-                    
+                    activation_results = (
+                        await auto_circuit_breaker.check_and_activate_breakers()
+                    )
+
                     # Verificar estado después de auto-activación
                     ck = CircuitBreakers()
-                    breakers = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
-                    if breakers.get('critical_mode') or ('system_integrity' in breakers.get('active_breakers', [])):
+                    breakers = (
+                        ck.get_all_breakers_status()
+                        if hasattr(ck, "get_all_breakers_status")
+                        else {}
+                    )
+                    if breakers.get("critical_mode") or (
+                        "system_integrity" in breakers.get("active_breakers", [])
+                    ):
                         breakers_block = True
-                        logger.warning(f"[Cycle] Circuit breakers activos: {activation_results.get('breakers_activated', [])}")
-                        logger.warning(f"[Cycle] Razones: {activation_results.get('reasons', [])}")
+                        logger.warning(
+                            f"[Cycle] Circuit breakers activos: {activation_results.get('breakers_activated', [])}"
+                        )
+                        logger.warning(
+                            f"[Cycle] Razones: {activation_results.get('reasons', [])}"
+                        )
                 except Exception as e:
                     logger.error(f"[Cycle] Error verificando circuit breakers: {e}")
                     breakers_block = False
@@ -201,8 +239,12 @@ def trading_cycle_tick() -> Dict[str, Any]:
                     paper_mode = os.getenv("PAPER_TRADING", "false").lower() == "true"
                     if paper_mode:
                         from app.core.paper_trading import get_paper_portfolio_summary
+
                         paper_summary = get_paper_portfolio_summary()
-                        available_balance = float(paper_summary.get("current_balance", available_balance) or available_balance)
+                        available_balance = float(
+                            paper_summary.get("current_balance", available_balance)
+                            or available_balance
+                        )
                 except Exception:
                     pass
 
@@ -224,7 +266,10 @@ def trading_cycle_tick() -> Dict[str, Any]:
                                 ml_regime_used_in_cycle_total.labels(symbol=sym).inc()
                                 logger.debug(
                                     "[Cycle] ML regime used",
-                                    extra={"symbol": sym, "regime": rp.long_regime.value},
+                                    extra={
+                                        "symbol": sym,
+                                        "regime": rp.long_regime.value,
+                                    },
                                 )
                             except Exception as ml_err:
                                 logger.warning(
@@ -237,7 +282,9 @@ def trading_cycle_tick() -> Dict[str, Any]:
                                     long_conf=0.6,
                                     short_conf=0.6,
                                 )
-                                ml_regime_fallback_total.labels(symbol=sym, reason="error").inc()
+                                ml_regime_fallback_total.labels(
+                                    symbol=sym, reason="error"
+                                ).inc()
                         else:
                             rp = RegimePrediction(
                                 long_regime=MarketRegime.RANGE,
@@ -245,27 +292,41 @@ def trading_cycle_tick() -> Dict[str, Any]:
                                 long_conf=0.6,
                                 short_conf=0.6,
                             )
-                            ml_regime_fallback_total.labels(symbol=sym, reason="disabled").inc()
+                            ml_regime_fallback_total.labels(
+                                symbol=sym, reason="disabled"
+                            ).inc()
 
                         account = AccountState(
                             total_equity=total_equity or 300.0,
                             available_balance=available_balance or 50.0,
-                            total_exposure=total_exposure if total_equity > 0 else 250.0,
+                            total_exposure=total_exposure
+                            if total_equity > 0
+                            else 250.0,
                             daily_pnl=0.0,
                             max_drawdown=0.0,
                             risk_score=0.1,
                         )
                         spec = selector.select_strategy(rp, sym, account)
-                        conf = float(getattr(spec, 'confidence', 0.6))
+                        conf = float(getattr(spec, "confidence", 0.6))
                         # Requisitos de readiness: confianza, liquidez mínima y breakers inactivos
                         # En PAPER_TRADING relajamos el mínimo a MIN_NOTIONAL
-                        min_cash = (MIN_NOTIONAL_USDT if (os.getenv("PAPER_TRADING", "false").lower() == "true") else max(MIN_NOTIONAL_USDT, SAFE_MIN_USDT))
-                        ready = (conf >= MIN_DECISION_CONFIDENCE) and (available_balance >= min_cash) and (not breakers_block)
+                        min_cash = (
+                            MIN_NOTIONAL_USDT
+                            if (os.getenv("PAPER_TRADING", "false").lower() == "true")
+                            else max(MIN_NOTIONAL_USDT, SAFE_MIN_USDT)
+                        )
+                        ready = (
+                            (conf >= MIN_DECISION_CONFIDENCE)
+                            and (available_balance >= min_cash)
+                            and (not breakers_block)
+                        )
                         decisions[sym] = {
-                            "strategy": getattr(spec.strategy_name, 'value', str(spec.strategy_name)),
+                            "strategy": getattr(
+                                spec.strategy_name, "value", str(spec.strategy_name)
+                            ),
                             "confidence": conf,
                             "price": float(price),
-                            "ready": ready
+                            "ready": ready,
                         }
                     except Exception as e:
                         logger.warning(f"[Cycle] Eval fallo {sym}: {e}")
@@ -277,7 +338,9 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 if 210 <= elapsed < 240 and decisions:
                     for sym, d in decisions.items():
                         if d.get("ready"):
-                            cycle_decision_ready.labels(symbol=sym, strategy=d.get("strategy","grid")).set(_now_ts())
+                            cycle_decision_ready.labels(
+                                symbol=sym, strategy=d.get("strategy", "grid")
+                            ).set(_now_ts())
                 return
 
             # 240–300s: ejecución
@@ -285,28 +348,52 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 cycle_phase.labels(phase="execution").set(_now_ts())
                 decisions = state.get("decision") or {}
                 # Considerar listo si hay decisión y breakers inactivos; en tests se fuerza con PYTEST_CURRENT_TEST
-                ready_symbols = [s for s, d in (decisions or {}).items() if d and d.get("ready")]
+                ready_symbols = [
+                    s for s, d in (decisions or {}).items() if d and d.get("ready")
+                ]
                 if not ready_symbols:
                     # Fallback para compatibilidad de test: si hay decisiones y breakers inactivos, encolar
                     try:
                         ck = CircuitBreakers()
-                        breakers = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
-                        if decisions and not breakers.get('critical_mode') and not breakers.get('active_breakers'):
+                        breakers = (
+                            ck.get_all_breakers_status()
+                            if hasattr(ck, "get_all_breakers_status")
+                            else {}
+                        )
+                        if (
+                            decisions
+                            and not breakers.get("critical_mode")
+                            and not breakers.get("active_breakers")
+                        ):
                             execute_trading_cycle.delay()
                             for sym in decisions.keys():
-                                cycle_order_executed.labels(symbol=sym, status="sent").set(_now_ts())
-                            logger.info("[Cycle] ✅ Ejecución enviada (fallback sin ready) por compatibilidad")
+                                cycle_order_executed.labels(
+                                    symbol=sym, status="sent"
+                                ).set(_now_ts())
+                            logger.info(
+                                "[Cycle] ✅ Ejecución enviada (fallback sin ready) por compatibilidad"
+                            )
                             return
                     except Exception:
                         pass
-                    logger.info("[Cycle] Sin decisión lista (ready=false); se omite ejecución en minuto 5")
+                    logger.info(
+                        "[Cycle] Sin decisión lista (ready=false); se omite ejecución en minuto 5"
+                    )
                     return
                 # Breakers
                 try:
                     ck = CircuitBreakers()
-                    breakers = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
-                    if breakers.get('critical_mode') or ('system_integrity' in breakers.get('active_breakers', [])):
-                        logger.warning("[Cycle] Ciclo protegido por breakers activos; sin ejecución")
+                    breakers = (
+                        ck.get_all_breakers_status()
+                        if hasattr(ck, "get_all_breakers_status")
+                        else {}
+                    )
+                    if breakers.get("critical_mode") or (
+                        "system_integrity" in breakers.get("active_breakers", [])
+                    ):
+                        logger.warning(
+                            "[Cycle] Ciclo protegido por breakers activos; sin ejecución"
+                        )
                         return
                 except Exception:
                     pass
@@ -314,8 +401,12 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 try:
                     execute_trading_cycle.delay()
                     for sym in ready_symbols:
-                        cycle_order_executed.labels(symbol=sym, status="sent").set(_now_ts())
-                    logger.info(f"[Cycle] ✅ Ejecución enviada (fase ejecución) symbols={ready_symbols}")
+                        cycle_order_executed.labels(symbol=sym, status="sent").set(
+                            _now_ts()
+                        )
+                    logger.info(
+                        f"[Cycle] ✅ Ejecución enviada (fase ejecución) symbols={ready_symbols}"
+                    )
                 except Exception as e:
                     logger.error(f"[Cycle] Error en ejecución: {e}")
                 return
@@ -333,6 +424,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
         logger.error(f"❌ trading_cycle_tick error: {e}")
         return {"status": "error", "message": str(e)}
 
+
 @shared_task
 def execute_trading_cycle() -> Dict[str, Any]:
     """
@@ -341,7 +433,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
     try:
         logger.info("🚀 Iniciando ciclo de trading REAL")
         logger.info("💰 Ejecutando TRADING REAL con dinero real")
-        
+
         # Verificar credenciales de Binance
         logger.info("🔍 Validando credenciales de Binance...")
         try:
@@ -351,32 +443,44 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 logger.error("❌ Conectividad con Binance fallida - abortando ciclo")
                 notify_consecutive_api_failures.delay("binance", 1)
                 try:
-                    asyncio.run(CircuitBreakers().activate_breaker('system_integrity', 'binance_net_fail'))
+                    asyncio.run(
+                        CircuitBreakers().activate_breaker(
+                            "system_integrity", "binance_net_fail"
+                        )
+                    )
                 except Exception:
                     pass
                 return {"status": "error", "message": "Binance net check failed"}
             if not check.get("auth_ok", False):
-                logger.error("❌ Credenciales/permiso de Binance inválidos - abortando ciclo")
+                logger.error(
+                    "❌ Credenciales/permiso de Binance inválidos - abortando ciclo"
+                )
                 notify_consecutive_api_failures.delay("binance_auth", 1)
                 try:
-                    asyncio.run(CircuitBreakers().activate_breaker('system_integrity', 'binance_auth_fail'))
+                    asyncio.run(
+                        CircuitBreakers().activate_breaker(
+                            "system_integrity", "binance_auth_fail"
+                        )
+                    )
                 except Exception:
                     pass
                 return {"status": "error", "message": "Binance auth check failed"}
             # Auto-recovery: si pasó el check, intentar desactivar breaker de integridad de red
             try:
-                asyncio.run(CircuitBreakers().deactivate_breaker('system_integrity'))
+                asyncio.run(CircuitBreakers().deactivate_breaker("system_integrity"))
             except Exception:
                 pass
         except Exception as e:
             logger.error(f"❌ Error validando Binance pre-ciclo: {e}")
             return {"status": "error", "message": str(e)}
-        
+
         # Crear manager de grid trading (usar loop local para evitar nested run)
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+            manager = loop.run_until_complete(
+                create_optimized_grid_manager("grid_config_optimized.json")
+            )
         finally:
             asyncio.set_event_loop(None)
             loop.close()
@@ -394,78 +498,139 @@ def execute_trading_cycle() -> Dict[str, Any]:
             finally:
                 asyncio.set_event_loop(None)
                 loop.close()
-            summary = fund_manager.get_trading_summary_sync(balances) if hasattr(fund_manager, 'get_trading_summary_sync') else None
+            summary = (
+                fund_manager.get_trading_summary_sync(balances)
+                if hasattr(fund_manager, "get_trading_summary_sync")
+                else None
+            )
             if not summary:
                 # fallback async
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    summary = loop.run_until_complete(fund_manager.get_trading_summary(balances))
+                    summary = loop.run_until_complete(
+                        fund_manager.get_trading_summary(balances)
+                    )
                 finally:
                     asyncio.set_event_loop(None)
                     loop.close()
             available_usdt = float((summary or {}).get("usdt_balance", 0.0) or 0.0)
-            
+
             # 🔧 MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
             if CALIBRATION_MODE:
-                logger.info(f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f}")
+                logger.info(
+                    f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f}"
+                )
                 logger.info(f"🔬 [CALIBRATION MODE] Umbral mínimo: ${SAFE_MIN_USDT}")
-                logger.info(f"🔬 [CALIBRATION MODE] Confianza mínima: {MIN_DECISION_CONFIDENCE}")
-                
+                logger.info(
+                    f"🔬 [CALIBRATION MODE] Confianza mínima: {MIN_DECISION_CONFIDENCE}"
+                )
+
                 # Simular trades que habrían sido ejecutados con los nuevos parámetros
                 if available_usdt >= 10.0:  # Umbral más bajo para calibración
-                    logger.info(f"🔬 [CALIBRATION MODE] Trade BUY para ETHUSDT habría sido ejecutado")
-                    logger.info(f"🔬 [CALIBRATION MODE] - Cantidad estimada: 0.0025 ETH")
-                    logger.info(f"🔬 [CALIBRATION MODE] - Valor estimado: ${available_usdt * 0.8:.2f}")
-                    logger.info(f"🔬 [CALIBRATION MODE] - Confianza: 0.60 (GridTrading)")
-                    logger.info(f"🔬 [CALIBRATION MODE] - Razón: Balance suficiente con nuevos umbrales")
+                    logger.info(
+                        "🔬 [CALIBRATION MODE] Trade BUY para ETHUSDT habría sido ejecutado"
+                    )
+                    logger.info("🔬 [CALIBRATION MODE] - Cantidad estimada: 0.0025 ETH")
+                    logger.info(
+                        f"🔬 [CALIBRATION MODE] - Valor estimado: ${available_usdt * 0.8:.2f}"
+                    )
+                    logger.info("🔬 [CALIBRATION MODE] - Confianza: 0.60 (GridTrading)")
+                    logger.info(
+                        "🔬 [CALIBRATION MODE] - Razón: Balance suficiente con nuevos umbrales"
+                    )
                 else:
-                    logger.info(f"🔬 [CALIBRATION MODE] No se habrían ejecutado trades (balance muy bajo)")
-                
-                return {"status": "calibration", "message": "Calibration mode - no real trades executed"}
-            
+                    logger.info(
+                        "🔬 [CALIBRATION MODE] No se habrían ejecutado trades (balance muy bajo)"
+                    )
+
+                return {
+                    "status": "calibration",
+                    "message": "Calibration mode - no real trades executed",
+                }
+
             if available_usdt < SAFE_MIN_USDT:
-                logger.warning(f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}")
-                
+                logger.warning(
+                    f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}"
+                )
+
                 # 🔄 INTEGRACIÓN DEL REBALANCEADOR V2
-                logger.info("🔄 Disparando rebalanceador automático para generar liquidez...")
+                logger.info(
+                    "🔄 Disparando rebalanceador automático para generar liquidez..."
+                )
                 try:
                     # Ejecutar rebalanceo asíncrono
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        rebalance_result = loop.run_until_complete(auto_rebalancer_v2.check_and_rebalance())
+                        rebalance_result = loop.run_until_complete(
+                            auto_rebalancer_v2.check_and_rebalance()
+                        )
                         logger.info(f"🎯 Resultado del rebalanceo: {rebalance_result}")
-                        
+
                         # Verificar si se generó liquidez suficiente
                         if rebalance_result.get("status") == "success":
                             # Verificar balance actualizado
-                            updated_balances = loop.run_until_complete(manager.get_asset_balances())
-                            updated_summary = loop.run_until_complete(fund_manager.get_trading_summary(updated_balances))
-                            updated_usdt = float((updated_summary or {}).get("usdt_balance", 0.0) or 0.0)
-                            
+                            updated_balances = loop.run_until_complete(
+                                manager.get_asset_balances()
+                            )
+                            updated_summary = loop.run_until_complete(
+                                fund_manager.get_trading_summary(updated_balances)
+                            )
+                            updated_usdt = float(
+                                (updated_summary or {}).get("usdt_balance", 0.0) or 0.0
+                            )
+
                             if updated_usdt >= SAFE_MIN_USDT:
-                                logger.info(f"✅ Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading")
+                                logger.info(
+                                    f"✅ Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading"
+                                )
                                 # Continuar con el ciclo normal
                             else:
-                                logger.warning(f"⚠️ Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT")
-                                return {"status": "skipped", "message": "Insufficient USDT after rebalancing"}
+                                logger.warning(
+                                    f"⚠️ Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT"
+                                )
+                                return {
+                                    "status": "skipped",
+                                    "message": "Insufficient USDT after rebalancing",
+                                }
                         else:
-                            logger.warning(f"⚠️ Rebalanceo falló: {rebalance_result.get('message', 'Unknown error')}")
-                            return {"status": "skipped", "message": "Rebalancing failed"}
-                            
+                            rr = rebalance_result or {}
+                            detail = (
+                                rr.get("message")
+                                or rr.get("reason")
+                                or (
+                                    str(rr.get("result", {}).get("message"))
+                                    if isinstance(rr.get("result"), dict)
+                                    and rr.get("result", {}).get("message")
+                                    else None
+                                )
+                                or f"status={rr.get('status')}"
+                            )
+                            logger.warning("⚠️ Rebalanceo no exitoso: %s", detail)
+                            return {
+                                "status": "skipped",
+                                "message": f"Rebalancing: {detail}",
+                            }
+
                     finally:
                         asyncio.set_event_loop(None)
                         loop.close()
-                        
+
                 except Exception as e:
                     logger.error(f"❌ Error ejecutando rebalanceo automático: {e}")
                     return {"status": "skipped", "message": "Auto-rebalancing failed"}
-                
+
                 return {"status": "skipped", "message": "Insufficient USDT"}
             ck = CircuitBreakers()
-            bs = ck.get_all_breakers_status() if hasattr(ck, 'get_all_breakers_status') else {}
-            if bs.get('critical_mode') or ('system_integrity' in bs.get('active_breakers', [])):
+            bs = (
+                ck.get_all_breakers_status()
+                if hasattr(ck, "get_all_breakers_status")
+                else {}
+            )
+            if bs.get("critical_mode") or (
+                "system_integrity" in bs.get("active_breakers", [])
+            ):
                 logger.warning("[Cycle] Breakers activos; omitiendo ejecución")
                 return {"status": "skipped", "message": "Breakers active"}
         except Exception as e:
@@ -474,12 +639,14 @@ def execute_trading_cycle() -> Dict[str, Any]:
         # Limitar universo a ETHUSDT temporalmente y ajustar grilla a entorno actual
         try:
             for sym, asset in manager.config.assets.items():
-                asset.is_active = (sym == "ETHUSDT")
+                asset.is_active = sym == "ETHUSDT"
             # Ajuste dinámico de grilla basado en precio actual (±1% del spot)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                spot = loop.run_until_complete(AsyncBinanceWrapper().get_price("ETHUSDT"))
+                spot = loop.run_until_complete(
+                    AsyncBinanceWrapper().get_price("ETHUSDT")
+                )
             finally:
                 asyncio.set_event_loop(None)
                 loop.close()
@@ -495,7 +662,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     asset.grids = [round(low + step * i, 8) for i in range(1, 4)]
         except Exception as e:
             logger.warning(f"[Cycle] No se pudo ajustar universo/grilla dinámica: {e}")
-        
+
         # Ejecutar ciclo de trading
         logger.info("🔄 Ejecutando ciclo de grid trading...")
         # Comprobación rápida de conectividad y ejecución
@@ -503,7 +670,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
         try:
             asyncio.set_event_loop(loop)
             try:
-                price = loop.run_until_complete(AsyncBinanceWrapper().get_price("ETHUSDT"))
+                price = loop.run_until_complete(
+                    AsyncBinanceWrapper().get_price("ETHUSDT")
+                )
                 logger.info(f"🔎 ETH precio pre-ciclo: {price}")
             except Exception as e:
                 logger.warning(f"Fallo conectividad Binance pre-ciclo: {e}")
@@ -515,43 +684,50 @@ def execute_trading_cycle() -> Dict[str, Any]:
         finally:
             asyncio.set_event_loop(None)
             loop.close()
-        
+
         # Analizar resultados
         trades_executed = len([r for r in results if r and r.status == "success"])
         total_trades = len(results)
-        
+
         # Generar resumen con modo según flag PAPER_TRADING
         import os
-        mode = "PAPER" if os.getenv("PAPER_TRADING", "false").lower() == "true" else "REAL"
+
+        mode = (
+            "PAPER" if os.getenv("PAPER_TRADING", "false").lower() == "true" else "REAL"
+        )
         summary = {
             "timestamp": datetime.now().isoformat(),
             "total_trades": total_trades,
             "trades_executed": trades_executed,
-            "success_rate": (trades_executed / total_trades * 100) if total_trades > 0 else 0,
-            "mode": mode
+            "success_rate": (trades_executed / total_trades * 100)
+            if total_trades > 0
+            else 0,
+            "mode": mode,
         }
-        
+
         # Logging detallado
-        logger.info(f"📊 Resumen del ciclo de trading:")
+        logger.info("📊 Resumen del ciclo de trading:")
         logger.info(f"   🔄 Total operaciones: {total_trades}")
         logger.info(f"   ✅ Operaciones ejecutadas: {trades_executed}")
         logger.info(f"   📈 Tasa de éxito: {summary['success_rate']:.1f}%")
         logger.info(f"   💰 Modo: {summary['mode']}")
-        
+
         # Enviar notificación si hay operaciones
         if trades_executed > 0:
-            message = f"🔄 Resumen del ciclo de trading:\n" \
-                     f"🔄 Total operaciones: {total_trades}\n" \
-                     f"✅ Operaciones ejecutadas: {trades_executed}\n" \
-                     f"📈 Tasa de éxito: {summary['success_rate']:.1f}%\n" \
-                     f"💰 Modo: {summary['mode']}"
-            
+            message = (
+                f"🔄 Resumen del ciclo de trading:\n"
+                f"🔄 Total operaciones: {total_trades}\n"
+                f"✅ Operaciones ejecutadas: {trades_executed}\n"
+                f"📈 Tasa de éxito: {summary['success_rate']:.1f}%\n"
+                f"💰 Modo: {summary['mode']}"
+            )
+
             try:
                 send_telegram_alert.delay(message)
                 logger.info("✅ Notificación a Telegram encolada")
             except Exception as e:
                 logger.error(f"❌ Error encolando notificación: {e}")
-        
+
         # Actualizar métricas
         try:
             metrics_service = MetricsService()
@@ -565,24 +741,25 @@ def execute_trading_cycle() -> Dict[str, Any]:
             logger.info("✅ Métricas actualizadas")
         except Exception as e:
             logger.error(f"❌ Error actualizando métricas: {e}")
-        
+
         return {
             "status": "success",
             "message": f"Ciclo completado - {trades_executed}/{total_trades} operaciones ejecutadas",
-            "summary": summary
+            "summary": summary,
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Error en ciclo de trading: {e}")
-        
+
         # Enviar alerta de error
         error_message = f"🚨 Error en ciclo de trading:\n{str(e)}"
         try:
             send_telegram_alert.delay(error_message)
         except Exception:
             pass
-        
+
         return {"status": "error", "message": str(e)}
+
 
 @shared_task
 def assess_risk() -> Dict[str, Any]:
@@ -591,18 +768,20 @@ def assess_risk() -> Dict[str, Any]:
     """
     try:
         logger.info("🔍 Evaluando riesgo del portafolio")
-        
+
         # Crear manager para obtener balances
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+            manager = loop.run_until_complete(
+                create_optimized_grid_manager("grid_config_optimized.json")
+            )
         finally:
             asyncio.set_event_loop(None)
             loop.close()
         if not manager:
             return {"risk_level": "unknown", "error": "Manager no disponible"}
-        
+
         # Obtener balances
         loop = asyncio.new_event_loop()
         try:
@@ -611,20 +790,22 @@ def assess_risk() -> Dict[str, Any]:
         finally:
             asyncio.set_event_loop(None)
             loop.close()
-        
+
         # Obtener resumen de trading
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            trading_summary = loop.run_until_complete(fund_manager.get_trading_summary(balances))
+            trading_summary = loop.run_until_complete(
+                fund_manager.get_trading_summary(balances)
+            )
         finally:
             asyncio.set_event_loop(None)
             loop.close()
-        
+
         # Calcular métricas de riesgo
         total_value = trading_summary.get("total_value_usdt", 0)
         usdt_balance = trading_summary.get("usdt_balance", 0)
-        
+
         # Determinar nivel de riesgo
         if total_value < 10:
             risk_level = "high"
@@ -635,7 +816,7 @@ def assess_risk() -> Dict[str, Any]:
         else:
             risk_level = "low"
             recommendation = "continue_trading"
-        
+
         risk_assessment = {
             "risk_level": risk_level,
             "daily_pnl": 0.0,  # Se calcularía con datos históricos
@@ -643,15 +824,16 @@ def assess_risk() -> Dict[str, Any]:
             "recommendation": recommendation,
             "total_value": total_value,
             "usdt_balance": usdt_balance,
-            "can_trade": trading_summary.get("can_trade", False)
+            "can_trade": trading_summary.get("can_trade", False),
         }
-        
+
         logger.info(f"✅ Evaluación de riesgo completada: {risk_assessment}")
         return risk_assessment
-        
+
     except Exception as e:
         logger.error(f"❌ Error evaluando riesgo: {e}")
         return {"risk_level": "unknown", "error": str(e)}
+
 
 @shared_task
 def update_metrics() -> Dict[str, Any]:
@@ -660,7 +842,7 @@ def update_metrics() -> Dict[str, Any]:
     """
     try:
         logger.info("📊 Actualizando métricas del sistema")
-        
+
         metrics_service = MetricsService()
         loop = asyncio.new_event_loop()
         try:
@@ -669,13 +851,14 @@ def update_metrics() -> Dict[str, Any]:
         finally:
             asyncio.set_event_loop(None)
             loop.close()
-        
+
         logger.info("✅ Métricas actualizadas correctamente")
         return {"status": "success", "message": "Métricas actualizadas"}
-        
+
     except Exception as e:
         logger.error(f"❌ Error actualizando métricas: {e}")
         return {"status": "error", "message": str(e)}
+
 
 @shared_task
 def health_check() -> Dict[str, Any]:
@@ -684,18 +867,20 @@ def health_check() -> Dict[str, Any]:
     """
     try:
         logger.info("🏥 Ejecutando verificación de salud del sistema")
-        
+
         # Verificar conexión con Binance
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            manager = loop.run_until_complete(create_optimized_grid_manager('grid_config_optimized.json'))
+            manager = loop.run_until_complete(
+                create_optimized_grid_manager("grid_config_optimized.json")
+            )
         finally:
             asyncio.set_event_loop(None)
             loop.close()
         if not manager:
             return {"status": "unhealthy", "error": "Manager no disponible"}
-        
+
         # Verificar balances
         loop = asyncio.new_event_loop()
         try:
@@ -706,27 +891,27 @@ def health_check() -> Dict[str, Any]:
             loop.close()
         if not balances:
             return {"status": "unhealthy", "error": "No se pueden obtener balances"}
-        
+
         # Verificar configuración
         config = manager.config
         if not config.assets:
             return {"status": "unhealthy", "error": "No hay activos configurados"}
-        
+
         health_status = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "binance_connection": "ok",
             "balances_available": len(balances),
             "assets_configured": len(config.assets),
-            "active_assets": len([a for a in config.assets.values() if a.is_active])
+            "active_assets": len([a for a in config.assets.values() if a.is_active]),
         }
-        
+
         logger.info(f"✅ Verificación de salud completada: {health_status}")
         return health_status
-        
+
     except Exception as e:
         logger.error(f"❌ Error en verificación de salud: {e}")
-        return {"status": "unhealthy", "error": str(e)} 
+        return {"status": "unhealthy", "error": str(e)}
 
 
 @shared_task
@@ -734,7 +919,7 @@ def health_check() -> Dict[str, Any]:
 def dust_sweep(dry_run: bool = True) -> dict:
     """
     Barrido de polvo (dust) - vende activos con saldos muy pequeños.
-    
+
     Con lock distribuido para prevenir múltiples sweeps simultáneos.
     Barre saldos pequeños (< 1 USDT) según política:
     - Si existe par ASSETUSDT y supera MIN_NOTIONAL: vender MARKET a USDT
@@ -746,16 +931,22 @@ def dust_sweep(dry_run: bool = True) -> dict:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         from app.services.binance_client_singleton import get_binance_client_singleton
+
         client_singleton = get_binance_client_singleton()
 
         async def _run() -> dict:
             # Obtener balances actuales (dict asset -> qty)
             balances = client_singleton.get_balances() or {}
+
             # Precios helper
             def px(sym: str) -> float:
                 return client_singleton.get_symbol_price(sym)
 
-            whitelist = set(os.getenv("DUST_WHITELIST", "").split(",")) if os.getenv("DUST_WHITELIST") else set()
+            whitelist = (
+                set(os.getenv("DUST_WHITELIST", "").split(","))
+                if os.getenv("DUST_WHITELIST")
+                else set()
+            )
             min_notional = float(os.getenv("DUST_MIN_NOTIONAL", "10"))
             dust_threshold = float(os.getenv("DUST_THRESHOLD_USD", "1"))
 
@@ -769,7 +960,14 @@ def dust_sweep(dry_run: bool = True) -> dict:
                 price = 1.0 if asset == "USD" else px(f"{asset}USDT") or 0.0
                 value = float(qty) * float(price)
                 if 0.0 < value < dust_threshold:
-                    items.append({"asset": asset, "qty": float(qty), "price": float(price), "value": value})
+                    items.append(
+                        {
+                            "asset": asset,
+                            "qty": float(qty),
+                            "price": float(price),
+                            "value": value,
+                        }
+                    )
                     total_dust += value
 
             dust_assets_count.set(len(items))
@@ -780,24 +978,44 @@ def dust_sweep(dry_run: bool = True) -> dict:
             for it in items:
                 symbol = f"{it['asset']}USDT"
                 if it["value"] >= min_notional:
-                    action = {"asset": it["asset"], "symbol": symbol, "qty": it["qty"], "type": "SELL_MARKET"}
+                    action = {
+                        "asset": it["asset"],
+                        "symbol": symbol,
+                        "qty": it["qty"],
+                        "type": "SELL_MARKET",
+                    }
                     actions.append({**action, "executed": not dry_run})
                     if not dry_run:
                         try:
                             # Usar TradeExecutor para mantener balances sincronizados
                             trade_executor = get_trade_executor()
-                            trade_executor.execute_market_sell(symbol=symbol, quantity=str(it["qty"]))
+                            trade_executor.execute_market_sell(
+                                symbol=symbol, quantity=str(it["qty"])
+                            )
                             swept_total += it["value"]
                         except Exception as e:
                             logger.warning(f"Dust sell fallo {symbol}: {e}")
                 else:
-                    actions.append({"asset": it["asset"], "symbol": symbol, "qty": it["qty"], "type": "RECOMMEND_DUST_TO_BNB", "executed": False})
+                    actions.append(
+                        {
+                            "asset": it["asset"],
+                            "symbol": symbol,
+                            "qty": it["qty"],
+                            "type": "RECOMMEND_DUST_TO_BNB",
+                            "executed": False,
+                        }
+                    )
 
             if swept_total > 0:
                 dust_swept_usd_total.inc(swept_total)
             last_dust_sweep_timestamp.set(time.time())
 
-            return {"count": len(items), "total_value": round(total_dust, 4), "actions": actions, "dry_run": dry_run}
+            return {
+                "count": len(items),
+                "total_value": round(total_dust, 4),
+                "actions": actions,
+                "dry_run": dry_run,
+            }
 
         try:
             result = loop.run_until_complete(_run())

@@ -7,7 +7,7 @@
 [![Status](https://img.shields.io/badge/status-Public-brightgreen)]()
 
 ## 📌 Resumen
-Backend algorítmico de trading para Binance con enfoque de bajo riesgo y alta observabilidad.  
+Backend algorítmico de trading para Binance con enfoque de bajo riesgo y alta observabilidad.
 Incluye:
 - API `FastAPI` asíncrona.
 - ML/IA híbrido (LSTM/Transformer + River online) para predicción de régimen.
@@ -87,7 +87,7 @@ pytest --cov=app
 Este proyecto está licenciado bajo la Licencia MIT. Ver `LICENSE` para más detalles.
 
 ## 🙌 Agradecimientos y contribuidores
-- Equipo GridBot — Plataforma/Trading, SRE/DevOps, Quant/ML.  
+- Equipo GridBot — Plataforma/Trading, SRE/DevOps, Quant/ML.
 Contacto: `support@gridbot.com` | Telegram: `@gridbot_support`
 
 ## 📘 OpenAPI

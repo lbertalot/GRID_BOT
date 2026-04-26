@@ -24,7 +24,6 @@ from __future__ import annotations
 import os
 import sys
 import gzip
-import json
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,12 +51,24 @@ def parse_ts_from_name(path: Path) -> datetime | None:
         parts = stem.split("_")
         for i in range(len(parts) - 1, -1, -1):
             token = parts[i]
-            if len(token) == 15 and token.isdigit():  # YYYYMMDD_HHMMSS without underscore
-                return datetime.strptime(token, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+            if (
+                len(token) == 15 and token.isdigit()
+            ):  # YYYYMMDD_HHMMSS without underscore
+                return datetime.strptime(token, "%Y%m%d%H%M%S").replace(
+                    tzinfo=timezone.utc
+                )
             if len(token) == 8 and token.isdigit():  # YYYYMMDD
                 return datetime.strptime(token, "%Y%m%d").replace(tzinfo=timezone.utc)
-            if i >= 1 and len(parts[i-1]) == 8 and parts[i-1].isdigit() and len(parts[i]) == 6 and parts[i].isdigit():
-                return datetime.strptime(parts[i-1] + parts[i], "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+            if (
+                i >= 1
+                and len(parts[i - 1]) == 8
+                and parts[i - 1].isdigit()
+                and len(parts[i]) == 6
+                and parts[i].isdigit()
+            ):
+                return datetime.strptime(
+                    parts[i - 1] + parts[i], "%Y%m%d%H%M%S"
+                ).replace(tzinfo=timezone.utc)
     except Exception:
         return None
     return None
@@ -101,7 +112,9 @@ def apply_policies(
                         gz_path = path.with_suffix(path.suffix + ".gz")
                         if not gz_path.exists():
                             if verbose:
-                                print(f"[COMPRESS] {path} -> {gz_path} (age {age:.1f}d)")
+                                print(
+                                    f"[COMPRESS] {path} -> {gz_path} (age {age:.1f}d)"
+                                )
                             if not dry_run:
                                 try:
                                     gzip_json_file(path, gz_path)
@@ -124,7 +137,9 @@ def apply_policies(
 
                     for t in set(targets):
                         if verbose:
-                            print(f"[DELETE] {t} (age {age:.1f}d > {policy.retain_days}d)")
+                            print(
+                                f"[DELETE] {t} (age {age:.1f}d > {policy.retain_days}d)"
+                            )
                         if not dry_run:
                             try:
                                 t.unlink(missing_ok=True)
@@ -147,10 +162,32 @@ def main(argv: list[str]) -> int:
 
     # Policies
     monitoring_policies = [
-        Policy(("monitoring_summary_*.json", "monitoring_summary_*.json.gz"), retain_days=90, compress_after_days=30),
-        Policy(("continuous_72h_monitoring_data_*.json", "continuous_72h_monitoring_data_*.json.gz"), retain_days=30),
-        Policy(("intensive_monitoring_report_*.json", "intensive_monitoring_report_*.json.gz"), retain_days=90),
-        Policy(("extended_monitoring_report_*.json", "extended_monitoring_report_*.json.gz"), retain_days=90),
+        Policy(
+            ("monitoring_summary_*.json", "monitoring_summary_*.json.gz"),
+            retain_days=90,
+            compress_after_days=30,
+        ),
+        Policy(
+            (
+                "continuous_72h_monitoring_data_*.json",
+                "continuous_72h_monitoring_data_*.json.gz",
+            ),
+            retain_days=30,
+        ),
+        Policy(
+            (
+                "intensive_monitoring_report_*.json",
+                "intensive_monitoring_report_*.json.gz",
+            ),
+            retain_days=90,
+        ),
+        Policy(
+            (
+                "extended_monitoring_report_*.json",
+                "extended_monitoring_report_*.json.gz",
+            ),
+            retain_days=90,
+        ),
     ]
 
     reports_policies = [
@@ -174,7 +211,9 @@ def main(argv: list[str]) -> int:
     total_compressed = 0
 
     if monitoring_dir.exists():
-        d, c = apply_policies(monitoring_dir, monitoring_policies, now, dry_run, verbose)
+        d, c = apply_policies(
+            monitoring_dir, monitoring_policies, now, dry_run, verbose
+        )
         total_deleted += d
         total_compressed += c
     else:
@@ -194,11 +233,11 @@ def main(argv: list[str]) -> int:
         total_deleted += d
         total_compressed += c
 
-    print(f"Resumen: comprimidos={total_compressed}, eliminados={total_deleted}, dry_run={dry_run}")
+    print(
+        f"Resumen: comprimidos={total_compressed}, eliminados={total_deleted}, dry_run={dry_run}"
+    )
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
-
-

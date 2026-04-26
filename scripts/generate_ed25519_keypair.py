@@ -24,6 +24,7 @@ Después:
 
 Este script no envía nada a Binance; solo crea los archivos localmente.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -74,7 +75,9 @@ def generate(out_dir: Path, name: str, force: bool) -> tuple[Path, Path]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Genera par de claves Ed25519 para Binance WS API v3.")
+    parser = argparse.ArgumentParser(
+        description="Genera par de claves Ed25519 para Binance WS API v3."
+    )
     parser.add_argument(
         "--out-dir",
         default="secrets",
@@ -99,10 +102,12 @@ def main() -> None:
     print(f"🔐 Clave privada : {priv_path}   (permisos 600)")
     print(f"🔓 Clave pública : {pub_path}\n")
     print("Próximos pasos:")
-    print(f"  1. Sube el contenido de {pub_path.name} a Binance → API Management (Ed25519).")
+    print(
+        f"  1. Sube el contenido de {pub_path.name} a Binance → API Management (Ed25519)."
+    )
     print("  2. Copia la API Key que te devuelve Binance.")
     print("  3. Exporta las variables de entorno:")
-    print(f"       export BINANCE_ED25519_API_KEY=<tu_api_key>")
+    print("       export BINANCE_ED25519_API_KEY=<tu_api_key>")
     print(f"       export BINANCE_ED25519_PRIVATE_KEY_PATH={priv_path}")
     print("  4. Reinicia los servicios (docker compose restart api worker beat).")
     print("\n⚠️  Nunca commitees la clave privada. Añade el directorio a .gitignore.")

@@ -1,6 +1,6 @@
 # Cleanup Report — cleanup-archive-agent
 
-Generado por: `cleanup-archive-agent`  
+Generado por: `cleanup-archive-agent`
 Fecha: 2026-04-17
 
 ## Resumen de hallazgos

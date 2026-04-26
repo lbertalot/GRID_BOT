@@ -20,19 +20,19 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Crear tablas faltantes que no fueron creadas en migraciones anteriores"""
     connection = op.get_bind()
-    
+
     # 1. Crear tabla trades si no existe
     result = connection.execute(
         text("""
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'trades'
             );
         """)
     )
     trades_exists = result.scalar()
-    
+
     if not trades_exists:
         op.create_table(
             'trades',
@@ -47,19 +47,19 @@ def upgrade() -> None:
             sa.Column('version', sa.Integer(), nullable=False, server_default='0'),  # Para optimistic locking
         )
         print("✅ Tabla 'trades' creada")
-    
+
     # 2. Crear tabla grid_config si no existe
     result = connection.execute(
         text("""
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'grid_config'
             );
         """)
     )
     grid_config_exists = result.scalar()
-    
+
     if not grid_config_exists:
         op.create_table(
             'grid_config',
@@ -72,19 +72,19 @@ def upgrade() -> None:
             sa.Column('last_action', sa.String(), nullable=True),
         )
         print("✅ Tabla 'grid_config' creada")
-    
+
     # 3. Crear tabla asset_limits si no existe
     result = connection.execute(
         text("""
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'asset_limits'
             );
         """)
     )
     asset_limits_exists = result.scalar()
-    
+
     if not asset_limits_exists:
         op.create_table(
             'asset_limits',
@@ -99,19 +99,19 @@ def upgrade() -> None:
             sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
         )
         print("✅ Tabla 'asset_limits' creada")
-    
+
     # 4. Crear tabla system_settings si no existe (diferente de system_config)
     result = connection.execute(
         text("""
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'system_settings'
             );
         """)
     )
     system_settings_exists = result.scalar()
-    
+
     if not system_settings_exists:
         op.create_table(
             'system_settings',
@@ -121,21 +121,21 @@ def upgrade() -> None:
             sa.Column('created_at', sa.DateTime(), default=sa.func.now(), nullable=False),
         )
         print("✅ Tabla 'system_settings' creada")
-    
+
     # 5. Si la tabla trades existe pero no tiene la columna version, agregarla
     if trades_exists:
         result = connection.execute(
             text("""
                 SELECT EXISTS (
-                    SELECT FROM information_schema.columns 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'trades' 
+                    SELECT FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    AND table_name = 'trades'
                     AND column_name = 'version'
                 );
             """)
         )
         version_column_exists = result.scalar()
-        
+
         if not version_column_exists:
             op.add_column('trades', sa.Column('version', sa.Integer(), nullable=False, server_default='0'))
             print("✅ Columna 'version' agregada a tabla 'trades'")

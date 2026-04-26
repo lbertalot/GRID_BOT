@@ -4,6 +4,10 @@ from datetime import datetime
 import asyncio
 from typing import Any, Dict, List
 from app.services.telegram_alert import send_telegram_alert_async
+from app.db.session import SessionLocal
+from app.models.alerts import Alert
+from app.core.metrics import alerts_persisted_total, pipeline_persistence_failures_total
+from app.core.metrics import db_writes_total
 
 router = APIRouter(prefix="/api/v1/alerts/telegram", tags=["Alerts"])
 
@@ -12,7 +16,9 @@ def _format_alertmanager_message(payload: Dict[str, Any], severity: str) -> str:
     try:
         alerts: List[Dict[str, Any]] = payload.get("alerts", [])
         if not alerts:
-            fallback = payload.get("message") or payload.get("summary") or "Alerta del sistema"
+            fallback = (
+                payload.get("message") or payload.get("summary") or "Alerta del sistema"
+            )
             return f"🚨 ALERTA {severity.upper()}\n\n{fallback}"
 
         lines: List[str] = [f"🚨 ALERTA {severity.upper()} ({len(alerts)})"]
@@ -38,23 +44,56 @@ def _format_alertmanager_message(payload: Dict[str, Any], severity: str) -> str:
         return f"🚨 ALERTA {severity.upper()}\n\n{fallback}"
 
 
+def _persist_alert(severity: str, message: str) -> None:
+    db = SessionLocal()
+    try:
+        alert = Alert(
+            type="ALERTMANAGER",
+            message=message,
+            level=severity.upper(),
+            sent_to_telegram=False,
+        )
+        db.add(alert)
+        db.commit()
+        alerts_persisted_total.labels(severity=severity.lower(), status="ok").inc()
+        db_writes_total.labels(table="alerts", operation="insert", status="ok").inc()
+    except Exception:
+        db.rollback()
+        alerts_persisted_total.labels(severity=severity.lower(), status="error").inc()
+        db_writes_total.labels(table="alerts", operation="insert", status="error").inc()
+        pipeline_persistence_failures_total.labels(
+            table="alerts",
+            reason="db_commit_error",
+        ).inc()
+        raise
+    finally:
+        db.close()
+
+
 @router.post("/critical")
 async def telegram_critical_alert(request: Request) -> JSONResponse:
     try:
         payload = await request.json()
         formatted = _format_alertmanager_message(payload, severity="crítica")
+        _persist_alert(severity="critical", message=formatted)
         asyncio.create_task(send_telegram_alert_async(formatted))
-        return JSONResponse(status_code=202, content={
-            "status": "accepted",
-            "message": "Procesamiento en background",
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "message": "Procesamiento en background",
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 @router.post("/warning")
@@ -62,17 +101,22 @@ async def telegram_warning_alert(request: Request) -> JSONResponse:
     try:
         payload = await request.json()
         formatted = _format_alertmanager_message(payload, severity="warning")
+        _persist_alert(severity="warning", message=formatted)
         asyncio.create_task(send_telegram_alert_async(formatted))
-        return JSONResponse(status_code=202, content={
-            "status": "accepted",
-            "message": "Procesamiento en background",
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "message": "Procesamiento en background",
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
-
-
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )

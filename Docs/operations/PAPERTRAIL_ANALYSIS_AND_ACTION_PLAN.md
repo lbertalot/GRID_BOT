@@ -1,6 +1,6 @@
 # Análisis de logs de producción (Papertrail/Heroku) y plan de acción
 
-**Fecha:** 2026-02-17  
+**Fecha:** 2026-02-17
 **Fuente:** Logs de Heroku (grid-bot-ia), equivalentes a lo que recibe Papertrail.
 
 ---
@@ -23,9 +23,9 @@ En producción **no funcionan correctamente** la conexión con Binance (API y We
 
 **Causa:** Los dynos de Heroku salen a internet desde IPs/región que Binance considera restringidas (política de elegibilidad). No es un fallo de credenciales ni de código.
 
-**Impacto:**  
-- No hay trading real desde producción (API y User Data Stream bloqueados).  
-- Circuit breaker `system_integrity` se activa por `binance_net_fail`.  
+**Impacto:**
+- No hay trading real desde producción (API y User Data Stream bloqueados).
+- Circuit breaker `system_integrity` se activa por `binance_net_fail`.
 - Endpoints privados se deshabilitan (comportamiento esperado de defensa).
 
 ---

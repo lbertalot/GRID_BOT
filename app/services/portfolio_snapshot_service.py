@@ -11,7 +11,6 @@ Este servicio reemplaza completamente los datos simulados con np.random
 que existían en performance_analyzer.get_portfolio_value_history().
 """
 
-import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -24,6 +23,11 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.binance_client_singleton import get_binance_client_singleton
+from app.core.metrics import (
+    pipeline_filter_drops_total,
+    pipeline_persistence_failures_total,
+    portfolio_asset_valuation_failures_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ PRIMARY_SYMBOL = os.getenv("TRADING_SYMBOL", "BTCUSDT")
 # ---------------------------------------------------------------------------
 # Capa de consulta (sin lógica Binance, pura lectura de DB)
 # ---------------------------------------------------------------------------
+
 
 def get_portfolio_value_history(
     db: Session,
@@ -74,6 +79,7 @@ def get_snapshot_count(db: Session) -> int:
 # Lógica de captura (obtiene datos de Binance y persiste)
 # ---------------------------------------------------------------------------
 
+
 def _compute_portfolio_value_sync() -> Optional[Dict]:
     """
     Calcula el valor total del portafolio de forma síncrona.
@@ -86,14 +92,28 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
     """
     singleton = get_binance_client_singleton()
     if not singleton.is_ready():
-        logger.warning("[SnapshotAgent] Cliente Binance no disponible — snapshot omitido")
+        logger.warning(
+            "[SnapshotAgent] Cliente Binance no disponible — snapshot omitido"
+        )
+        pipeline_filter_drops_total.labels(
+            stage="portfolio_snapshot",
+            reason="binance_client_not_ready",
+            table="portfolio_snapshots",
+        ).inc()
         return None
 
     binance = singleton.client
     try:
         account_info = binance.get_account()
     except Exception as exc:
-        logger.error("[SnapshotAgent] Error al obtener account info de Binance: %s", exc)
+        logger.error(
+            "[SnapshotAgent] Error al obtener account info de Binance: %s", exc
+        )
+        pipeline_filter_drops_total.labels(
+            stage="portfolio_snapshot",
+            reason="account_info_error",
+            table="portfolio_snapshots",
+        ).inc()
         return None
 
     balances = account_info.get("balances", [])
@@ -125,9 +145,17 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
                     btc_price = price
                 else:
                     other_assets_usdt += value
-            except Exception:
-                # Activo sin par USDT directo — ignorar silenciosamente
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "[SnapshotAgent] Fallo valuando asset=%s con symbol=%s: %s",
+                    asset,
+                    symbol,
+                    exc,
+                )
+                portfolio_asset_valuation_failures_total.labels(
+                    asset=asset,
+                    reason="ticker_unavailable_or_invalid_pair",
+                ).inc()
 
     total_value_usdt = usdt_free + btc_value_usdt + other_assets_usdt
 
@@ -167,6 +195,10 @@ def save_portfolio_snapshot() -> Optional[PortfolioSnapshot]:
     except Exception as exc:
         db.rollback()
         logger.error("[SnapshotAgent] Error al persistir snapshot: %s", exc)
+        pipeline_persistence_failures_total.labels(
+            table="portfolio_snapshots",
+            reason="db_commit_error",
+        ).inc()
         return None
     finally:
         db.close()
@@ -175,6 +207,7 @@ def save_portfolio_snapshot() -> Optional[PortfolioSnapshot]:
 # ---------------------------------------------------------------------------
 # Tarea Celery registrada en beat_schedule
 # ---------------------------------------------------------------------------
+
 
 @shared_task(
     name="app.services.portfolio_snapshot_service.capture_portfolio_snapshot",
@@ -195,7 +228,9 @@ def capture_portfolio_snapshot(self) -> Dict:
             "status": "ok",
             "snapshot_id": snapshot.id,
             "total_value_usdt": snapshot.total_value_usdt,
-            "captured_at": snapshot.captured_at.isoformat() if snapshot.captured_at else None,
+            "captured_at": snapshot.captured_at.isoformat()
+            if snapshot.captured_at
+            else None,
         }
     except Exception as exc:
         logger.error("[SnapshotAgent] Fallo en tarea Celery: %s", exc)

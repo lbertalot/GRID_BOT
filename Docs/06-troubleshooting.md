@@ -73,5 +73,3 @@ docker-compose logs --since 1h | grep -E "(ERROR|Exception|Failed)"
 curl -s 'http://localhost:9090/api/v1/query?query=up' | jq
 curl -s http://localhost:8000/api/portfolio/summary | jq
 ```
-
-

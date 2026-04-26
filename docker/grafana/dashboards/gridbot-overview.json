@@ -6,7 +6,19 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Pipeline Ingestion Dashboard",
+      "type": "dashboards",
+      "url": "/d/gridbot-pipeline-ingestion/gridbot-pipeline-ingestion"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -164,4 +176,4 @@
   "uid": "gridbot-overview",
   "version": 1,
   "weekStart": ""
-} 
+}

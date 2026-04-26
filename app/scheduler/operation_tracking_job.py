@@ -13,5 +13,3 @@ async def run_operation_tracking_forever(interval_seconds: int = 30) -> None:
         except Exception:
             pass
         await asyncio.sleep(interval_seconds)
-
-

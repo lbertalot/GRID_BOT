@@ -60,5 +60,3 @@ docker compose logs -f celery_worker
 ```bash
 make dry-run SYMBOL=BTCUSDT QTY=0.0002 SIDE=BUY TYPE=MARKET
 ```
-
-

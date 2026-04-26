@@ -228,6 +228,6 @@ docker-compose restart prometheus
 
 ---
 
-**Fecha de Plan:** 2025-09-21 14:45:00  
-**Analista:** GridBot Monitoring System  
+**Fecha de Plan:** 2025-09-21 14:45:00
+**Analista:** GridBot Monitoring System
 **Estado:** 📋 PLANO - Listo para implementación

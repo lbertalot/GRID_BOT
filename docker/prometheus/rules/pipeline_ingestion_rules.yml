@@ -1,0 +1,80 @@
+groups:
+  - name: gridbot.pipeline.ingestion
+    interval: 30s
+    rules:
+      - alert: TradesNoInserts60m
+        expr: increase(db_writes_total{table="trades",operation="insert",status="ok"}[60m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sin inserts en trades por 60m"
+          description: "No se registraron inserts exitosos en trades durante 60m."
+
+      - alert: BalancesNoWrites60m
+        expr: increase(db_writes_total{table="balances",operation=~"insert|upsert|update",status="ok"}[60m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sin escrituras en balances por 60m"
+          description: "No se registraron escrituras exitosas en balances durante 60m."
+
+      - alert: AlertsNoInserts60m
+        expr: increase(db_writes_total{table="alerts",operation="insert",status="ok"}[60m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sin inserts en alerts por 60m"
+          description: "No se registraron inserts exitosos en alerts durante 60m."
+
+      - alert: PerformanceMetricsNoInserts60m
+        expr: increase(db_writes_total{table="performance_metrics",operation="insert",status="ok"}[60m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sin inserts en performance_metrics por 60m"
+          description: "No se registraron inserts exitosos en performance_metrics durante 60m."
+
+      - alert: PipelineAuthErrorsBurst
+        expr: increase(pipeline_errors_total{error_type="auth"}[10m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pico de errores auth en pipeline"
+          description: "Más de 5 errores de autenticación en 10m."
+
+      - alert: PipelineTimeoutErrorsBurst
+        expr: increase(pipeline_errors_total{error_type="timeout"}[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pico de timeouts en pipeline"
+          description: "Más de 10 timeouts en 10m para API->DB."
+
+      - alert: PipelineConstraintErrors
+        expr: increase(pipeline_errors_total{error_type="constraint"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Errores de constraint en persistencia"
+          description: "Se detectaron errores de constraint en escritura DB en los últimos 5m."
+
+      - alert: PipelineHighDropRatio
+        expr: |
+          (
+            increase(pipeline_events_dropped_total[15m])
+            /
+            clamp_min(increase(pipeline_events_processed_total[15m]), 1)
+          ) > 0.7
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ratio alto de eventos descartados"
+          description: "Más del 70% de eventos procesados se están descartando en 15m."

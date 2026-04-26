@@ -12,7 +12,9 @@ from app.core.metrics import (
 )
 
 
-def settle_pnl_on_sell(db: Session, symbol: str, sell_qty: float, sell_price: float) -> Dict[str, float]:
+def settle_pnl_on_sell(
+    db: Session, symbol: str, sell_qty: float, sell_price: float
+) -> Dict[str, float]:
     """
     Cierra BUYs abiertos (FIFO) al ejecutar un SELL y computa PnL realizado.
     Retorna resumen con pnl_realized y qty_closed.
@@ -24,7 +26,11 @@ def settle_pnl_on_sell(db: Session, symbol: str, sell_qty: float, sell_price: fl
     # BUYs abiertos: exit_price is NULL
     open_buys: List[Trade] = (
         db.query(Trade)
-        .filter(Trade.symbol == symbol.upper(), Trade.side == "BUY", Trade.exit_price == None)  # noqa: E711
+        .filter(
+            Trade.symbol == symbol.upper(),
+            Trade.side == "BUY",
+            Trade.exit_price == None,
+        )  # noqa: E711
         .order_by(Trade.timestamp.asc())
         .all()
     )
@@ -83,5 +89,3 @@ def recompute_profit_metrics(db: Session, strategy: str = "grid") -> None:
         profit_by_asset_usdt.labels(asset=asset, strategy=strategy).set(profit)
         # ROI por activo requiere baseline; publicamos 0.0 por ahora
         roi_by_asset_percent.labels(asset=asset, strategy=strategy).set(0.0)
-
-

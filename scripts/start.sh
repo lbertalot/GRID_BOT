@@ -81,11 +81,11 @@ build_images() {
 start_services() {
     print_message "Iniciando servicios..."
     docker-compose up -d
-    
+
     # Esperar a que los servicios estén listos
     print_message "Esperando a que los servicios estén listos..."
     sleep 30
-    
+
     # Verificar estado de los servicios
     check_services_health
 }
@@ -93,28 +93,28 @@ start_services() {
 # Función para verificar la salud de los servicios
 check_services_health() {
     print_message "Verificando estado de los servicios..."
-    
+
     # Verificar API
     if curl -f http://localhost:8000/health > /dev/null 2>&1; then
         print_message "✅ API está funcionando (http://localhost:8000)"
     else
         print_warning "⚠️  API no responde aún. Puede tardar unos minutos en iniciar."
     fi
-    
+
     # Verificar Grafana
     if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
         print_message "✅ Grafana está funcionando (http://localhost:3000)"
     else
         print_warning "⚠️  Grafana no responde aún. Puede tardar unos minutos en iniciar."
     fi
-    
+
     # Verificar Prometheus
     if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
         print_message "✅ Prometheus está funcionando (http://localhost:9090)"
     else
         print_warning "⚠️  Prometheus no responde aún. Puede tardar unos minutos en iniciar."
     fi
-    
+
     # Verificar Flower
     if curl -f http://localhost:5555 > /dev/null 2>&1; then
         print_message "✅ Flower está funcionando (http://localhost:5555)"
@@ -153,12 +153,12 @@ show_useful_commands() {
 # Función principal
 main() {
     print_header
-    
+
     # Verificar requisitos
     check_docker
     check_env_file
     create_directories
-    
+
     # Preguntar si detener contenedores existentes
     if docker-compose ps | grep -q "Up"; then
         read -p "¿Detener contenedores existentes? (y/N): " -n 1 -r
@@ -167,24 +167,24 @@ main() {
             stop_containers
         fi
     fi
-    
+
     # Preguntar si reconstruir imágenes
     read -p "¿Reconstruir imágenes Docker? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         build_images
     fi
-    
+
     # Iniciar servicios
     start_services
-    
+
     # Mostrar información
     show_access_info
     show_useful_commands
-    
+
     print_message "¡GridBot Trading Platform iniciado correctamente!"
     print_warning "Recuerda configurar tus API keys de Binance en el archivo .env"
 }
 
 # Ejecutar función principal
-main "$@" 
+main "$@"

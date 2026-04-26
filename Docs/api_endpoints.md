@@ -1,7 +1,7 @@
 # GridBot v2.5 - API Endpoints Técnicos
 
-> **Última actualización**: 2026-01-02  
-> **Auditor**: Senior Software Architect  
+> **Última actualización**: 2026-01-02
+> **Auditor**: Senior Software Architect
 > **Versión**: 2.5.0
 
 ## 📑 Tabla de Contenidos
@@ -21,7 +21,7 @@
 
 ### Método de Autenticación
 
-**Header**: `X-API-Key`  
+**Header**: `X-API-Key`
 **Valor**: Configurado en variable de entorno `API_KEY`
 
 ```python
@@ -96,11 +96,11 @@ async def execute_trade(request: TradeRequest, api_key: str = Depends(require_au
     # 1. Validar símbolo contra exchange_info
     validator = OrderValidator(client)
     validator.validate_order(...)
-    
+
     # 2. Consultar circuit breakers
     if breakers.is_breaker_active('system_integrity'):
         raise HTTPException(503, "Trading disabled by circuit breaker")
-    
+
     # 3. Ejecutar orden en Binance
     order = client.create_order(
         symbol=symbol,
@@ -109,15 +109,15 @@ async def execute_trade(request: TradeRequest, api_key: str = Depends(require_au
         quantity=quantity,
         newClientOrderId=f"GRID-{int(time.time())}-{uuid4().hex[:6]}"
     )
-    
+
     # 4. Registrar en BD
     trade = Trade(...)
     db.add(trade)
     db.commit()
-    
+
     # 5. Actualizar métricas Prometheus
     orders_executed_total.labels(symbol=symbol, side=side).inc()
-    
+
     return order
 ```
 
@@ -257,12 +257,12 @@ LIMIT %s;
 async def get_integrity_status():
     balance_summary = await balance_validator.get_validation_summary()
     operation_summary = await operation_tracker.get_operation_summary()
-    
+
     balance_integrity = balance_summary.get('integrity_score', 0)
     operation_integrity = operation_summary.get('success_rate', 0) * 100
-    
+
     overall_integrity = (balance_integrity + operation_integrity) / 2
-    
+
     return {
         "status": "healthy" if overall_integrity > 90 else "degraded" if overall_integrity > 70 else "critical",
         "overall_integrity_score": overall_integrity,
@@ -715,5 +715,3 @@ async def trade(breakers: CircuitBreakers = Depends(get_breakers)):
 - [FastAPI Best Practices](https://fastapi.tiangolo.com/tutorial/)
 - [REST API Design Guide](https://restfulapi.net/)
 - [Binance API Docs](https://binance-docs.github.io/apidocs/spot/en/)
-
-

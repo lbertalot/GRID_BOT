@@ -282,7 +282,7 @@
             .main-content {
                 grid-template-columns: 1fr;
             }
-            
+
             .header h1 {
                 font-size: 2rem;
             }
@@ -300,7 +300,7 @@
             <!-- Panel de Configuración -->
             <div class="card">
                 <h2>⚙️ Configuración de Optimización</h2>
-                
+
                 <div class="form-group">
                     <label for="symbol">Símbolo:</label>
                     <input type="text" id="symbol" placeholder="Ej: BTC, ETH, BNB" value="BTC">
@@ -467,18 +467,18 @@
 
         function displayOptimizationResult(data) {
             const container = document.getElementById('optimizationResults');
-            
-            const confidenceClass = data.confidence_score > 0.7 ? 'confidence-high' : 
+
+            const confidenceClass = data.confidence_score > 0.7 ? 'confidence-high' :
                                   data.confidence_score > 0.4 ? 'confidence-medium' : 'confidence-low';
 
             container.innerHTML = `
                 <div class="optimization-result">
                     <h3>✅ Optimización Completada para ${data.symbol}</h3>
                     <p><strong>Estrategia:</strong> ${data.optimization_strategy}</p>
-                    <p><strong>Score de Confianza:</strong> 
+                    <p><strong>Score de Confianza:</strong>
                         <span class="confidence-score ${confidenceClass}">${(data.confidence_score * 100).toFixed(1)}%</span>
                     </p>
-                    
+
                     <div class="result-grid">
                         <div class="result-item">
                             <h4>Precio Mínimo</h4>
@@ -525,11 +525,11 @@
 
         function displayMarketAnalysis(data) {
             const container = document.getElementById('marketAnalysis');
-            
+
             container.innerHTML = `
                 <div class="optimization-result">
                     <h3>📈 Análisis de ${data.symbol}</h3>
-                    
+
                     <div class="result-grid">
                         <div class="result-item">
                             <h4>Precio Actual</h4>
@@ -565,12 +565,12 @@
 
         function displayStrategyComparison(data) {
             const container = document.getElementById('strategyResults');
-            
+
             let html = `
                 <h3>📊 Comparación de Estrategias para ${data.symbol}</h3>
                 <p><strong>Inversión:</strong> $${data.investment_amount.toFixed(2)} USDT</p>
                 <p><strong>Mejor Estrategia:</strong> ${data.best_strategy} (Score: ${(data.best_score * 100).toFixed(1)}%)</p>
-                
+
                 <div class="strategy-comparison">
             `;
 
@@ -584,16 +584,16 @@
                     `;
                 } else {
                     const isBest = strategy === data.best_strategy;
-                    const confidenceClass = result.confidence_score > 0.7 ? 'confidence-high' : 
+                    const confidenceClass = result.confidence_score > 0.7 ? 'confidence-high' :
                                           result.confidence_score > 0.4 ? 'confidence-medium' : 'confidence-low';
-                    
+
                     html += `
                         <div class="strategy-card ${isBest ? 'best' : ''}">
                             <h4>${strategy.replace('_', ' ').toUpperCase()}</h4>
-                            <p><strong>Score:</strong> 
+                            <p><strong>Score:</strong>
                                 <span class="confidence-score ${confidenceClass}">${(result.confidence_score * 100).toFixed(1)}%</span>
                             </p>
-                            
+
                             <div class="strategy-metrics">
                                 <div class="metric">
                                     <div class="label">Grids</div>
@@ -647,4 +647,4 @@
         document.getElementById('symbol').addEventListener('change', getMarketAnalysis);
     </script>
 </body>
-</html> 
+</html>
