@@ -4,6 +4,7 @@ Combina modelos deep learning (LSTM/Transformer) con River para predicción de r
 """
 
 import hashlib
+import asyncio
 import json
 import logging
 import os
@@ -785,9 +786,9 @@ class HybridMLEngine:
         if train_online and not df.empty:
             observed_regime = self._infer_observed_regime(df)
             self.update_river_model(symbol, features, observed_regime)
-            self.save_river_model(symbol)
+            await asyncio.to_thread(self.save_river_model, symbol)
 
-        self.load_latest_deep_model(symbol)
+        await asyncio.to_thread(self.load_latest_deep_model, symbol)
 
         short_regime, short_conf = self.predict_short_regime(symbol, features)
         if symbol in self.deep_models and len(df) > self.deep_config.sequence_length:
