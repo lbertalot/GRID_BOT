@@ -25,7 +25,7 @@ RUN groupadd -r gridbot && useradd -r -g gridbot gridbot
 WORKDIR /app
 
 # Copiar requirements primero para aprovechar el layer cache de Docker
-COPY requirements.txt ./
+COPY requirements.txt requirements-ml.txt ./
 
 # Instalar dependencias Python
 # Las dependencias de OpenTelemetry son opcionales; si fallan no rompen el build
@@ -34,15 +34,20 @@ RUN pip install --no-cache-dir -r requirements.txt || \
      grep -v "^opentelemetry" requirements.txt > /tmp/req_core.txt && \
      pip install --no-cache-dir -r /tmp/req_core.txt)
 
+# El despliegue local completo exige el motor híbrido (TensorFlow/Keras + River).
+RUN pip install --no-cache-dir -r requirements-ml.txt
+
 # Verificar dependencias críticas
 RUN python -c "\
 import sys; \
-critical = ['fastapi','uvicorn','sqlalchemy','pydantic','celery','redis','numpy','pandas']; \
+critical = ['fastapi','uvicorn','sqlalchemy','pydantic','celery','redis','numpy','pandas','tensorflow']; \
 missing = [p for p in critical if not __import__(p, globals(), locals(), [], 0)]; \
 sys.exit(1) if missing else print('✅ Dependencias críticas OK')"
 
 # Copiar el código de la aplicación
 COPY . .
+
+RUN python -c "from app.services.hybrid_ml_engine import HybridMLEngine; HybridMLEngine(); print('✅ HybridMLEngine OK')"
 
 # Crear directorios de runtime
 RUN mkdir -p logs cache data monitoring_data reports /tmp/matplotlib && \
