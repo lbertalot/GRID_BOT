@@ -15,9 +15,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.error import URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+import httpx
 
 from celery import shared_task
 from sqlalchemy import text
@@ -32,23 +30,28 @@ WINDOW = "65m"
 # Snapshots Celery cada 15m: margen 2× + buffer
 SNAPSHOT_MAX_AGE_MIN = int(os.getenv("PIPELINE_HEALTH_SNAPSHOT_MAX_AGE_MIN", "35"))
 # alerts puede estar quieto en horas sin eventos: solo advertencia, no falla la tarea
-ALERTS_SOFT_ONLY = os.getenv("PIPELINE_HEALTH_ALERTS_SOFT", "true").lower() in ("1", "true", "yes")
+ALERTS_SOFT_ONLY = os.getenv("PIPELINE_HEALTH_ALERTS_SOFT", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 def _prom_query(query: str, timeout_s: float = 10.0) -> Optional[float]:
     """Ejecuta instant query; devuelve el valor escalar o None si falla."""
-    params = urlencode({"query": query})
-    url = f"{PROMETHEUS_URL}/api/v1/query?{params}"
+    url = f"{PROMETHEUS_URL}/api/v1/query"
     try:
-        req = Request(url, headers={"Accept": "application/json"})
-        with urlopen(req, timeout=timeout_s) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (URLError, OSError, json.JSONDecodeError, ValueError) as exc:
+        resp = httpx.get(url, params={"query": query}, timeout=timeout_s)
+        resp.raise_for_status()
+        body = resp.json()
+    except (httpx.HTTPError, OSError, ValueError) as exc:
         logger.warning("[PipelineHealth] Prometheus no disponible (%s): %s", url, exc)
         return None
 
     if body.get("status") != "success":
-        logger.warning("[PipelineHealth] Prometheus respuesta no success: %s", body.get("status"))
+        logger.warning(
+            "[PipelineHealth] Prometheus respuesta no success: %s", body.get("status")
+        )
         return None
 
     data = body.get("data") or {}
@@ -91,7 +94,9 @@ def _write_reports(payload: Dict[str, Any]) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path_ts = out / f"health_{stamp}.json"
     path_ts.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-    (out / "LATEST.json").write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    (out / "LATEST.json").write_text(
+        json.dumps(payload, indent=2, default=str), encoding="utf-8"
+    )
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     daily = out / f"daily_{day}.jsonl"
@@ -134,15 +139,18 @@ def _sql_fallback_checks(session) -> Dict[str, Any]:
         if table in ("trades", "performance_metrics"):
             col = _max_ts_column_for_table(session, table)
         elif table == "balances":
-            bcols = {r[0] for r in session.execute(
-                text(
-                    """
+            bcols = {
+                r[0]
+                for r in session.execute(
+                    text(
+                        """
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_schema = 'public' AND table_name = 'balances'
                     """
-                )
-            ).fetchall()}
+                    )
+                ).fetchall()
+            }
             col = "updated_at" if "updated_at" in bcols else default_col
         mx = _db_scalar(session, f"SELECT MAX({col}) FROM {table}")
         row_ok = mx is not None and mx >= cutoff_row
@@ -167,6 +175,8 @@ def _sql_fallback_checks(session) -> Dict[str, Any]:
     name="app.services.pipeline_health_tasks.check_pipeline_db_writes",
     bind=True,
     max_retries=0,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def check_pipeline_db_writes(self) -> Dict[str, Any]:
     """
@@ -193,7 +203,9 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
                 checks[tbl]["warning"] = "sin escrituras alerts en ventana (no bloquea)"
         elif not ok and not (tbl == "alerts" and ALERTS_SOFT_ONLY):
             if parsed is None:
-                failures.append(f"{tbl}: Prometheus sin datos para increase en [{WINDOW}]")
+                failures.append(
+                    f"{tbl}: Prometheus sin datos para increase en [{WINDOW}]"
+                )
             else:
                 failures.append(
                     f"{tbl}: increase(db_writes_total status=ok) en [{WINDOW}] == 0"
@@ -221,7 +233,9 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
 
         # Si Prometheus no respondió (ninguna query con valor), fallback SQL
         if not prom_responded:
-            logger.warning("[PipelineHealth] Usando fallback SQL (Prometheus no consultable)")
+            logger.warning(
+                "[PipelineHealth] Usando fallback SQL (Prometheus no consultable)"
+            )
             fb = _sql_fallback_checks(db)
             checks["_sql_fallback"] = fb
             failures = [f for f in failures if "Prometheus sin datos" not in f]
@@ -262,7 +276,9 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
             if isinstance(c, dict) and "ok" in c:
                 pipeline_health_table_ok.labels(table=name).set(1 if c["ok"] else 0)
     except Exception as exc:
-        logger.debug("[PipelineHealth] No se pudo actualizar pipeline_health_table_ok: %s", exc)
+        logger.debug(
+            "[PipelineHealth] No se pudo actualizar pipeline_health_table_ok: %s", exc
+        )
 
     if hard_failures:
         msg = "; ".join(hard_failures)
@@ -270,4 +286,8 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
         raise RuntimeError(f"pipeline_health: {msg}")
 
     logger.info("[PipelineHealth] OK — evidencia %s", path)
-    return {"status": "ok", "report": str(path), "checked_at": payload["checked_at_utc"]}
+    return {
+        "status": "ok",
+        "report": str(path),
+        "checked_at": payload["checked_at_utc"],
+    }

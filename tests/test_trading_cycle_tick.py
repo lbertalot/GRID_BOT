@@ -27,6 +27,7 @@ def no_celery_broker_env(monkeypatch):
     # Evitar dependencias externas durante tests
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+    monkeypatch.setenv("ML_ENABLED", "false")
 
 
 @pytest.fixture
@@ -213,10 +214,10 @@ def test_ml_disabled_uses_fallback(setup_tick, monkeypatch):
     assert any(c.get("reason") == "disabled" for c in fallback.calls)
 
 
-def test_ml_enabled_uses_prediction_when_available(setup_tick, monkeypatch):
-    """Con ML_ENABLED=true y predict_regime OK se usa predicción y métrica used."""
+def test_ml_enabled_uses_hybrid_prediction_when_available(setup_tick, monkeypatch):
+    """Con ML_ENABLED=true el ciclo usa HybridMLEngine y registra métrica used."""
     import app.services.trading_tasks as tt
-    from app.services.ml_engine import MLEngine, RegimePrediction as MLRegimePrediction
+    from app.core.risk_manager import MarketRegime, RegimePrediction
 
     monkeypatch.setenv("ML_ENABLED", "true")
     used = _MockCounter()
@@ -224,12 +225,23 @@ def test_ml_enabled_uses_prediction_when_available(setup_tick, monkeypatch):
     monkeypatch.setattr(tt, "ml_regime_used_in_cycle_total", used, raising=True)
     monkeypatch.setattr(tt, "ml_regime_fallback_total", fallback, raising=True)
 
-    async def fake_predict_regime(
-        self, symbol: str, interval: str = "1m", limit: int = 60
-    ):
-        return MLRegimePrediction(label=1, proba=0.8)
+    hybrid_calls = []
 
-    monkeypatch.setattr(MLEngine, "predict_regime", fake_predict_regime, raising=True)
+    class FakeHybridMLEngine:
+        async def predict_regime_from_klines(self, symbol, klines, train_online=True):
+            hybrid_calls.append(
+                {"symbol": symbol, "klines": klines, "train_online": train_online}
+            )
+            return RegimePrediction(
+                long_regime=MarketRegime.BULL_TREND,
+                short_regime=MarketRegime.BULL_TREND,
+                long_conf=0.8,
+                short_conf=0.8,
+            )
+
+    monkeypatch.setattr(
+        tt, "_create_hybrid_ml_engine", lambda: FakeHybridMLEngine(), raising=True
+    )
     strategy_blacklist = type(
         "FakeBlacklist",
         (),
@@ -243,12 +255,18 @@ def test_ml_enabled_uses_prediction_when_available(setup_tick, monkeypatch):
 
     assert len(used.calls) >= 1
     assert any(c.get("symbol") == "ETHUSDT" for c in used.calls)
+    assert hybrid_calls == [
+        {
+            "symbol": "ETHUSDT",
+            "klines": [[0, 0, 0, 0, 100.0, 123.0] for _ in range(60)],
+            "train_online": True,
+        }
+    ]
 
 
 def test_ml_enabled_fallback_on_predict_error(setup_tick, monkeypatch):
-    """Con ML_ENABLED=true y predict_regime lanzando, se usa fallback con reason=error."""
+    """Con ML_ENABLED=true y HybridMLEngine fallando, se usa fallback reason=error."""
     import app.services.trading_tasks as tt
-    from app.services.ml_engine import MLEngine
 
     monkeypatch.setenv("ML_ENABLED", "true")
     used = _MockCounter()
@@ -256,12 +274,13 @@ def test_ml_enabled_fallback_on_predict_error(setup_tick, monkeypatch):
     monkeypatch.setattr(tt, "ml_regime_used_in_cycle_total", used, raising=True)
     monkeypatch.setattr(tt, "ml_regime_fallback_total", fallback, raising=True)
 
-    async def fake_predict_raise(
-        self, symbol: str, interval: str = "1m", limit: int = 60
-    ):
-        raise RuntimeError("mock ML failure")
+    class FakeHybridMLEngine:
+        async def predict_regime_from_klines(self, symbol, klines, train_online=True):
+            raise RuntimeError("mock ML failure")
 
-    monkeypatch.setattr(MLEngine, "predict_regime", fake_predict_raise, raising=True)
+    monkeypatch.setattr(
+        tt, "_create_hybrid_ml_engine", lambda: FakeHybridMLEngine(), raising=True
+    )
     strategy_blacklist = type(
         "FakeBlacklist",
         (),
