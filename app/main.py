@@ -333,7 +333,9 @@ app.add_middleware(
 # Middleware de métricas HTTP (Prometheus)
 app.add_middleware(PrometheusHTTPMiddleware)
 
-_trusted_hosts = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1").split(",")
+# testserver: Host que usa Starlette/FastAPI TestClient en pytest/CI
+_trusted_hosts_raw = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 # Middleware Integrity Guard (desactivable en tests)
