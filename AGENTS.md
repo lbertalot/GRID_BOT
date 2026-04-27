@@ -62,6 +62,7 @@ docker compose -f docker-compose.local.yml up --build -d
 
 - API: `http://localhost:8000` · Flower: `5555` · Grafana: `3000` · Prometheus: `9090` · cAdvisor: `8081`
 - En `x-app-env` de compose local: **`PAPER_TRADING=true`** (simulación; no órdenes reales en Binance). Para real, cambiar explícitamente ese bloque y revisar `FORCE_REAL_MODE`.
+- El stack local instala `requirements-ml.txt` en la imagen Docker; con `ML_ENABLED=true` en `.env`, `api` y `worker` usan `HybridMLEngine` (TensorFlow/Keras + River) y persisten el componente online en `ML_MODELS_DIR` (default `data/ml/hybrid`).
 - Flower usa Basic Auth desde `FLOWER_BASIC_AUTH_*`; en desarrollo local se puede poner `FLOWER_DISABLE_AUTH=1` en `.env` para desactivar la autenticación.
 
 ### Uvicorn local (sin Docker)
