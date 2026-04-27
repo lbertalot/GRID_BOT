@@ -7,7 +7,7 @@ import logging
 from typing import Optional, Dict
 import re
 import time
-import urllib.request
+import httpx
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 import ccxt  # Fallback para validación privada
@@ -43,12 +43,8 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
             "https://icanhazip.com",
         ]:
             try:
-                public_ip = (
-                    urllib.request.urlopen(url, timeout=3)
-                    .read()
-                    .decode("utf-8")
-                    .strip()
-                )
+                resp = httpx.get(url, timeout=3)
+                public_ip = resp.text.strip()
                 if public_ip:
                     break
             except Exception:

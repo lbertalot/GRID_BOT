@@ -97,18 +97,24 @@ def test_token_correcto_con_espacios_extra_se_strippea(monkeypatch):
     assert get_api_key(req) == "real_key_xyz"
 
 
-def test_default_api_key_sin_env(monkeypatch):
-    """Si API_KEY no está seteado, usa el default hardcoded del módulo."""
+def test_sin_api_key_env_devuelve_500(monkeypatch):
+    """Si API_KEY no está seteado, debe retornar 500 (servidor mal configurado)."""
     monkeypatch.delenv("API_KEY", raising=False)
-    req = _make_request("Bearer gridbot_api_key_2024_secure_12345")
-    assert get_api_key(req) == "gridbot_api_key_2024_secure_12345"
+    req = _make_request("Bearer cualquier_token")
+    with pytest.raises(HTTPException) as exc:
+        get_api_key(req)
+    assert exc.value.status_code == 500
+    assert "API_KEY" in exc.value.detail
 
 
-def test_default_api_key_con_env_vacio(monkeypatch):
-    """API_KEY="" cae al default por short-circuit en `or`."""
+def test_api_key_env_vacio_devuelve_500(monkeypatch):
+    """API_KEY="" es falsy → 500 (servidor mal configurado)."""
     monkeypatch.setenv("API_KEY", "")
-    req = _make_request("Bearer gridbot_api_key_2024_secure_12345")
-    assert get_api_key(req) == "gridbot_api_key_2024_secure_12345"
+    req = _make_request("Bearer cualquier_token")
+    with pytest.raises(HTTPException) as exc:
+        get_api_key(req)
+    assert exc.value.status_code == 500
+    assert "API_KEY" in exc.value.detail
 
 
 # ─────────────────────────────────────────────────────────────────

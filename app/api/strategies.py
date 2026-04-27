@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Body, HTTPException, Query
-from typing import Literal
 from app.services.strategies.trailing_stop import trailing_stop_strategy
 from app.services.strategies.scalping import scalping_strategy
 from app.services.strategies.rsi_macd import rsi_macd_strategy
@@ -98,12 +101,19 @@ def backtest_strategy(
     limit: int = Body(50),
     balances: dict = Body(...),
     params: dict = Body(default={}),
+    price_history: Optional[list[float]] = Body(default=None),
 ):
-    try:
-        price_history = get_price_history(symbol, interval, limit)
-    except Exception as e:
+    if price_history is None:
+        try:
+            price_history = get_price_history(symbol, interval, limit)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, detail=f"Error obteniendo histórico de Binance: {e}"
+            )
+    if len(price_history) < 11:
         raise HTTPException(
-            status_code=400, detail=f"Error obteniendo histórico de Binance: {e}"
+            status_code=400,
+            detail="Se requieren al menos 11 puntos en price_history para backtest",
         )
     strat_fn = strategy_map[strategy]
     # Simulación simple: ejecuta la estrategia en cada punto del histórico

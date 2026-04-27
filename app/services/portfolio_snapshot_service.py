@@ -131,8 +131,36 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
         if total_asset <= 0:
             continue
 
-        if asset == "USDT":
+        if asset in ("USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD"):
             usdt_free += total_asset
+        elif asset.startswith("LD"):
+            # Activos de Binance Earn (Simple Earn) — LD{ASSET}: mapear al activo subyacente
+            underlying = asset[2:] or ""
+            if underlying in ("USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD"):
+                usdt_free += total_asset
+            elif underlying:
+                symbol = f"{underlying}USDT"
+                try:
+                    ticker = binance.get_symbol_ticker(symbol=symbol)
+                    price = float(ticker["price"])
+                    value = total_asset * price
+                    if underlying == "BTC":
+                        btc_value_usdt += value
+                        btc_price = price
+                    else:
+                        other_assets_usdt += value
+                except Exception as exc:
+                    logger.warning(
+                        "[SnapshotAgent] Fallo valuando LD asset=%s underlying=%s symbol=%s: %s",
+                        asset,
+                        underlying,
+                        symbol,
+                        exc,
+                    )
+                    portfolio_asset_valuation_failures_total.labels(
+                        asset=asset,
+                        reason="ld_ticker_unavailable",
+                    ).inc()
         else:
             symbol = f"{asset}USDT"
             try:

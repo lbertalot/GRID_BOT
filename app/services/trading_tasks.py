@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
+from decimal import Decimal
 from typing import Dict, Optional, Any
 from celery import shared_task
 from app.core.celery_app import celery_app
@@ -29,7 +30,6 @@ from app.core.metrics import (
     ml_regime_fallback_total,
 )
 from app.services.market_data_collector import MarketDataCollector
-from app.services.ml_engine import MLEngine, ml_prediction_to_regime_prediction
 from app.services.strategy_selector import StrategySelector, AccountState
 from app.core.risk_manager import RiskManager
 from app.services.cache import get_async_cache
@@ -84,6 +84,13 @@ def _now_ts() -> float:
     return datetime.utcnow().timestamp()
 
 
+def _create_hybrid_ml_engine():
+    """Crea el motor híbrido de forma lazy para que ML_ENABLED gobierne TensorFlow."""
+    from app.services.hybrid_ml_engine import HybridMLEngine
+
+    return HybridMLEngine(models_dir=os.getenv("ML_MODELS_DIR", "data/ml/hybrid"))
+
+
 async def _get_cached_balances() -> Optional[Dict[str, float]]:
     """Obtiene balances desde cache"""
     raw = await _CACHE.get(BALANCES_CACHE_KEY)
@@ -130,7 +137,7 @@ async def _fetch_balances_with_retry(
     return {}
 
 
-@celery_app.task
+@celery_app.task(acks_late=True, reject_on_worker_lost=True)
 @with_distributed_lock("trading_cycle", timeout=300, blocking=False)
 def trading_cycle_tick() -> Dict[str, Any]:
     """
@@ -164,7 +171,6 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 cycle_phase.labels(phase="evaluation").set(_now_ts())
                 # Recolectar datos y actualizar ML/selector
                 mdc = MarketDataCollector(ttl_seconds=5)
-                ml = MLEngine()
                 # Universo temporal restringido para ejecuciones seguras
                 symbols = ["ETHUSDT"]
 
@@ -200,9 +206,11 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         mgr, retries=3, delay_seconds=1.5
                     )
                     summary = await fund_manager.get_trading_summary(balances)
-                    total_equity = float(summary.get("total_value_usdt", 0.0) or 0.0)
-                    available_balance = float(summary.get("usdt_balance", 0.0) or 0.0)
-                    total_exposure = max(0.0, total_equity - available_balance)
+                    total_equity = Decimal(str(summary.get("total_value_usdt", 0) or 0))
+                    available_balance = Decimal(
+                        str(summary.get("usdt_balance", 0) or 0)
+                    )
+                    total_exposure = max(Decimal("0"), total_equity - available_balance)
                 except Exception as e:
                     logger.warning(f"[Cycle] No se pudo obtener estado de cuenta: {e}")
                 # Verificar circuit breakers (auto-activación)
@@ -241,14 +249,17 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         from app.core.paper_trading import get_paper_portfolio_summary
 
                         paper_summary = get_paper_portfolio_summary()
-                        available_balance = float(
-                            paper_summary.get("current_balance", available_balance)
-                            or available_balance
+                        available_balance = Decimal(
+                            str(
+                                paper_summary.get("current_balance", available_balance)
+                                or available_balance
+                            )
                         )
                 except Exception:
                     pass
 
                 ml_enabled = os.getenv("ML_ENABLED", "false").lower() == "true"
+                hybrid_ml = _create_hybrid_ml_engine() if ml_enabled else None
                 risk = RiskManager()
                 selector = StrategySelector(risk)
                 from app.core.risk_manager import RegimePrediction, MarketRegime
@@ -261,14 +272,20 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         rp: RegimePrediction
                         if ml_enabled:
                             try:
-                                ml_pred = await ml.predict_regime(sym, "1m", 60)
-                                rp = ml_prediction_to_regime_prediction(ml_pred)
+                                if hybrid_ml is None:
+                                    raise RuntimeError(
+                                        "Hybrid ML engine not initialized"
+                                    )
+                                rp = await hybrid_ml.predict_regime_from_klines(
+                                    sym, kl, train_online=True
+                                )
                                 ml_regime_used_in_cycle_total.labels(symbol=sym).inc()
                                 logger.debug(
-                                    "[Cycle] ML regime used",
+                                    "[Cycle] Hybrid ML regime used",
                                     extra={
                                         "symbol": sym,
                                         "regime": rp.long_regime.value,
+                                        "short_regime": rp.short_regime.value,
                                     },
                                 )
                             except Exception as ml_err:
@@ -327,6 +344,9 @@ def trading_cycle_tick() -> Dict[str, Any]:
                             "confidence": conf,
                             "price": float(price),
                             "ready": ready,
+                            "regime": getattr(
+                                rp.short_regime, "value", str(rp.short_regime)
+                            ),
                         }
                     except Exception as e:
                         logger.warning(f"[Cycle] Eval fallo {sym}: {e}")
@@ -425,7 +445,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
         return {"status": "error", "message": str(e)}
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def execute_trading_cycle() -> Dict[str, Any]:
     """
     Ejecuta un ciclo completo de trading con validaciones mejoradas
@@ -514,7 +534,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 finally:
                     asyncio.set_event_loop(None)
                     loop.close()
-            available_usdt = float((summary or {}).get("usdt_balance", 0.0) or 0.0)
+            available_usdt = Decimal(str((summary or {}).get("usdt_balance", 0) or 0))
 
             # 🔧 MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
             if CALIBRATION_MODE:
@@ -577,8 +597,8 @@ def execute_trading_cycle() -> Dict[str, Any]:
                             updated_summary = loop.run_until_complete(
                                 fund_manager.get_trading_summary(updated_balances)
                             )
-                            updated_usdt = float(
-                                (updated_summary or {}).get("usdt_balance", 0.0) or 0.0
+                            updated_usdt = Decimal(
+                                str((updated_summary or {}).get("usdt_balance", 0) or 0)
                             )
 
                             if updated_usdt >= SAFE_MIN_USDT:
@@ -653,8 +673,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
             if spot and spot > 0:
                 asset = manager.config.assets.get("ETHUSDT")
                 if asset:
-                    low = float(spot) * 0.99
-                    high = float(spot) * 1.01
+                    spot_d = Decimal(str(spot))
+                    low = float(spot_d * Decimal("0.99"))
+                    high = float(spot_d * Decimal("1.01"))
                     asset.min_price = low
                     asset.max_price = high
                     # Generar 3 niveles equidistantes dentro del rango
@@ -761,7 +782,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
         return {"status": "error", "message": str(e)}
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def assess_risk() -> Dict[str, Any]:
     """
     Evalúa el riesgo del portafolio
@@ -835,7 +856,7 @@ def assess_risk() -> Dict[str, Any]:
         return {"risk_level": "unknown", "error": str(e)}
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def update_metrics() -> Dict[str, Any]:
     """
     Actualiza todas las métricas del sistema
@@ -860,7 +881,7 @@ def update_metrics() -> Dict[str, Any]:
         return {"status": "error", "message": str(e)}
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def health_check() -> Dict[str, Any]:
     """
     Verificación de salud del sistema
@@ -914,7 +935,7 @@ def health_check() -> Dict[str, Any]:
         return {"status": "unhealthy", "error": str(e)}
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 @with_distributed_lock("dust_sweep", timeout=600, blocking=False)
 def dust_sweep(dry_run: bool = True) -> dict:
     """
@@ -951,15 +972,19 @@ def dust_sweep(dry_run: bool = True) -> dict:
             dust_threshold = float(os.getenv("DUST_THRESHOLD_USD", "1"))
 
             items = []
-            total_dust = 0.0
+            total_dust = Decimal("0")
             for asset, qty in balances.items():
                 if asset in ("USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"):
                     continue
                 if asset in whitelist:
                     continue
-                price = 1.0 if asset == "USD" else px(f"{asset}USDT") or 0.0
-                value = float(qty) * float(price)
-                if 0.0 < value < dust_threshold:
+                price = (
+                    Decimal("1")
+                    if asset == "USD"
+                    else Decimal(str(px(f"{asset}USDT") or 0))
+                )
+                value = Decimal(str(qty)) * price
+                if Decimal("0") < value < Decimal(str(dust_threshold)):
                     items.append(
                         {
                             "asset": asset,
@@ -971,7 +996,7 @@ def dust_sweep(dry_run: bool = True) -> dict:
                     total_dust += value
 
             dust_assets_count.set(len(items))
-            dust_value_usd.set(total_dust)
+            dust_value_usd.set(float(total_dust))
 
             actions = []
             swept_total = 0.0
@@ -1012,7 +1037,7 @@ def dust_sweep(dry_run: bool = True) -> dict:
 
             return {
                 "count": len(items),
-                "total_value": round(total_dust, 4),
+                "total_value": float(round(total_dust, 4)),
                 "actions": actions,
                 "dry_run": dry_run,
             }

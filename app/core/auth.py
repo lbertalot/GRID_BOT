@@ -13,10 +13,11 @@ def get_api_key(request: Request) -> str:
     if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Formato Authorization inválido")
     token = header.split(" ", 1)[1].strip()
-    valid_api_key = os.getenv("API_KEY") or "gridbot_api_key_2024_secure_12345"
+    valid_api_key = os.getenv("API_KEY")
     if not valid_api_key:
         raise HTTPException(
-            status_code=500, detail="API key no configurado en el servidor"
+            status_code=500,
+            detail="API_KEY no configurado en el servidor — revisar .env",
         )
     if token != valid_api_key:
         raise HTTPException(status_code=401, detail="API key inválido")
