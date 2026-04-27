@@ -3,7 +3,7 @@
 This project implements predictive and adaptive market regime detection to steer strategies and position sizing.
 
 - MLEngine (online, lightweight): Incremental logistic regression with River for short-horizon regime classification from klines-derived features. Non-blocking I/O, model persistence with joblib, drift detection via ADWIN.
-- HybridMLEngine (deep + online): LSTM/Transformer for long-horizon context combined with River-based short-horizon classifier. Exposes Prometheus metrics and integrates with `MarketRegime` and `RegimePrediction` types from `app/core/risk_manager.py`.
+- HybridMLEngine (deep + online): TensorFlow/Keras LSTM/Transformer for long-horizon context combined with River-based short-horizon classifier. Exposes Prometheus metrics and integrates with `MarketRegime` and `RegimePrediction` types from `app/core/risk_manager.py`.
 
 Key features
 - Feature pipeline from klines: volatility, spread, volume, RSI, ATR
@@ -13,7 +13,8 @@ Key features
 - Regime predictions wired to strategy selection and risk controls
 
 Dependencies
-- Optional/online: River (`river`), `joblib`
+- Online: River (`river`), `joblib`
+- Docker local hybrid stack: `requirements-ml.txt` is installed by `Dockerfile` and makes TensorFlow/Keras a required dependency for `HybridMLEngine`
 - Deep: TensorFlow/Keras, scikit-learn (`StandardScaler`, `LabelEncoder`)
 - Metrics: `prometheus_client`
 
@@ -76,5 +77,17 @@ asyncio.run(main())
 
 Operational guidance
 - Use async flows for any I/O-bound operation (market data, DB, filesystem saves).
-- When River is unavailable, `MLEngine` gracefully falls back and returns neutral predictions `(label=0, proba=0.5)`.
-- Persist deep models with Hybrid engine to `models/` and record scaler and label encoder for reproducible inference.
+- For the full local stack, use `docker compose -f docker-compose.local.yml up --build -d`; this is the compose file that passes `.env` into `api`, `worker`, and `beat`.
+- Set `ML_ENABLED=true` in the root `.env` to make the Celery trading tick call `HybridMLEngine.predict_regime_from_klines(...)`.
+- The tick trains the River online component from recent klines, persists it under `ML_MODELS_DIR` (default `data/ml/hybrid`), and passes the resulting `RegimePrediction` to `StrategySelector`.
+- If no deep model exists yet for a symbol, the hybrid engine uses the online River signal for both horizons until a TensorFlow model is trained and stored. This is not treated as an error fallback; errors still increment `gridbot_ml_regime_fallback_total` with `reason="error"`.
+- Persist deep models with Hybrid engine to `ML_MODELS_DIR` and record scaler and label encoder for reproducible inference.
+
+Docker smoke checks
+```bash
+docker compose -f docker-compose.local.yml build
+docker compose -f docker-compose.local.yml up -d api worker
+docker compose -f docker-compose.local.yml exec -T api printenv ML_ENABLED
+docker compose -f docker-compose.local.yml exec -T worker printenv ML_ENABLED
+docker compose -f docker-compose.local.yml exec -T worker python -c "import tensorflow; from app.services.hybrid_ml_engine import HybridMLEngine; HybridMLEngine()"
+```
