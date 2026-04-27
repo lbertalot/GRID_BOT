@@ -10,6 +10,7 @@ import pytest
 
 BASE_URL = os.getenv("GRIDBOT_BASE_URL", "http://localhost:8000")
 API_KEY = os.getenv("API_KEY", "aPZGos-2ok2Cb9t0OeOMPzUqtMU0GPk0")
+AUTH_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 
 class TestTradingCycle:
@@ -19,7 +20,12 @@ class TestTradingCycle:
         assert isinstance(r.json(), dict)
 
     def test_reconciliation_summary(self):
-        r = requests.get(f"{BASE_URL}/api/reconciliation/summary", timeout=20)
+        # /api/reconciliation/summary requiere autenticación
+        r = requests.get(
+            f"{BASE_URL}/api/reconciliation/summary",
+            headers=AUTH_HEADERS,
+            timeout=20,
+        )
         assert r.status_code in (
             200,
             500,
@@ -29,6 +35,7 @@ class TestTradingCycle:
             assert "portfolio_total_usdt" in js
 
     def test_breakers_summary(self):
+        # /breakers/summary es público (dashboards de monitoreo)
         r = requests.get(f"{BASE_URL}/breakers/summary", timeout=45)
         assert r.status_code == 200
         js = r.json()

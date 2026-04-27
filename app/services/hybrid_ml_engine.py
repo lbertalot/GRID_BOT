@@ -3,13 +3,14 @@ HybridMLEngine para V2.5 "Low-Risk, Predictive & Adaptive Grid".
 Combina modelos deep learning (LSTM/Transformer) con River para predicción de régimen.
 """
 
+import hashlib
 import json
 import logging
 import os
-import pickle
+import joblib
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any, List
 from datetime import datetime
 
 import tensorflow as tf
@@ -347,11 +348,15 @@ class HybridMLEngine:
             # Guardar modelo y componentes
             model.save(os.path.join(output_path, "model.h5"))
 
-            with open(os.path.join(output_path, "scaler.pkl"), "wb") as f:
-                pickle.dump(self.scalers[symbol], f)
+            scaler_path = os.path.join(output_path, "scaler.pkl")
+            joblib.dump(self.scalers[symbol], scaler_path)
+            with open(scaler_path + ".sha256", "w") as hf:
+                hf.write(hashlib.sha256(open(scaler_path, "rb").read()).hexdigest())
 
-            with open(os.path.join(output_path, "label_encoder.pkl"), "wb") as f:
-                pickle.dump(self.label_encoders[symbol], f)
+            encoder_path = os.path.join(output_path, "label_encoder.pkl")
+            joblib.dump(self.label_encoders[symbol], encoder_path)
+            with open(encoder_path + ".sha256", "w") as hf:
+                hf.write(hashlib.sha256(open(encoder_path, "rb").read()).hexdigest())
 
             # Guardar configuración
             with open(os.path.join(output_path, "config.json"), "w") as f:
@@ -399,13 +404,27 @@ class HybridMLEngine:
             # Cargar modelo
             model = keras.models.load_model(os.path.join(path, "model.h5"))
 
-            # Cargar scaler
-            with open(os.path.join(path, "scaler.pkl"), "rb") as f:
-                scaler = pickle.load(f)
+            # Cargar scaler (joblib con verificación SHA256)
+            scaler_path = os.path.join(path, "scaler.pkl")
+            scaler_hash_path = scaler_path + ".sha256"
+            if os.path.exists(scaler_hash_path):
+                expected_hash = open(scaler_hash_path).read().strip()
+                actual_hash = hashlib.sha256(open(scaler_path, "rb").read()).hexdigest()
+                if actual_hash != expected_hash:
+                    raise ValueError(f"SHA256 mismatch for {scaler_path}")
+            scaler = joblib.load(scaler_path)
 
-            # Cargar label encoder
-            with open(os.path.join(path, "label_encoder.pkl"), "rb") as f:
-                label_encoder = pickle.load(f)
+            # Cargar label encoder (joblib con verificación SHA256)
+            encoder_path = os.path.join(path, "label_encoder.pkl")
+            encoder_hash_path = encoder_path + ".sha256"
+            if os.path.exists(encoder_hash_path):
+                expected_hash = open(encoder_hash_path).read().strip()
+                actual_hash = hashlib.sha256(
+                    open(encoder_path, "rb").read()
+                ).hexdigest()
+                if actual_hash != expected_hash:
+                    raise ValueError(f"SHA256 mismatch for {encoder_path}")
+            label_encoder = joblib.load(encoder_path)
 
             # Cargar configuración
             with open(os.path.join(path, "config.json"), "r") as f:
@@ -454,11 +473,61 @@ class HybridMLEngine:
         Args:
             symbol: Símbolo del trading pair
         """
+        if symbol not in self.river_models and self.load_river_model(symbol):
+            return
+
         if symbol not in self.river_models:
             self.river_models[symbol] = self._create_river_model()
             self.river_metrics[symbol] = metrics.Accuracy()
 
             self.logger.info(f"River model initialized for {symbol}")
+
+    def _river_model_path(self, symbol: str) -> str:
+        """Ruta de persistencia para el componente River online."""
+        safe_symbol = symbol.replace("/", "_").replace(":", "_")
+        return os.path.join(self.models_dir, f"{safe_symbol}_river.pkl")
+
+    def load_river_model(self, symbol: str) -> bool:
+        """Carga el modelo River online de un símbolo si existe."""
+        path = self._river_model_path(symbol)
+        if not os.path.exists(path):
+            return False
+
+        try:
+            hash_path = path + ".sha256"
+            if os.path.exists(hash_path):
+                expected_hash = open(hash_path).read().strip()
+                actual_hash = hashlib.sha256(open(path, "rb").read()).hexdigest()
+                if actual_hash != expected_hash:
+                    self.logger.error(
+                        f"SHA256 mismatch for River model {path} — refusing to load"
+                    )
+                    return False
+            payload = joblib.load(path)
+
+            self.river_models[symbol] = payload["model"]
+            self.river_metrics[symbol] = payload.get("metric", metrics.Accuracy())
+            self.logger.info(f"River model loaded for {symbol} from {path}")
+            return True
+        except Exception as e:
+            self.logger.warning(f"Error loading River model for {symbol}: {e}")
+            return False
+
+    def save_river_model(self, symbol: str) -> None:
+        """Persiste el modelo River online para sobrevivir reinicios Docker."""
+        if symbol not in self.river_models:
+            return
+
+        os.makedirs(self.models_dir, exist_ok=True)
+        path = self._river_model_path(symbol)
+        payload = {
+            "model": self.river_models[symbol],
+            "metric": self.river_metrics.get(symbol, metrics.Accuracy()),
+            "saved_at": datetime.now().isoformat(),
+        }
+        joblib.dump(payload, path)
+        with open(path + ".sha256", "w") as hf:
+            hf.write(hashlib.sha256(open(path, "rb").read()).hexdigest())
 
     def update_river_model(
         self, symbol: str, features: Dict[str, float], regime: MarketRegime
@@ -561,6 +630,8 @@ class HybridMLEngine:
         try:
             # Predicción
             y_pred = self.river_models[symbol].predict_one(features)
+            if y_pred is None:
+                return MarketRegime.RANGE, 0.5
 
             # Obtener confianza (simplificado)
             confidence = 0.7  # River no proporciona confianza directamente
@@ -578,6 +649,167 @@ class HybridMLEngine:
         except Exception as e:
             self.logger.error(f"Error predicting short regime for {symbol}: {e}")
             return MarketRegime.RANGE, 0.5
+
+    def _klines_to_dataframe(self, klines: List[List[Any]]) -> pd.DataFrame:
+        """Convierte klines de Binance a DataFrame con features técnicas básicas."""
+        rows = []
+        for kline in klines:
+            try:
+                rows.append(
+                    {
+                        "open": float(kline[1]),
+                        "high": float(kline[2]),
+                        "low": float(kline[3]),
+                        "close": float(kline[4]),
+                        "volume": float(kline[5]),
+                    }
+                )
+            except (IndexError, TypeError, ValueError):
+                continue
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+
+        df["returns"] = df["close"].pct_change().fillna(0.0)
+        df["volatility"] = df["returns"].rolling(20, min_periods=2).std().fillna(0.0)
+
+        delta = df["close"].diff().fillna(0.0)
+        gain = delta.clip(lower=0).rolling(14, min_periods=1).mean()
+        loss = (-delta.clip(upper=0)).rolling(14, min_periods=1).mean()
+        rs = gain / loss.replace(0, np.nan)
+        df["rsi"] = (100 - (100 / (1 + rs))).fillna(50.0)
+
+        ema_fast = df["close"].ewm(span=12, adjust=False).mean()
+        ema_slow = df["close"].ewm(span=26, adjust=False).mean()
+        df["macd"] = ema_fast - ema_slow
+
+        rolling_mean = df["close"].rolling(20, min_periods=1).mean()
+        rolling_std = df["close"].rolling(20, min_periods=1).std().fillna(0.0)
+        df["bb_upper"] = rolling_mean + (rolling_std * 2)
+        df["bb_lower"] = rolling_mean - (rolling_std * 2)
+
+        previous_close = df["close"].shift(1).fillna(df["close"])
+        true_range = pd.concat(
+            [
+                df["high"] - df["low"],
+                (df["high"] - previous_close).abs(),
+                (df["low"] - previous_close).abs(),
+            ],
+            axis=1,
+        ).max(axis=1)
+        df["atr"] = true_range.rolling(14, min_periods=1).mean().fillna(0.0)
+
+        return df
+
+    def _features_from_dataframe(self, df: pd.DataFrame) -> Dict[str, float]:
+        """Extrae el último snapshot de features para River."""
+        if df.empty:
+            return {
+                "close": 0.0,
+                "volume": 0.0,
+                "rsi": 50.0,
+                "atr": 0.0,
+                "volatility": 0.0,
+                "returns": 0.0,
+                "macd": 0.0,
+            }
+
+        last = df.iloc[-1]
+        return {
+            "close": float(last.get("close", 0.0)),
+            "volume": float(last.get("volume", 0.0)),
+            "rsi": float(last.get("rsi", 50.0)),
+            "atr": float(last.get("atr", 0.0)),
+            "volatility": float(last.get("volatility", 0.0)),
+            "returns": float(last.get("returns", 0.0)),
+            "macd": float(last.get("macd", 0.0)),
+        }
+
+    def _infer_observed_regime(self, df: pd.DataFrame) -> MarketRegime:
+        """Etiqueta online conservadora para entrenar River con klines recientes."""
+        if len(df) < 3:
+            return MarketRegime.RANGE
+
+        first_close = float(df["close"].iloc[0])
+        last_close = float(df["close"].iloc[-1])
+        if first_close <= 0:
+            return MarketRegime.RANGE
+
+        window_return = (last_close - first_close) / first_close
+        volatility = float(df["volatility"].iloc[-1])
+
+        if volatility >= 0.03 and window_return < 0:
+            return MarketRegime.HIGH_VOLATILITY_BEAR
+        if volatility >= 0.03:
+            return MarketRegime.HIGH_VOL
+        if window_return >= 0.01:
+            return MarketRegime.BULL_TREND
+        if window_return <= -0.01:
+            return MarketRegime.BEAR_TREND
+        return MarketRegime.RANGE
+
+    def load_latest_deep_model(self, symbol: str) -> bool:
+        """Intenta cargar el modelo deep más reciente del directorio de modelos."""
+        if symbol in self.deep_models or not os.path.isdir(self.models_dir):
+            return symbol in self.deep_models
+
+        candidates = [
+            os.path.join(self.models_dir, entry)
+            for entry in os.listdir(self.models_dir)
+            if entry.startswith(f"{symbol}_deep_")
+            and os.path.isdir(os.path.join(self.models_dir, entry))
+        ]
+        if not candidates:
+            return False
+
+        latest = max(candidates, key=os.path.getmtime)
+        return self.load_deep_model(latest, symbol)
+
+    async def predict_regime_from_klines(
+        self,
+        symbol: str,
+        klines: List[List[Any]],
+        train_online: bool = True,
+    ) -> RegimePrediction:
+        """
+        Predice régimen desde klines y actualiza el componente online River.
+
+        TensorFlow/Keras es requisito de importación del motor híbrido. Si aún no
+        existe un modelo deep entrenado para el símbolo, el horizonte largo usa la
+        señal online como puente explícito y observable, no un fallback de error.
+        """
+        df = self._klines_to_dataframe(klines)
+        features = self._features_from_dataframe(df)
+
+        if train_online and not df.empty:
+            observed_regime = self._infer_observed_regime(df)
+            self.update_river_model(symbol, features, observed_regime)
+            self.save_river_model(symbol)
+
+        self.load_latest_deep_model(symbol)
+
+        short_regime, short_conf = self.predict_short_regime(symbol, features)
+        if symbol in self.deep_models and len(df) > self.deep_config.sequence_length:
+            long_regime, long_conf = self.predict_long_regime(symbol, df)
+        else:
+            long_regime, long_conf = short_regime, max(0.5, short_conf * 0.9)
+
+        prediction = RegimePrediction(
+            long_regime=long_regime,
+            short_regime=short_regime,
+            long_conf=long_conf,
+            short_conf=short_conf,
+        )
+        self.last_predictions[symbol] = prediction
+
+        self.logger.info(
+            f"Hybrid regime prediction for {symbol}: "
+            f"Long={long_regime.value}({long_conf:.2f}), "
+            f"Short={short_regime.value}({short_conf:.2f})"
+        )
+
+        return prediction
 
     async def predict_regime(
         self, symbol: str, recent_data: pd.DataFrame, current_features: Dict[str, float]

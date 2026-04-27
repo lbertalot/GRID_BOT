@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List
 
 from sqlalchemy.orm import Session
@@ -12,16 +13,26 @@ from app.core.metrics import (
 )
 
 
+def _d(value) -> Decimal:
+    """Convierte un valor numérico a Decimal de forma segura."""
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
 def settle_pnl_on_sell(
-    db: Session, symbol: str, sell_qty: float, sell_price: float
+    db: Session, symbol: str, sell_qty, sell_price
 ) -> Dict[str, float]:
     """
     Cierra BUYs abiertos (FIFO) al ejecutar un SELL y computa PnL realizado.
     Retorna resumen con pnl_realized y qty_closed.
     """
-    remaining_qty = float(sell_qty)
-    pnl_realized = 0.0
-    qty_closed = 0.0
+    remaining_qty = _d(sell_qty)
+    pnl_realized = Decimal("0")
+    qty_closed = Decimal("0")
+    sell_price_d = _d(sell_price)
 
     # BUYs abiertos: exit_price is NULL
     open_buys: List[Trade] = (
@@ -35,27 +46,27 @@ def settle_pnl_on_sell(
         .all()
     )
 
+    epsilon = Decimal("1e-12")
     for buy in open_buys:
         if remaining_qty <= 0:
             break
-        close_qty = min(remaining_qty, float(buy.quantity))
-        entry_price = float(buy.entry_price)
-        trade_pnl = (sell_price - entry_price) * close_qty
+        buy_qty = _d(buy.quantity)
+        close_qty = min(remaining_qty, buy_qty)
+        entry_price = _d(buy.entry_price)
+        trade_pnl = (sell_price_d - entry_price) * close_qty
 
-        # Cerrar totalmente el trade cuando cantidades coinciden; en caso parcial, registrar PnL proporcional
-        if close_qty >= float(buy.quantity) - 1e-12:
-            buy.exit_price = sell_price
-            buy.profit_loss = (sell_price - entry_price) * float(buy.quantity)
+        if close_qty >= buy_qty - epsilon:
+            buy.exit_price = sell_price_d
+            buy.profit_loss = (sell_price_d - entry_price) * buy_qty
         else:
-            # Para parcial: ajustar cantidad y crear un registro cerrado proporcional
-            remaining_in_buy = float(buy.quantity) - close_qty
+            remaining_in_buy = buy_qty - close_qty
             buy.quantity = remaining_in_buy
             closed = Trade(
                 symbol=buy.symbol,
                 side=buy.side,
                 quantity=close_qty,
                 entry_price=entry_price,
-                exit_price=sell_price,
+                exit_price=sell_price_d,
                 profit_loss=trade_pnl,
             )
             db.add(closed)
@@ -66,7 +77,10 @@ def settle_pnl_on_sell(
 
     db.commit()
 
-    return {"pnl_realized": pnl_realized, "qty_closed": qty_closed}
+    return {
+        "pnl_realized": float(pnl_realized),
+        "qty_closed": float(qty_closed),
+    }
 
 
 def recompute_profit_metrics(db: Session, strategy: str = "grid") -> None:
@@ -74,18 +88,15 @@ def recompute_profit_metrics(db: Session, strategy: str = "grid") -> None:
     Recalcula métricas de profit agregadas desde DB.
     ROI por activo se deja en 0 si no hay baseline de capital invertido.
     """
-    # Suma de PnL realizado
     rows: List[Trade] = db.query(Trade).filter(Trade.profit_loss != None).all()  # noqa: E711
-    total_profit = sum(float(t.profit_loss or 0.0) for t in rows)
-    profit_total_usdt.labels(strategy=strategy).set(total_profit)
+    total_profit = sum(_d(t.profit_loss) for t in rows)
+    profit_total_usdt.labels(strategy=strategy).set(float(total_profit))
 
-    # Por activo
-    by_asset: Dict[str, float] = {}
+    by_asset: Dict[str, Decimal] = {}
     for t in rows:
         asset = (t.symbol or "").replace("USDT", "") or t.symbol
-        by_asset[asset] = by_asset.get(asset, 0.0) + float(t.profit_loss or 0.0)
+        by_asset[asset] = by_asset.get(asset, Decimal("0")) + _d(t.profit_loss)
 
     for asset, profit in by_asset.items():
-        profit_by_asset_usdt.labels(asset=asset, strategy=strategy).set(profit)
-        # ROI por activo requiere baseline; publicamos 0.0 por ahora
+        profit_by_asset_usdt.labels(asset=asset, strategy=strategy).set(float(profit))
         roi_by_asset_percent.labels(asset=asset, strategy=strategy).set(0.0)

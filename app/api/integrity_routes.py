@@ -12,22 +12,33 @@ from app.core.balance_validator import BalanceValidator  # type: ignore
 
 router = APIRouter(prefix="/integrity", tags=["integrity"])  # exported router
 
+# Componentes de integridad — se inicializan on-demand al primer uso
+_balance_validator: BalanceValidator | None = None
+_operation_tracker: OperationTracker | None = None
+_integrity_monitor: IntegrityMonitor | None = None
+
+
+def _get_components() -> tuple[BalanceValidator, OperationTracker]:
+    """Devuelve los componentes de integridad, inicializando on-demand si es necesario."""
+    global _balance_validator, _operation_tracker, _integrity_monitor
+    if _balance_validator is None or _operation_tracker is None:
+        try:
+            _balance_validator = BalanceValidator()
+            _operation_tracker = OperationTracker()
+            _integrity_monitor = IntegrityMonitor()
+            _integrity_monitor.set_components(_balance_validator, _operation_tracker)
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se pudieron inicializar componentes de integridad: {e}",
+            )
+    return _balance_validator, _operation_tracker
+
 
 @router.get("/status")
 async def get_integrity_status() -> Dict[str, Any]:
     try:
-        monitor: IntegrityMonitor | None = getattr(router, "integrity_monitor", None)
-        balance_validator: BalanceValidator | None = getattr(
-            router, "balance_validator", None
-        )
-        operation_tracker: OperationTracker | None = getattr(
-            router, "operation_tracker", None
-        )
-
-        if not balance_validator or not operation_tracker:
-            raise HTTPException(
-                status_code=503, detail="Componentes de integridad no inicializados"
-            )
+        balance_validator, operation_tracker = _get_components()
 
         balance_summary = await balance_validator.get_validation_summary()
         operation_summary = await operation_tracker.get_operation_summary()
@@ -56,14 +67,7 @@ async def get_integrity_status() -> Dict[str, Any]:
 @router.post("/validate-balances")
 async def force_balance_validation() -> Dict[str, Any]:
     try:
-        balance_validator: BalanceValidator | None = getattr(
-            router, "balance_validator", None
-        )
-        if not balance_validator:
-            raise HTTPException(
-                status_code=503, detail="BalanceValidator no inicializado"
-            )
-
+        balance_validator, _ = _get_components()
         await balance_validator.force_validation()
         return {
             "message": "Validación de balances forzada exitosamente",
@@ -78,14 +82,7 @@ async def force_balance_validation() -> Dict[str, Any]:
 @router.post("/check-operations")
 async def force_operation_check() -> Dict[str, Any]:
     try:
-        operation_tracker: OperationTracker | None = getattr(
-            router, "operation_tracker", None
-        )
-        if not operation_tracker:
-            raise HTTPException(
-                status_code=503, detail="OperationTracker no inicializado"
-            )
-
+        _, operation_tracker = _get_components()
         await operation_tracker.force_operation_check()
         return {
             "message": "Verificación de operaciones forzada exitosamente",
@@ -100,14 +97,7 @@ async def force_operation_check() -> Dict[str, Any]:
 @router.get("/operations/failed")
 async def get_failed_operations() -> Dict[str, Any]:
     try:
-        operation_tracker: OperationTracker | None = getattr(
-            router, "operation_tracker", None
-        )
-        if not operation_tracker:
-            raise HTTPException(
-                status_code=503, detail="OperationTracker no inicializado"
-            )
-
+        _, operation_tracker = _get_components()
         failed_ops = await operation_tracker.get_failed_operations_summary()
         return {
             "failed_operations": failed_ops,
@@ -123,14 +113,7 @@ async def get_failed_operations() -> Dict[str, Any]:
 @router.get("/operations/partial-fills")
 async def get_partial_fills() -> Dict[str, Any]:
     try:
-        operation_tracker: OperationTracker | None = getattr(
-            router, "operation_tracker", None
-        )
-        if not operation_tracker:
-            raise HTTPException(
-                status_code=503, detail="OperationTracker no inicializado"
-            )
-
+        _, operation_tracker = _get_components()
         partial_fills = await operation_tracker.get_partial_fills_summary()
         return {
             "partial_fills": partial_fills,
