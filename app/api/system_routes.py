@@ -15,7 +15,7 @@ async def root():
 
 @router.get("/health")
 async def health_check():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @router.get("/health/liveness")

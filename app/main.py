@@ -321,10 +321,11 @@ app = FastAPI(
 )
 
 # Configurar middleware
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=("*" not in _cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -332,7 +333,10 @@ app.add_middleware(
 # Middleware de métricas HTTP (Prometheus)
 app.add_middleware(PrometheusHTTPMiddleware)
 
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+# testserver: Host que usa Starlette/FastAPI TestClient en pytest/CI
+_trusted_hosts_raw = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 # Middleware Integrity Guard (desactivable en tests)
 if os.getenv("INTEGRITY_GUARD_DISABLED", "0") != "1":
@@ -365,9 +369,13 @@ app.include_router(alert_routes.router)
 # Exponer /metrics raíz para Prometheus y compatibilidad
 app.include_router(prometheus_routes.router)
 app.include_router(simulations.router)
-app.include_router(config_routes.router)
+# /api/config requiere auth — gestión de configuración sensible
+from app.core.auth import require_auth as _require_auth  # noqa: E402
+
+app.include_router(config_routes.router, dependencies=[Depends(_require_auth)])
 app.include_router(system_routes.router)
-app.include_router(binance_sync_routes.router)
+# /api/v1/binance requiere auth — sincronización de cuenta Binance
+app.include_router(binance_sync_routes.router, dependencies=[Depends(_require_auth)])
 
 # Routers de nueva capa de integridad y reconciliación
 from app.api.integrity_routes import router as integrity_router  # noqa: E402
@@ -376,16 +384,20 @@ from app.api.breakers_routes import router as breakers_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
 
-app.include_router(integrity_router)
-app.include_router(reconciliation_router)
+# /integrity/* requiere auth — estado interno de integridad financiera
+app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
+# /api/reconciliation/* requiere auth — reconciliación contable
+app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
+# /breakers/* público — dashboards de monitoreo (Grafana/Prometheus)
 app.include_router(breakers_router)
-app.include_router(portfolio_router)
+# /portfolio/* requiere auth — posiciones y PnL
+app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
 
 
 # Endpoint directo para /api/positions (compatibilidad con auditoría)
 @app.get("/api/positions")
-async def get_positions():
-    """Endpoint directo para /api/positions (compatibilidad con auditoría)"""
+async def get_positions(api_key: str = Depends(_require_auth)):
+    """Endpoint directo para /api/positions (requiere auth)"""
     return await get_portfolio_positions()
 
 
@@ -480,11 +492,25 @@ async def get_server_ip():
 @app.get("/integrity/status")
 async def get_integrity_status():
     """Obtener estado de integridad del sistema"""
+    global balance_validator, operation_tracker, integrity_monitor
     try:
         if not balance_validator or not operation_tracker:
-            raise HTTPException(
-                status_code=503, detail="Componentes de integridad no inicializados"
+            logger.warning(
+                "Componentes de integridad no encontrados, inicializando on-demand..."
             )
+            try:
+                balance_validator = BalanceValidator()
+                operation_tracker = OperationTracker()
+                if not integrity_monitor:
+                    integrity_monitor = IntegrityMonitor()
+                integrity_monitor.set_components(balance_validator, operation_tracker)
+            except Exception as init_e:
+                logger.error(
+                    f"No se pudo inicializar componentes de integridad: {init_e}"
+                )
+                raise HTTPException(
+                    status_code=503, detail="Componentes de integridad no inicializados"
+                )
 
         # Obtener resumen de validación de balances
         balance_summary = await balance_validator.get_validation_summary()
@@ -518,7 +544,7 @@ async def get_integrity_status():
 
 
 @app.post("/integrity/validate-balances")
-async def force_balance_validation():
+async def force_balance_validation(api_key: str = Depends(_require_auth)):
     """Forzar validación inmediata de balances"""
     try:
         if not balance_validator:
@@ -539,7 +565,7 @@ async def force_balance_validation():
 
 
 @app.post("/integrity/check-operations")
-async def force_operation_check():
+async def force_operation_check(api_key: str = Depends(_require_auth)):
     """Forzar verificación de operaciones activas"""
     try:
         if not operation_tracker:
@@ -612,7 +638,7 @@ async def ping():
 # Endpoint de salud simple para healthcheck de Docker y sondas
 @app.get("/health")
 async def health():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @app.get("/integrity/balances/discrepancies")
@@ -646,7 +672,10 @@ async def get_balance_discrepancies():
 
 @app.post("/integrity/update-binance-balance")
 async def update_binance_balance(
-    balance: float, pnl: float = None, pnl_pct: float = None
+    balance: float,
+    pnl: float = None,
+    pnl_pct: float = None,
+    api_key: str = Depends(_require_auth),
 ):
     """Actualizar balance real de Binance proporcionado por el usuario"""
     try:
@@ -685,7 +714,7 @@ async def update_binance_balance(
 
 
 @app.post("/integrity/auto-correct-balance")
-async def auto_correct_balance():
+async def auto_correct_balance(api_key: str = Depends(_require_auth)):
     """Corrección automática de discrepancia de balance del sistema"""
     try:
         if not balance_validator:

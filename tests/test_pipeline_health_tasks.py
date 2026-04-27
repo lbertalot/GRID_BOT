@@ -20,22 +20,20 @@ def test_prom_query_parses_scalar_vector() -> None:
         },
     }
     mock_resp = MagicMock()
-    mock_resp.read.return_value = json.dumps(sample).encode("utf-8")
-    mock_resp.__enter__ = lambda self=None: mock_resp
-    mock_resp.__exit__ = lambda *a: None
+    mock_resp.json.return_value = sample
+    mock_resp.raise_for_status = MagicMock()
 
-    with patch.object(ph, "urlopen", return_value=mock_resp):
+    with patch.object(ph.httpx, "get", return_value=mock_resp):
         assert ph._prom_query("sum(up)") == 12.25
 
 
 def test_prom_query_empty_result_zero() -> None:
     sample = {"status": "success", "data": {"resultType": "vector", "result": []}}
     mock_resp = MagicMock()
-    mock_resp.read.return_value = json.dumps(sample).encode("utf-8")
-    mock_resp.__enter__ = lambda self=None: mock_resp
-    mock_resp.__exit__ = lambda *a: None
+    mock_resp.json.return_value = sample
+    mock_resp.raise_for_status = MagicMock()
 
-    with patch.object(ph, "urlopen", return_value=mock_resp):
+    with patch.object(ph.httpx, "get", return_value=mock_resp):
         assert ph._prom_query("sum(up)") == 0.0
 
 
@@ -51,7 +49,9 @@ def test_max_ts_column_for_table_resolves_known_columns() -> None:
     assert ph._max_ts_column_for_table(mock_session, "trades") == "timestamp"
 
 
-def test_write_reports_creates_latest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_write_reports_creates_latest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(ph, "REPORTS_DIR", tmp_path)
     payload = {"ok": True, "checks": {}}
     path = ph._write_reports(payload)
