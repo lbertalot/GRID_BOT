@@ -266,26 +266,24 @@ async def place_order(
     # Validación previa unificada (PRECIO/LOT/MIN_NOTIONAL + balance) usando dependencia E2E
     try:
         symbol = order.symbol.upper()
-        current_price = None
+        current_price: Optional[Decimal] = None
         try:
             # ✅ Bug #3 Fix: Obtener ticker en thread separado
             ticker = await asyncio.to_thread(client.get_symbol_ticker, symbol=symbol)
-            current_price = float(ticker["price"])
+            current_price = Decimal(str(ticker["price"]))
         except Exception:
             current_price = None
 
         price_for_validation = (
-            current_price
-            if order.type == "MARKET"
-            else float(order.price)
-            if order.price is not None
+            float(current_price) if current_price is not None and order.type == "MARKET"
+            else float(Decimal(str(order.price))) if order.price is not None
             else None
         )
         # Validación directa en ruta (sin depender de __wrapped__).
         order_validator = OrderValidator(client)
         validation = order_validator.validate_order_parameters(
             symbol=symbol,
-            quantity=float(order.quantity),
+            quantity=float(Decimal(str(order.quantity))),
             side=order.side,
             order_type=order.type,
             price=price_for_validation,
@@ -301,11 +299,11 @@ async def place_order(
                     "validation": validation,
                 },
             )
-        # Ajustar cantidad/precio recomendados
-        rounded_qty = float(validation.get("recommended_quantity", order.quantity))
-        order.quantity = rounded_qty
+        # Ajustar cantidad/precio recomendados — usar Decimal para precisión
+        rounded_qty = Decimal(str(validation.get("recommended_quantity", order.quantity)))
+        order.quantity = float(rounded_qty)  # OrderRequest espera float; Decimal ya redondeó
         if order.type == "LIMIT" and validation.get("adjusted_price") is not None:
-            order.price = float(validation["adjusted_price"])
+            order.price = float(Decimal(str(validation["adjusted_price"])))
     except HTTPException:
         raise
     except Exception as e:
@@ -316,11 +314,13 @@ async def place_order(
 
     try:
         # Registrar INTENDED e idempotencia con newClientOrderId
-        intended_price = (
-            float(order.price)
+        # Usar Decimal para precisión en precios financieros
+        intended_price_d = (
+            Decimal(str(order.price))
             if (order.type == "LIMIT" and order.price)
-            else float(current_price or 0.0)
+            else (current_price or Decimal("0"))
         )
+        intended_price = float(intended_price_d)  # track_operation acepta float
         client_order_id = _operation_tracker.generate_client_order_id(
             asset=symbol,
             side=order.side,
@@ -408,14 +408,15 @@ async def place_order(
         except Exception:
             pass
         # Registro en base de datos (y cálculo PnL si SELL)
+        # Usar Decimal para el precio de fill — es un dato financiero crítico
         entry_price = (
-            float(result["fills"][0]["price"])
+            float(Decimal(str(result["fills"][0]["price"])))
             if "fills" in result and result["fills"]
             else 0.0
         )
         symbol_u = order.symbol.upper()
         side_u = order.side.upper()
-        qty_f = float(order.quantity)
+        qty_f = float(Decimal(str(order.quantity)))
 
         if side_u == "BUY":
             log_trade(

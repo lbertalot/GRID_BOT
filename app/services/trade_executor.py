@@ -56,6 +56,26 @@ class TradeExecutor:
             Exception si la orden falla
         """
         try:
+            # ── GUARD DE SEGURIDAD: verificar Circuit Breakers antes de enviar ──
+            # Si cualquier breaker está activo, rechazar la orden inmediatamente.
+            # Esto es la última línea de defensa antes de Binance.
+            try:
+                from app.core.circuit_breakers import CircuitBreakers as _CB
+                _cb = _CB()
+                if _cb.is_trading_halted():
+                    active = _cb.get_all_breakers_status().get("active_breakers", [])
+                    logger.error(
+                        f"🚨 ORDEN BLOQUEADA por Circuit Breakers activos {active}: "
+                        f"{side} {quantity} {symbol}"
+                    )
+                    raise ValueError(
+                        f"Circuit Breaker activo {active}: trading detenido por seguridad"
+                    )
+            except ValueError:
+                raise
+            except Exception as cb_err:
+                logger.warning(f"[Guard] No se pudo verificar circuit breakers: {cb_err}")
+
             # 1. Ejecutar orden en Binance (con mitigación -1021)
             logger.info(
                 f"🔄 Ejecutando orden: {side} {quantity} {symbol} ({order_type})"

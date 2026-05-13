@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Iniciando GridBot v2.5 con componentes de integridad")
 
     # Distributed tracing (OpenTelemetry — no-op si las dependencias no están instaladas)
-    setup_tracing(app)
+    # setup_tracing(app) — MOVIDO fuera de lifespan para evitar RuntimeError de middleware
 
     try:
         # Si estamos exportando OpenAPI en CI, no inicializar componentes externos
@@ -319,6 +319,9 @@ app = FastAPI(
     version="2.5.0",
     lifespan=lifespan,
 )
+# Distributed tracing (OpenTelemetry — no-op si las dependencias no están instaladas)
+# Debe inicializarse ANTES de que el servidor acepte requests para poder añadir middleware
+setup_tracing(app)
 
 # Configurar middleware
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")

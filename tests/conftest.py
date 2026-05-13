@@ -2,8 +2,19 @@ import os
 import sys
 import time
 import types
+import tempfile
 import requests
 import pytest
+
+# ── Fix Prometheus multiprocess en Windows ────────────────────────────────────
+# prometheus_client en modo multiprocess requiere un directorio real.
+# En Windows `/tmp` no existe; lo redirigimos a un tempdir antes de cualquier
+# import de módulos que registren métricas (RiskManager, circuit_breakers, etc.)
+_PROM_DIR = os.getenv("PROMETHEUS_MULTIPROC_DIR", "")
+if not _PROM_DIR or not os.path.isdir(_PROM_DIR):
+    _PROM_TMP = tempfile.mkdtemp(prefix="prom_test_")
+    os.environ["PROMETHEUS_MULTIPROC_DIR"] = _PROM_TMP
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Asegurar que /app esté en PYTHONPATH antes de importar 'app'
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

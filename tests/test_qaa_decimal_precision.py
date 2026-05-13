@@ -58,7 +58,7 @@ class TestStaticFloatAudit:
         if not os.path.exists(full_path):
             return results
 
-        with open(full_path, "r") as f:
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
             source = f.read()
 
         try:
