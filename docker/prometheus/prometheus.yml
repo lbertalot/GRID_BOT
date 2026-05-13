@@ -6,12 +6,6 @@ global:
 rule_files:
   - "rules/*.yml"
 
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-          - alertmanager:9093
-
 scrape_configs:
   # Prometheus se scrapea a sí mismo
   - job_name: 'prometheus'

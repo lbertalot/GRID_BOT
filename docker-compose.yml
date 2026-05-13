@@ -25,6 +25,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   # Redis para cache y Celery
   redis:
@@ -43,6 +48,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 768M
 
   # API principal con todas las mejoras y configuración unificada
   api:
@@ -127,6 +137,11 @@ services:
       start_period: 60s
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   # Celery worker para tareas asíncronas
   celery_worker:
@@ -183,6 +198,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   # Celery beat para tareas programadas
   celery_beat:
@@ -226,6 +246,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 256M
 
   # Flower para monitoreo de Celery
   flower:
@@ -280,6 +305,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 512M
 
   # Grafana para visualización con PostgreSQL
   grafana:
@@ -332,6 +362,11 @@ services:
       retries: 3
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 768M
 
   # Alertmanager para alertas
   alertmanager:
@@ -348,6 +383,66 @@ services:
       - '--storage.path=/alertmanager'
     networks:
       - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 128M
+
+  # Redis Exporter
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: gridbot_redis_exporter
+    restart: always
+    environment:
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    networks:
+      - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 128M
+
+  # Postgres Exporter
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: gridbot_postgres_exporter
+    restart: always
+    environment:
+      - DATA_SOURCE_NAME=postgresql://griduser:gridpass@db:5432/gridbot?sslmode=disable
+    depends_on:
+      - db
+    networks:
+      - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 128M
+
+  # cAdvisor para métricas de contenedores
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: gridbot_cadvisor
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    networks:
+      - gridbot_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 256M
 
   # Nginx como proxy reverso (opcional para producción)
   nginx:

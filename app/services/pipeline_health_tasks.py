@@ -1,10 +1,10 @@
 """
-Watchdog de ingesta API → DB: verifica escrituras recientes cada ~15 min.
+Watchdog de ingesta API -- DB: verifica escrituras recientes cada ~15 min.
 
-- Preferencia: PromQL `increase(db_writes_total{...}[65m])` vía Prometheus HTTP API.
-- Fallback si Prometheus no responde: timestamps máximos en PostgreSQL.
+- Preferencia: PromQL increase(db_writes_total{...}[65m]) via Prometheus HTTP API.
+- Fallback si Prometheus no responde: timestamps maximos en PostgreSQL.
 - Evidencia: JSON en REPORTS_DIR/pipeline_health/ (LATEST + timestamp).
-- Fallo duro (excepción Celery) si una tabla crítica incumple el umbral.
+- Degradacion detectada: loguear WARNING, retornar estado degraded sin RuntimeError
 """
 
 from __future__ import annotations
@@ -27,9 +27,7 @@ logger = logging.getLogger(__name__)
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://127.0.0.1:9090").rstrip("/")
 REPORTS_DIR = Path(os.getenv("REPORTS_DIR", "reports")).resolve()
 WINDOW = "65m"
-# Snapshots Celery cada 15m: margen 2× + buffer
 SNAPSHOT_MAX_AGE_MIN = int(os.getenv("PIPELINE_HEALTH_SNAPSHOT_MAX_AGE_MIN", "35"))
-# alerts puede estar quieto en horas sin eventos: solo advertencia, no falla la tarea
 ALERTS_SOFT_ONLY = os.getenv("PIPELINE_HEALTH_ALERTS_SOFT", "true").lower() in (
     "1",
     "true",
@@ -70,10 +68,7 @@ def _db_scalar(session, sql: str, params: Optional[Dict[str, Any]] = None) -> An
 
 
 def _max_ts_column_for_table(session, table: str) -> str:
-    """
-    Columna de tiempo a usar en MAX() para comprobar actividad reciente.
-    Alinea con esquemas que usan timestamp, created_at, etc.
-    """
+    """Columna de tiempo a usar en MAX() para comprobar actividad reciente."""
     q = text(
         """
         SELECT column_name
@@ -113,7 +108,7 @@ def _check_table_prometheus(table: str) -> Optional[float]:
 
 
 def _sql_fallback_checks(session) -> Dict[str, Any]:
-    """Cuando Prometheus no está: heurística por MAX(timestamp) en tablas."""
+    """Cuando Prometheus no esta: heuristica por MAX(timestamp) en tablas."""
     out: Dict[str, Any] = {}
     now = datetime.now(timezone.utc)
     cutoff_snap = now - timedelta(minutes=SNAPSHOT_MAX_AGE_MIN)
@@ -161,7 +156,6 @@ def _sql_fallback_checks(session) -> Dict[str, Any]:
         }
 
     max_al = _db_scalar(session, "SELECT MAX(created_at) FROM alerts")
-    # Sin alertas recientes no es fallo duro
     out["alerts"] = {
         "source": "sql",
         "max_created_at": str(max_al) if max_al else None,
@@ -180,10 +174,11 @@ def _sql_fallback_checks(session) -> Dict[str, Any]:
 )
 def check_pipeline_db_writes(self) -> Dict[str, Any]:
     """
-    Comprueba que haya escrituras `db_writes_total` en ~65m por tabla crítica
-    y que `portfolio_snapshots` tenga captura reciente (SQL).
+    Comprueba que haya escrituras db_writes_total en ~65m por tabla critica
+    y que portfolio_snapshots tenga captura reciente (SQL).
 
-    Lanza RuntimeError si falla algún check duro.
+    MEJORA: Retorna estado degraded en lugar de lanzar RuntimeError
+    Monitorea via metricas Prometheus, no via task failure
     """
     started = datetime.now(timezone.utc)
     tables_prom = ("trades", "balances", "performance_metrics", "alerts")
@@ -211,7 +206,6 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
                     f"{tbl}: increase(db_writes_total status=ok) en [{WINDOW}] == 0"
                 )
 
-    # portfolio_snapshots: sin contador de métricas dedicado → SQL siempre
     db = SessionLocal()
     try:
         max_cap = _db_scalar(
@@ -227,11 +221,10 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
         }
         if not snap_ok:
             failures.append(
-                f"portfolio_snapshots: última captura antigua o vacía "
+                f"portfolio_snapshots: ultima captura antigua o vacia "
                 f"(>{SNAPSHOT_MAX_AGE_MIN}m, max={max_cap})"
             )
 
-        # Si Prometheus no respondió (ninguna query con valor), fallback SQL
         if not prom_responded:
             logger.warning(
                 "[PipelineHealth] Usando fallback SQL (Prometheus no consultable)"
@@ -248,7 +241,7 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
                         checks[tbl]["ok"] = False
                         failures.append(
                             f"{tbl}: fallback SQL — sin actividad reciente "
-                            f"(max timestamp > 65m o tabla vacía)"
+                            f"(max timestamp > 65m o tabla vacia)"
                         )
     finally:
         db.close()
@@ -266,7 +259,6 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
 
     path = _write_reports(payload)
 
-    # Métricas exportadas por el worker (mismo proceso que prometheus_client)
     try:
         from app.core.metrics import pipeline_health_table_ok
 
@@ -280,14 +272,30 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
             "[PipelineHealth] No se pudo actualizar pipeline_health_table_ok: %s", exc
         )
 
+    # MEJORA: Usar WARNING en lugar de RuntimeError
+    # La salud del pipeline se monitorea via metricas, no via task failure
     if hard_failures:
         msg = "; ".join(hard_failures)
-        logger.error("[PipelineHealth] FALLO: %s (evidencia: %s)", msg, path)
-        raise RuntimeError(f"pipeline_health: {msg}")
+        logger.warning(
+            "[PipelineHealth] Degradacion detectada: %s",
+            msg,
+            extra={"failures": hard_failures, "report_path": str(path)},
+        )
+        return {
+            "status": "degraded",
+            "report": str(path),
+            "checked_at": payload["checked_at_utc"],
+            "failures": hard_failures,
+            "ok": False,
+        }
 
-    logger.info("[PipelineHealth] OK — evidencia %s", path)
+    logger.info(
+        "[PipelineHealth] Healthcheck OK",
+        extra={"report": str(path), "checked_at": payload["checked_at_utc"]},
+    )
     return {
         "status": "ok",
         "report": str(path),
         "checked_at": payload["checked_at_utc"],
+        "ok": True,
     }

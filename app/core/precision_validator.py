@@ -6,7 +6,7 @@ Evita errores de cantidad en órdenes de Binance
 
 import logging
 from decimal import Decimal
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 import json
 import os
 
@@ -97,8 +97,8 @@ class PrecisionValidator:
         return {"quantity": 2, "price": 2, "step_size": 0.01}
 
     def validate_quantity(
-        self, symbol: str, quantity: float
-    ) -> Tuple[bool, Optional[float], str]:
+        self, symbol: str, quantity: Decimal | float
+    ) -> Tuple[bool, Optional[Decimal], str]:
         """
         Valida y ajusta la cantidad para un símbolo
 
@@ -107,12 +107,16 @@ class PrecisionValidator:
             quantity: Cantidad a validar
 
         Returns:
-            Tuple[bool, Optional[float], str]: (válido, cantidad_ajustada, mensaje)
+            Tuple[bool, Optional[Decimal], str]: (válido, cantidad_ajustada, mensaje)
         """
         try:
+            # Asegurar que la cantidad sea Decimal
+            if not isinstance(quantity, Decimal):
+                quantity = Decimal(str(quantity))
+
             # Obtener precisión del símbolo
             precision_info = self.get_symbol_precision(symbol)
-            step_size = precision_info["step_size"]
+            step_size = Decimal(str(precision_info["step_size"]))
             quantity_precision = precision_info["quantity"]
 
             # Validar que la cantidad sea positiva
@@ -142,33 +146,29 @@ class PrecisionValidator:
             logger.error(f"Error validando cantidad para {symbol}: {e}")
             return False, None, f"Error de validación: {str(e)}"
 
-    def _adjust_to_step_size(self, quantity: float, step_size: float) -> float:
+    def _adjust_to_step_size(self, quantity: Decimal, step_size: Decimal) -> Decimal:
         """
         Ajusta la cantidad al step_size más cercano
 
         Args:
-            quantity: Cantidad original
-            step_size: Tamaño del paso
+            quantity: Cantidad original (Decimal)
+            step_size: Tamaño del paso (Decimal)
 
         Returns:
-            float: Cantidad ajustada
+            Decimal: Cantidad ajustada
         """
         try:
-            # Usar Decimal para precisión
-            quantity_decimal = Decimal(str(quantity))
-            step_decimal = Decimal(str(step_size))
-
             # Redondear hacia abajo al step_size más cercano
-            adjusted = (quantity_decimal // step_decimal) * step_decimal
+            adjusted = (quantity // step_size) * step_size
 
-            return float(adjusted)
+            return adjusted
 
         except Exception as e:
             logger.error(f"Error ajustando step_size: {e}")
-            # Fallback: redondear a 2 decimales
-            return round(quantity, 2)
+            # Fallback seguro
+            return quantity
 
-    def _is_valid_precision_format(self, quantity: float, precision: int) -> bool:
+    def _is_valid_precision_format(self, quantity: Decimal, precision: int) -> bool:
         """
         Valida que la cantidad tenga el formato de precisión correcto
 
@@ -180,23 +180,22 @@ class PrecisionValidator:
             bool: True si el formato es válido
         """
         try:
-            # Convertir a string y verificar decimales
-            quantity_str = str(quantity)
-
-            if "." in quantity_str:
-                decimal_part = quantity_str.split(".")[1]
-                if len(decimal_part) > precision:
-                    return False
-
-            return True
+            # Normalizar Decimal para evitar formatos científicos y contar decimales reales
+            normalized = quantity.normalize()
+            sign, digits, exponent = normalized.as_tuple()
+            
+            if exponent >= 0:
+                return True # No hay decimales
+            
+            return abs(exponent) <= precision
 
         except Exception as e:
             logger.error(f"Error validando formato de precisión: {e}")
             return False
 
     def validate_price(
-        self, symbol: str, price: float
-    ) -> Tuple[bool, Optional[float], str]:
+        self, symbol: str, price: Decimal | float
+    ) -> Tuple[bool, Optional[Decimal], str]:
         """
         Valida y ajusta el precio para un símbolo
 
@@ -205,9 +204,13 @@ class PrecisionValidator:
             price: Precio a validar
 
         Returns:
-            Tuple[bool, Optional[float], str]: (válido, precio_ajustado, mensaje)
+            Tuple[bool, Optional[Decimal], str]: (válido, precio_ajustado, mensaje)
         """
         try:
+            # Asegurar que el precio sea Decimal
+            if not isinstance(price, Decimal):
+                price = Decimal(str(price))
+
             # Obtener precisión del símbolo
             precision_info = self.get_symbol_precision(symbol)
             price_precision = precision_info["price"]
@@ -217,7 +220,10 @@ class PrecisionValidator:
                 return False, None, f"Precio debe ser mayor a 0: {price}"
 
             # Ajustar precio a la precisión correcta
-            adjusted_price = round(price, price_precision)
+            # Rounding mode HALF_DOWN para ser conservadores
+            from decimal import ROUND_HALF_DOWN
+            format_str = f"0.{'0' * price_precision}" if price_precision > 0 else "0"
+            adjusted_price = price.quantize(Decimal(format_str), rounding=ROUND_HALF_DOWN)
 
             return True, adjusted_price, "OK"
 
@@ -226,7 +232,7 @@ class PrecisionValidator:
             return False, None, f"Error de validación: {str(e)}"
 
     def validate_order(
-        self, symbol: str, quantity: float, price: float
+        self, symbol: str, quantity: Decimal | float, price: Decimal | float
     ) -> Tuple[bool, Dict, str]:
         """
         Valida una orden completa
@@ -251,11 +257,11 @@ class PrecisionValidator:
         if not price_valid:
             return False, {}, f"Error en precio: {price_msg}"
 
-        # Calcular valor notional
+        # Calcular valor notional usando Decimal
         notional_value = adjusted_quantity * adjusted_price
 
-        # Validar valor notional mínimo (ejemplo: $10)
-        if notional_value < 10:
+        # Validar valor notional mínimo (Binance standard: $10)
+        if notional_value < Decimal("10.0"):
             return False, {}, f"Valor notional muy bajo: ${notional_value:.2f} < $10"
 
         return (
@@ -296,7 +302,7 @@ precision_validator = PrecisionValidator()
 
 
 def validate_trading_order(
-    symbol: str, quantity: float, price: float
+    symbol: str, quantity: Union[Decimal, str], price: Union[Decimal, str]
 ) -> Tuple[bool, Dict, str]:
     """
     Función de conveniencia para validar una orden de trading

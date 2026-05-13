@@ -8,7 +8,7 @@ import time
 import asyncio
 import requests
 from decimal import Decimal
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from app.core.binance_proxy import get_binance_proxies
 from app.services.binance_client_singleton import get_binance_client_singleton
@@ -32,7 +32,7 @@ class TradeExecutor:
         symbol: str,
         side: str,
         order_type: str,
-        quantity: str,
+        quantity: Union[Decimal, str],
         db: Optional[Session] = None,
         update_balance: bool = True,
         **kwargs,
@@ -279,19 +279,19 @@ class TradeExecutor:
             traceback.print_exc()
 
     def execute_market_buy(
-        self, symbol: str, quantity: str, db: Optional[Session] = None
+        self, symbol: str, quantity: Union[Decimal, str], db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """Shortcut para orden MARKET BUY"""
         return self.execute_order(symbol, "BUY", "MARKET", quantity, db=db)
 
     def execute_market_sell(
-        self, symbol: str, quantity: str, db: Optional[Session] = None
+        self, symbol: str, quantity: Union[Decimal, str], db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """Shortcut para orden MARKET SELL"""
         return self.execute_order(symbol, "SELL", "MARKET", quantity, db=db)
 
     def execute_limit_buy(
-        self, symbol: str, quantity: str, price: str, db: Optional[Session] = None
+        self, symbol: str, quantity: Union[Decimal, str], price: Union[Decimal, str], db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """Shortcut para orden LIMIT BUY"""
         return self.execute_order(
@@ -299,7 +299,7 @@ class TradeExecutor:
         )
 
     def execute_limit_sell(
-        self, symbol: str, quantity: str, price: str, db: Optional[Session] = None
+        self, symbol: str, quantity: Union[Decimal, str], price: Union[Decimal, str], db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """Shortcut para orden LIMIT SELL"""
         return self.execute_order(

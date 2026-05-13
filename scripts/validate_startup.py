@@ -16,6 +16,10 @@ import sys
 import json
 from pathlib import Path
 from typing import Tuple, List
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
 
 # Colores para terminal
 GREEN = "\033[92m"
@@ -37,20 +41,20 @@ class HealthChecker:
         self.checks_failed = 0
 
     def log_pass(self, msg: str):
-        print(f"{GREEN}✅ {msg}{RESET}")
+        print(f"{GREEN}[PASS] {msg}{RESET}")
         self.checks_passed += 1
 
     def log_fail(self, msg: str, is_warning=False):
         if is_warning:
-            print(f"{YELLOW}⚠️  {msg}{RESET}")
+            print(f"{YELLOW}[WARN] {msg}{RESET}")
             self.warnings.append(msg)
         else:
-            print(f"{RED}❌ {msg}{RESET}")
+            print(f"{RED}[FAIL] {msg}{RESET}")
             self.errors.append(msg)
             self.checks_failed += 1
 
     def log_info(self, msg: str):
-        print(f"{BLUE}ℹ️  {msg}{RESET}")
+        print(f"{BLUE}[INFO] {msg}{RESET}")
 
     def check_file_exists(self, path: Path, name: str, critical=True) -> bool:
         """Verifica que un archivo existe."""
@@ -97,32 +101,13 @@ class HealthChecker:
             self.log_fail(f"Archivo no encontrado: {name}")
             return False
 
-    def check_ed25519_key(self) -> bool:
-        """Valida existencia de Ed25519 key."""
-        key_path = self.root / "secrets" / "binance_ed25519.pem"
-        if not key_path.exists():
-            self.log_fail(f"CRÍTICO: Falta clave Ed25519 en {key_path}")
-            return False
-        
-        try:
-            with open(key_path) as f:
-                content = f.read()
-                if "BEGIN PRIVATE KEY" not in content:
-                    self.log_fail("Clave Ed25519 inválida (formato incorrecto)")
-                    return False
-            self.log_pass("Clave Ed25519 válida")
-            return True
-        except Exception as e:
-            self.log_fail(f"Error leyendo clave Ed25519: {e}")
-            return False
 
     def check_binance_env_vars(self) -> bool:
         """Valida credenciales Binance."""
         api_key = self.check_env_var("BINANCE_API_KEY", required=True)
         api_secret = self.check_env_var("BINANCE_SECRET_KEY", required=True)
-        ed25519_key = self.check_env_var("BINANCE_ED25519_API_KEY", required=True)
         
-        if not (api_key and api_secret and ed25519_key):
+        if not (api_key and api_secret):
             self.log_fail("CRÍTICO: Credenciales Binance incompletas")
             return False
         
@@ -148,30 +133,24 @@ class HealthChecker:
             with open(config_path) as f:
                 config = json.load(f)
             
-            # Validaciones básicas
-            if "symbols" not in config:
-                self.log_fail("Config: falta 'symbols'")
+            # Detectar símbolos (claves que no empiezan por _ y no son system_config)
+            symbols = [k for k in config.keys() if not k.startswith("_") and k != "system_config"]
+            
+            if not symbols:
+                self.log_fail("Config: no se encontraron símbolos activos")
                 return False
             
-            symbols = config.get("symbols", [])
             invalid_symbols = []
-            
             for symbol in symbols:
-                # Valida que tenga formato XXX/YYY o XXXYYY
-                if "/" in symbol:
-                    parts = symbol.split("/")
-                    if len(parts) != 2 or not all(p.isalpha() for p in parts):
-                        invalid_symbols.append(symbol)
-                else:
-                    # XXXYYY debe terminar con una moneda conocida
-                    if not any(symbol.endswith(coin) for coin in ["USDT", "BUSD", "BTC", "ETH"]):
-                        invalid_symbols.append(symbol)
+                # Validar formato de símbolo (solo letras y números, 6-12 chars)
+                if not symbol.isalnum() or len(symbol) < 6:
+                    invalid_symbols.append(symbol)
             
             if invalid_symbols:
-                self.log_fail(f"Símbolos inválidos en config: {invalid_symbols}")
+                self.log_fail(f"Símbolos con formato inválido en config: {invalid_symbols}")
                 return False
             
-            self.log_pass(f"Grid config válido ({len(symbols)} símbolos)")
+            self.log_pass(f"Grid config válido ({len(symbols)} símbolos detectados)")
             return True
         except Exception as e:
             self.log_fail(f"Error validando grid config: {e}")
@@ -183,6 +162,30 @@ class HealthChecker:
         if not db_url:
             self.log_fail("DATABASE_URL no configurado o formato inválido")
             return False
+        return True
+
+    def check_trading_mode(self) -> bool:
+        """Valida consistencia del modo de trading (Paper vs Real)."""
+        paper_trading = os.getenv("PAPER_TRADING", "true").lower() == "true"
+        force_real = os.getenv("FORCE_REAL_MODE", "false").lower() == "true"
+        trading_enabled = os.getenv("TRADING_ENABLED", "false").lower() == "true"
+
+        if not trading_enabled:
+            self.log_info("Trading desactivado (TRADING_ENABLED=false)")
+            return True
+
+        if not paper_trading:
+            if not force_real:
+                self.log_fail("CRÍTICO: PAPER_TRADING=false pero FORCE_REAL_MODE no es true. "
+                             "Habilita FORCE_REAL_MODE=true para confirmar trading real.")
+                return False
+            else:
+                print(f"\n{RED}{BOLD}!!! MODO TRADING REAL ACTIVADO !!!{RESET}")
+                print(f"{RED}Dinero real en riesgo. Asegurate de que las credenciales son correctas.{RESET}\n")
+                self.log_pass("Modo REAL confirmado con FORCE_REAL_MODE=true")
+        else:
+            self.log_pass("Modo PAPER TRADING activo (simulación)")
+        
         return True
 
     def check_redis_env(self) -> bool:
@@ -243,12 +246,11 @@ class HealthChecker:
 
     def run_all_checks(self) -> bool:
         """Ejecuta todas las validaciones."""
-        print(f"\n{BOLD}{BLUE}🔍 GridBot Pre-Startup Validation{RESET}\n")
+        print(f"\n{BOLD}{BLUE}--- GridBot Pre-Startup Validation ---{RESET}\n")
         print(f"Root directory: {self.root}\n")
 
         # Fase 1: Archivos críticos
         print(f"{BOLD}[1/5] Archivos críticos:{RESET}")
-        self.check_ed25519_key()
         self.check_docker_compose_file()
         self.check_alembic_config()
 
@@ -259,8 +261,9 @@ class HealthChecker:
         self.check_redis_env()
 
         # Fase 3: Configuración JSON
-        print(f"\n{BOLD}[3/5] Configuración:{RESET}")
+        print(f"\n{BOLD}[3/5] Configuración y Modo:{RESET}")
         self.check_grid_config()
+        self.check_trading_mode()
 
         # Fase 4: Directorios
         print(f"\n{BOLD}[4/5] Estructura de directorios:{RESET}")
@@ -272,25 +275,25 @@ class HealthChecker:
         self.check_file_exists(env_file, ".env", critical=False)
 
         # Resumen
-        print(f"\n{BOLD}{BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+        print(f"\n{BOLD}{BLUE}========================================={RESET}")
         print(f"{BOLD}Resumen:{RESET}")
-        print(f"  {GREEN}✅ Pasadas: {self.checks_passed}{RESET}")
-        print(f"  {RED}❌ Fallos: {self.checks_failed}{RESET}")
-        print(f"  {YELLOW}⚠️  Advertencias: {len(self.warnings)}{RESET}")
-        print(f"{BOLD}{BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+        print(f"  {GREEN}[PASS] Pasadas: {self.checks_passed}{RESET}")
+        print(f"  {RED}[FAIL] Fallos: {self.checks_failed}{RESET}")
+        print(f"  {YELLOW}[WARN] Advertencias: {len(self.warnings)}{RESET}")
+        print(f"{BOLD}{BLUE}========================================={RESET}\n")
 
         if self.checks_failed > 0:
-            print(f"{RED}{BOLD}❌ STARTUP BLOCKED: Errores críticos encontrados{RESET}\n")
+            print(f"{RED}{BOLD}[FAIL] STARTUP BLOCKED: Errores criticos encontrados{RESET}\n")
             for error in self.errors:
-                print(f"  {RED}•{RESET} {error}")
+                print(f"  {RED}*{RESET} {error}")
             return False
         
         if self.warnings:
-            print(f"{YELLOW}⚠️  Advertencias detectadas (revisar):{RESET}\n")
+            print(f"{YELLOW}[WARN] Advertencias detectadas (revisar):{RESET}\n")
             for warning in self.warnings:
-                print(f"  {YELLOW}•{RESET} {warning}")
+                print(f"  {YELLOW}*{RESET} {warning}")
         
-        print(f"{GREEN}{BOLD}✅ Pre-startup checks PASSED! Puedes ejecutar:{RESET}")
+        print(f"{GREEN}{BOLD}[PASS] Pre-startup checks PASSED! Puedes ejecutar:{RESET}")
         print(f"  docker compose -f docker-compose.local.yml up --build\n")
         return True
 

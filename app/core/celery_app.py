@@ -40,7 +40,11 @@ celery_app = Celery(
     ],
 )
 
-# Configuración de Celery
+# ✅ MEJORA 1: Configuración de Celery optimizada
+# - prefetch_multiplier=1: Sin pre-fetch, mejor distribucion
+# - max_tasks_per_child=1000: Reciclar workers para evitar memory leaks
+# - acks_late=True: Confirmar tasks después de completarse
+# - reject_on_worker_lost=True: Re-encolar si worker muere
 conf_dict = {
     "task_serializer": "json",
     "accept_content": ["json"],
@@ -50,9 +54,12 @@ conf_dict = {
     "task_track_started": True,
     "task_time_limit": int(os.getenv("CELERY_TASK_HARD_TIMEOUT", str(30 * 60))),
     "task_soft_time_limit": int(os.getenv("CELERY_TASK_SOFT_TIMEOUT", str(25 * 60))),
-    "worker_prefetch_multiplier": 1,
-    "worker_max_tasks_per_child": 1000,
+    "worker_prefetch_multiplier": int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
+    "worker_max_tasks_per_child": int(os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "1000")),
     "broker_connection_retry_on_startup": True,
+    "task_acks_late": True,
+    "task_reject_on_worker_lost": True,
+    "worker_hijack_root_logger": False,
 }
 
 # Añadir opciones SSL si es necesario
@@ -63,8 +70,12 @@ if redis_backend_use_ssl:
 
 celery_app.conf.update(**conf_dict)
 
+# ✅ MEJORA 2: Tareas programadas con delays optimizados
+# trading-cycle-tick: cada 60s (orquesta ciclo de 5m internamente)
+# rebalance-check: cada hora (no es crítico)
+# risk-assessment: cada 5 minutos
+# pipeline-health: cada 15 minutos
 # Tareas programadas
-# observability-tracing-agent: instalar signals de OTel en los workers
 try:
     from app.core.celery_tracing import install_celery_tracing
 
@@ -72,23 +83,26 @@ try:
 except Exception:
     pass
 
-# Tareas programadas
 celery_app.conf.beat_schedule = {
     "trading-cycle-tick": {
         "task": "app.services.trading_tasks.trading_cycle_tick",
-        "schedule": 60.0,  # Tick cada minuto (orquesta 5m)
-    },
-    "rebalance-check": {
-        "task": "app.services.rebalancing_tasks.check_and_rebalance",
-        "schedule": 3600.0,  # Cada hora
-    },
-    "performance-analysis": {
-        "task": "app.services.ml_tasks.analyze_performance",
-        "schedule": crontab(hour=0, minute=0),  # Diario a medianoche
+        "schedule": 60.0,  # Cada 60 segundos
+        "options": {"queue": "celery"},
     },
     "risk-assessment": {
         "task": "app.services.trading_tasks.assess_risk",
         "schedule": 300.0,  # Cada 5 minutos
+        "options": {"queue": "low"},
+    },
+    "rebalance-check": {
+        "task": "app.services.rebalancing_tasks.check_and_rebalance",
+        "schedule": 3600.0,  # Cada hora
+        "options": {"queue": "low"},
+    },
+    "performance-analysis": {
+        "task": "app.services.ml_tasks.analyze_performance",
+        "schedule": crontab(hour=0, minute=0),  # Diario a medianoche
+        "options": {"queue": "low"},
     },
     "dust-sweep-weekly": {
         "task": "app.services.trading_tasks.dust_sweep",
@@ -96,14 +110,14 @@ celery_app.conf.beat_schedule = {
         "options": {"queue": "low"},
         "args": (True,),  # dry_run por defecto
     },
-    # portfolio-snapshot-agent: captura valor real del portafolio cada 15 min
     "portfolio-snapshot": {
         "task": "app.services.portfolio_snapshot_service.capture_portfolio_snapshot",
         "schedule": 900.0,  # 15 minutos
+        "options": {"queue": "low"},
     },
-    # Watchdog ingesta: falla si tablas críticas sin escrituras ok en ~65m (Prometheus + evidencia en reports/)
     "pipeline-db-writes-health": {
         "task": "app.services.pipeline_health_tasks.check_pipeline_db_writes",
         "schedule": 900.0,  # 15 minutos
+        "options": {"queue": "low"},
     },
 }
