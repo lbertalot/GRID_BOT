@@ -26,8 +26,8 @@ flower==2.0.1
 redis==5.0.1
 
 # Machine Learning y análisis básicos (ligeros)
-numpy==1.24.3
-pandas==2.1.4
+numpy>=1.26.0
+pandas>=2.2.0
 scikit-learn==1.5.0
 scipy==1.11.4
 
