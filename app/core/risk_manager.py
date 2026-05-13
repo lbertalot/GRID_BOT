@@ -4,7 +4,8 @@ Implementa Kelly fraccional, trailing stops adaptativos y filtros de régimen de
 """
 
 import logging
-from typing import Dict, Optional, Any
+from decimal import Decimal
+from typing import Dict, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
@@ -57,9 +58,9 @@ class BreakerState(Enum):
 class KellyParams:
     """Parámetros para el cálculo de Kelly"""
 
-    winrate: float  # W: Probabilidad de ganancia
-    avg_win_loss_ratio: float  # R: Ratio promedio ganancia/pérdida
-    fractional_kelly: float = 0.25  # Fracción de Kelly a usar (default 25%)
+    winrate: Decimal  # W: Probabilidad de ganancia
+    avg_win_loss_ratio: Decimal  # R: Ratio promedio ganancia/pérdida
+    fractional_kelly: Decimal = Decimal("0.25")  # Fracción de Kelly a usar (default 25%)
 
 
 @dataclass
@@ -67,15 +68,15 @@ class PositionSizeParams:
     """Parámetros para el cálculo de tamaño de posición"""
 
     symbol: str
-    account_equity: float
-    atr: float  # Average True Range
-    winrate_estimate: float
-    avg_win_loss_ratio: float
-    price: float
-    risk_per_trade_pct: float = 0.02  # 2% por trade
-    cap_symbol_pct: float = 0.20  # Máximo 20% por símbolo
-    cap_equity_pct: float = 0.80  # Máximo 80% del equity
-    cap_daily_loss_pct: float = 0.05  # Máximo 5% pérdida diaria
+    account_equity: Decimal
+    atr: Decimal  # Average True Range
+    winrate_estimate: Decimal
+    avg_win_loss_ratio: Decimal
+    price: Decimal
+    risk_per_trade_pct: Decimal = Decimal("0.02")  # 2% por trade
+    cap_symbol_pct: Decimal = Decimal("0.20")  # Máximo 20% por símbolo
+    cap_equity_pct: Decimal = Decimal("0.80")  # Máximo 80% del equity
+    cap_daily_loss_pct: Decimal = Decimal("0.05")  # Máximo 5% pérdida diaria
 
 
 @dataclass
@@ -83,9 +84,9 @@ class TrailingStopParams:
     """Parámetros para trailing stop adaptativo"""
 
     symbol: str
-    entry_price: float
-    atr: float
-    multiplier_atr: float = 2.0  # Multiplicador ATR para stop loss
+    entry_price: Decimal
+    atr: Decimal
+    multiplier_atr: Decimal = Decimal("2.0")  # Multiplicador ATR para stop loss
     is_long: bool = True
 
 
@@ -94,8 +95,8 @@ class RegimePrediction(BaseModel):
 
     long_regime: MarketRegime
     short_regime: MarketRegime
-    long_conf: float = Field(ge=0.0, le=1.0)
-    short_conf: float = Field(ge=0.0, le=1.0)
+    long_conf: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"))
+    short_conf: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"))
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -107,11 +108,11 @@ class RiskManager:
 
     def __init__(self):
         # Configuración de Kelly
-        self.fractional_kelly = 0.25  # 25% de Kelly por defecto
-        self.min_kelly_confidence = 0.6  # Mínima confianza para usar Kelly
+        self.fractional_kelly = Decimal("0.25")  # 25% de Kelly por defecto
+        self.min_kelly_confidence = Decimal("0.6")  # Mínima confianza para usar Kelly
 
         # Configuración de trailing stops
-        self.default_multiplier_atr = 2.0
+        self.default_multiplier_atr = Decimal("2.0")
         self.trailing_stops: Dict[str, Dict[str, Any]] = {}
 
         # Configuración de circuit breaker
@@ -123,37 +124,43 @@ class RiskManager:
         # Estado del régimen de mercado
         self.current_regime = MarketRegime.RANGE
         self.regime_multipliers = {
-            MarketRegime.CRASH_IMMINENT: 0.5,  # Reducir exposición 50%
-            MarketRegime.HIGH_VOLATILITY_BEAR: 0.5,
-            MarketRegime.BEAR_TREND: 0.7,
-            MarketRegime.HIGH_VOL: 0.8,
-            MarketRegime.RANGE: 1.0,
-            MarketRegime.BULL_TREND: 1.0,
+            MarketRegime.CRASH_IMMINENT: Decimal("0.5"),  # Reducir exposición 50%
+            MarketRegime.HIGH_VOLATILITY_BEAR: Decimal("0.5"),
+            MarketRegime.BEAR_TREND: Decimal("0.7"),
+            MarketRegime.HIGH_VOL: Decimal("0.8"),
+            MarketRegime.RANGE: Decimal("1.0"),
+            MarketRegime.BULL_TREND: Decimal("1.0"),
         }
 
         # Métricas de riesgo
-        self.daily_loss = 0.0
-        self.total_exposure = 0.0
-        self.max_loss_remaining = 0.0
+        self.daily_loss = Decimal("0.0")
+        self.total_exposure = Decimal("0.0")
+        self.max_loss_remaining = Decimal("0.0")
 
         self.logger = logging.getLogger(__name__)
 
-    def calculate_dynamic_position_size(self, params: PositionSizeParams) -> float:
+    def calculate_dynamic_position_size(self, params: PositionSizeParams) -> Decimal:
         """
         Calcula el tamaño de posición dinámico usando Kelly fraccional.
 
         Args:
-            params: Parámetros para el cálculo
+            params: Parámetros para el cálculo (se convertirán a Decimal si son floats)
 
         Returns:
-            Tamaño de posición en USDT
+            Tamaño de posición en USDT (Decimal)
         """
         try:
+            # Asegurar conversión a Decimal de todos los campos numéricos
+            for field in ["account_equity", "atr", "winrate_estimate", "avg_win_loss_ratio", "price", "risk_per_trade_pct", "cap_symbol_pct", "cap_equity_pct", "cap_daily_loss_pct"]:
+                val = getattr(params, field)
+                if not isinstance(val, Decimal):
+                    setattr(params, field, Decimal(str(val)))
+
             # Intentar Kelly fraccional primero
             if (
-                params.winrate_estimate > 0.5
-                and params.avg_win_loss_ratio > 1.0
-                and params.winrate_estimate * params.avg_win_loss_ratio > 1.0
+                params.winrate_estimate > Decimal("0.5")
+                and params.avg_win_loss_ratio > Decimal("1.0")
+                and params.winrate_estimate * params.avg_win_loss_ratio > Decimal("1.0")
             ):
                 kelly_size = self._calculate_kelly_position_size(params)
                 if kelly_size > 0:
@@ -169,7 +176,7 @@ class RiskManager:
             final_size = self._apply_position_limits(atr_size, params)
 
             self.logger.info(
-                f"Position size for {params.symbol}: {final_size:.2f} USDT (ATR method)"
+                f"Position size for {params.symbol}: {final_size} USDT (ATR method)"
             )
             return final_size
 
@@ -177,67 +184,69 @@ class RiskManager:
             self.logger.error(
                 f"Error calculating position size for {params.symbol}: {e}"
             )
-            # Retornar tamaño mínimo seguro
-            return params.account_equity * 0.01  # 1% mínimo
+            # Retornar tamaño mínimo seguro (1%)
+            return params.account_equity * Decimal("0.01")
 
-    def _calculate_kelly_position_size(self, params: PositionSizeParams) -> float:
+    def _calculate_kelly_position_size(self, params: PositionSizeParams) -> Decimal:
         """Calcula tamaño de posición usando Kelly fraccional."""
         # Kelly formula: f = W - (1-W)/R
         # donde W = winrate, R = avg_win_loss_ratio
+        one = Decimal("1.0")
         kelly_fraction = params.winrate_estimate - (
-            (1 - params.winrate_estimate) / params.avg_win_loss_ratio
+            (one - params.winrate_estimate) / params.avg_win_loss_ratio
         )
 
         # Aplicar Kelly fraccional
         fractional_kelly = kelly_fraction * self.fractional_kelly
 
         # Clampear entre 0 y 1
-        fractional_kelly = max(0.0, min(1.0, fractional_kelly))
+        zero = Decimal("0.0")
+        fractional_kelly = max(zero, min(one, fractional_kelly))
 
         position_size = fractional_kelly * params.account_equity
 
         self.logger.debug(
             f"Kelly calculation for {params.symbol}: "
-            f"W={params.winrate_estimate:.3f}, "
-            f"R={params.avg_win_loss_ratio:.3f}, "
-            f"Kelly={kelly_fraction:.3f}, "
-            f"Fractional={fractional_kelly:.3f}, "
-            f"Size={position_size:.2f}"
+            f"W={params.winrate_estimate}, "
+            f"R={params.avg_win_loss_ratio}, "
+            f"Kelly={kelly_fraction}, "
+            f"Fractional={fractional_kelly}, "
+            f"Size={position_size}"
         )
 
         return position_size
 
-    def _calculate_atr_position_size(self, params: PositionSizeParams) -> float:
+    def _calculate_atr_position_size(self, params: PositionSizeParams) -> Decimal:
         """Calcula tamaño de posición usando regla basada en ATR."""
         # Fórmula: size = risk_per_trade_pct * equity / (atr * price_scaling_factor)
-        price_scaling_factor = 1.0  # Ajustar según el precio del activo
+        price_scaling_factor = Decimal("1.0")  # Ajustar según el precio del activo
 
-        if params.price > 1000:  # Para activos caros como BTC
-            price_scaling_factor = 0.1
-        elif params.price > 100:  # Para activos medianos
-            price_scaling_factor = 0.5
+        if params.price > Decimal("1000"):  # Para activos caros como BTC
+            price_scaling_factor = Decimal("0.1")
+        elif params.price > Decimal("100"):  # Para activos medianos
+            price_scaling_factor = Decimal("0.5")
 
         risk_amount = params.account_equity * params.risk_per_trade_pct
         atr_risk = params.atr * params.price * price_scaling_factor
 
-        if atr_risk > 0:
+        if atr_risk > Decimal("0"):
             position_size = risk_amount / atr_risk
         else:
-            position_size = params.account_equity * 0.01  # 1% mínimo
+            position_size = params.account_equity * Decimal("0.01")  # 1% mínimo
 
         self.logger.debug(
             f"ATR calculation for {params.symbol}: "
-            f"ATR={params.atr:.6f}, "
-            f"Price={params.price:.2f}, "
+            f"ATR={params.atr}, "
+            f"Price={params.price}, "
             f"Scaling={price_scaling_factor}, "
-            f"Size={position_size:.2f}"
+            f"Size={position_size}"
         )
 
         return position_size
 
     def _apply_position_limits(
-        self, position_size: float, params: PositionSizeParams
-    ) -> float:
+        self, position_size: Decimal, params: PositionSizeParams
+    ) -> Decimal:
         """Aplica límites al tamaño de posición."""
         # Límite por símbolo
         max_symbol_size = params.account_equity * params.cap_symbol_pct
@@ -251,24 +260,24 @@ class RiskManager:
         remaining_daily_loss = (
             params.account_equity * params.cap_daily_loss_pct - self.daily_loss
         )
-        if remaining_daily_loss > 0:
+        if remaining_daily_loss > Decimal("0"):
             max_daily_size = (
-                remaining_daily_loss / 0.1
+                remaining_daily_loss / Decimal("0.1")
             )  # Asumiendo 10% de pérdida máxima por trade
             position_size = min(position_size, max_daily_size)
 
         # Aplicar filtro de régimen de mercado
-        regime_multiplier = self.regime_multipliers.get(self.current_regime, 1.0)
+        regime_multiplier = self.regime_multipliers.get(self.current_regime, Decimal("1.0"))
         position_size *= regime_multiplier
 
-        # Actualizar métricas
+        # Actualizar métricas (Prometheus acepta floats, convertir para la métrica)
         POSITION_SIZE_USDT.labels(symbol=params.symbol, strategy="dynamic").set(
-            position_size
+            float(position_size)
         )
 
         return position_size
 
-    def get_adaptive_trailing_stop(self, params: TrailingStopParams) -> float:
+    def get_adaptive_trailing_stop(self, params: TrailingStopParams) -> Decimal:
         """
         Calcula trailing stop adaptativo basado en ATR.
 
@@ -276,8 +285,16 @@ class RiskManager:
             params: Parámetros para el trailing stop
 
         Returns:
-            Precio del stop loss
+            Precio del stop loss (Decimal)
         """
+        # Asegurar Decimal
+        if not isinstance(params.entry_price, Decimal):
+            params.entry_price = Decimal(str(params.entry_price))
+        if not isinstance(params.atr, Decimal):
+            params.atr = Decimal(str(params.atr))
+        if not isinstance(params.multiplier_atr, Decimal):
+            params.multiplier_atr = Decimal(str(params.multiplier_atr))
+
         atr_distance = params.atr * params.multiplier_atr
 
         if params.is_long:
@@ -297,16 +314,16 @@ class RiskManager:
 
         self.logger.info(
             f"Trailing stop for {params.symbol}: "
-            f"Entry={params.entry_price:.6f}, "
-            f"Stop={stop_price:.6f}, "
-            f"ATR={params.atr:.6f}"
+            f"Entry={params.entry_price}, "
+            f"Stop={stop_price}, "
+            f"ATR={params.atr}"
         )
 
         return stop_price
 
     def update_trailing_stop(
-        self, symbol: str, current_price: float
-    ) -> Optional[float]:
+        self, symbol: str, current_price: Decimal | float
+    ) -> Optional[Decimal]:
         """
         Actualiza trailing stop con el precio actual.
 
@@ -315,8 +332,11 @@ class RiskManager:
             current_price: Precio actual
 
         Returns:
-            Nuevo precio de stop loss (si se actualizó)
+            Nuevo precio de stop loss (si se actualizó) (Decimal)
         """
+        if not isinstance(current_price, Decimal):
+            current_price = Decimal(str(current_price))
+
         if symbol not in self.trailing_stops:
             return None
 
@@ -324,20 +344,18 @@ class RiskManager:
         old_stop = stop_info["stop_price"]
 
         if stop_info["is_long"]:
-            # Para posiciones largas, solo mover stop hacia arriba; requiere avance neto
+            # Para posiciones largas, solo mover stop hacia arriba
             candidate = current_price - (stop_info["atr"] * stop_info["multiplier"])
-            # Exigir estrictamente mayor al stop anterior para considerar actualización
             new_stop = candidate if candidate > old_stop else old_stop
         else:
             # Para posiciones cortas, solo mover stop hacia abajo
-            new_stop = min(
-                old_stop, current_price + (stop_info["atr"] * stop_info["multiplier"])
-            )
+            candidate = current_price + (stop_info["atr"] * stop_info["multiplier"])
+            new_stop = candidate if candidate < old_stop else old_stop
 
-        if new_stop > old_stop:
+        if new_stop != old_stop:
             # No actualizar inmediatamente el almacenado para cumplir expectativas de test
             self.logger.info(
-                f"Updated trailing stop for {symbol}: {old_stop:.6f} -> {new_stop:.6f}"
+                f"Updated trailing stop for {symbol}: {old_stop} -> {new_stop}"
             )
             return new_stop
 
@@ -380,7 +398,7 @@ class RiskManager:
             return self.breaker_state
 
         # Verificar pérdida diaria
-        if self.daily_loss > 0.05:  # 5%
+        if self.daily_loss > Decimal("0.05"):  # 5%
             self.breaker_state = BreakerState.DANGER
             CIRCUIT_BREAKER_TRIGGERED.labels(reason="daily_loss_limit").inc()
             return self.breaker_state
@@ -423,7 +441,7 @@ class RiskManager:
             "timestamp": datetime.now().isoformat(),
         }
 
-    def update_metrics(self, daily_loss: float, total_exposure: float) -> None:
+    def update_metrics(self, daily_loss: Decimal | float, total_exposure: Decimal | float) -> None:
         """
         Actualiza métricas de riesgo.
 
@@ -431,16 +449,21 @@ class RiskManager:
             daily_loss: Pérdida diaria en porcentaje
             total_exposure: Exposición total en porcentaje
         """
+        if not isinstance(daily_loss, Decimal):
+            daily_loss = Decimal(str(daily_loss))
+        if not isinstance(total_exposure, Decimal):
+            total_exposure = Decimal(str(total_exposure))
+
         self.daily_loss = daily_loss
         self.total_exposure = total_exposure
-        # Evitar errores de flotante en tests estrictos
-        self.max_loss_remaining = round(
-            max(0.0, 0.05 - daily_loss), 2
-        )  # 5% máximo, redondeado a 2 decimales
+        
+        # Evitar errores de flotante
+        limit = Decimal("0.05")
+        self.max_loss_remaining = max(Decimal("0.0"), limit - daily_loss)
 
-        # Actualizar métricas Prometheus
-        DAILY_LOSS_PCT.labels(symbol="ALL").set(daily_loss)
-        TOTAL_EXPOSURE_PCT.labels(symbol="ALL").set(total_exposure)
+        # Actualizar métricas Prometheus (convertir a float)
+        DAILY_LOSS_PCT.labels(symbol="ALL").set(float(daily_loss))
+        TOTAL_EXPOSURE_PCT.labels(symbol="ALL").set(float(total_exposure))
 
     def trigger_emergency_stop(self, reason: str) -> None:
         """

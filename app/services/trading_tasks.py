@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tareas de trading mejoradas con logging detallado y validaciones robustas
 """
 
@@ -182,7 +182,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                     )
                     if should_block:
                         logger.warning(
-                            f"🚫 Símbolo {symbol} bloqueado por blacklist: {reason}"
+                            f"[EMOJI] Símbolo {symbol} bloqueado por blacklist: {reason}"
                         )
                     else:
                         filtered_symbols.append(symbol)
@@ -353,7 +353,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         continue
                 state["decision"] = decisions
                 await _set_cycle_state(state)
-                logger.info("[Cycle] 📝 Decisión parcial registrada (fase evaluación)")
+                logger.info("[Cycle] [EMOJI] Decisión parcial registrada (fase evaluación)")
                 # Si estamos cerca de 4 minutos, marcar decision_ready
                 if 210 <= elapsed < 240 and decisions:
                     for sym, d in decisions.items():
@@ -391,7 +391,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                                     symbol=sym, status="sent"
                                 ).set(_now_ts())
                             logger.info(
-                                "[Cycle] ✅ Ejecución enviada (fallback sin ready) por compatibilidad"
+                                "[Cycle] [EMOJI] Ejecución enviada (fallback sin ready) por compatibilidad"
                             )
                             return
                     except Exception:
@@ -425,7 +425,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                             _now_ts()
                         )
                     logger.info(
-                        f"[Cycle] ✅ Ejecución enviada (fase ejecución) symbols={ready_symbols}"
+                        f"[Cycle] [EMOJI] Ejecución enviada (fase ejecución) symbols={ready_symbols}"
                     )
                 except Exception as e:
                     logger.error(f"[Cycle] Error en ejecución: {e}")
@@ -441,7 +441,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
         loop.close()
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"❌ trading_cycle_tick error: {e}")
+        logger.error(f"[EMOJI] trading_cycle_tick error: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -451,16 +451,16 @@ def execute_trading_cycle() -> Dict[str, Any]:
     Ejecuta un ciclo completo de trading con validaciones mejoradas
     """
     try:
-        logger.info("🚀 Iniciando ciclo de trading REAL")
-        logger.info("💰 Ejecutando TRADING REAL con dinero real")
+        logger.info("[EMOJI] Iniciando ciclo de trading REAL")
+        logger.info("[EMOJI] Ejecutando TRADING REAL con dinero real")
 
         # Verificar credenciales de Binance
-        logger.info("🔍 Validando credenciales de Binance...")
+        logger.info("[EMOJI] Validando credenciales de Binance...")
         try:
             client_singleton = get_binance_client_singleton()
             check = client_singleton.validate_credentials_and_connectivity()
             if not check.get("net_ok", False):
-                logger.error("❌ Conectividad con Binance fallida - abortando ciclo")
+                logger.error("[EMOJI] Conectividad con Binance fallida - abortando ciclo")
                 notify_consecutive_api_failures.delay("binance", 1)
                 try:
                     asyncio.run(
@@ -473,7 +473,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 return {"status": "error", "message": "Binance net check failed"}
             if not check.get("auth_ok", False):
                 logger.error(
-                    "❌ Credenciales/permiso de Binance inválidos - abortando ciclo"
+                    "[EMOJI] Credenciales/permiso de Binance inválidos - abortando ciclo"
                 )
                 notify_consecutive_api_failures.delay("binance_auth", 1)
                 try:
@@ -491,7 +491,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
             except Exception:
                 pass
         except Exception as e:
-            logger.error(f"❌ Error validando Binance pre-ciclo: {e}")
+            logger.error(f"[EMOJI] Error validando Binance pre-ciclo: {e}")
             return {"status": "error", "message": str(e)}
 
         # Crear manager de grid trading (usar loop local para evitar nested run)
@@ -505,7 +505,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
             asyncio.set_event_loop(None)
             loop.close()
         if not manager:
-            logger.error("❌ No se pudo crear el manager de grid trading")
+            logger.error("[EMOJI] No se pudo crear el manager de grid trading")
             return {"status": "error", "message": "Manager no disponible"}
 
         # Guardas: evitar operar si liquidez es insuficiente o breakers activos
@@ -536,7 +536,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     loop.close()
             available_usdt = Decimal(str((summary or {}).get("usdt_balance", 0) or 0))
 
-            # 🔧 MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
+            # [EMOJI] MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
             if CALIBRATION_MODE:
                 logger.info(
                     f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f}"
@@ -574,9 +574,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}"
                 )
 
-                # 🔄 INTEGRACIÓN DEL REBALANCEADOR V2
+                # [EMOJI] INTEGRACIÓN DEL REBALANCEADOR V2
                 logger.info(
-                    "🔄 Disparando rebalanceador automático para generar liquidez..."
+                    "[EMOJI] Disparando rebalanceador automático para generar liquidez..."
                 )
                 try:
                     # Ejecutar rebalanceo asíncrono
@@ -586,7 +586,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                         rebalance_result = loop.run_until_complete(
                             auto_rebalancer_v2.check_and_rebalance()
                         )
-                        logger.info(f"🎯 Resultado del rebalanceo: {rebalance_result}")
+                        logger.info(f"[EMOJI] Resultado del rebalanceo: {rebalance_result}")
 
                         # Verificar si se generó liquidez suficiente
                         if rebalance_result.get("status") == "success":
@@ -603,12 +603,12 @@ def execute_trading_cycle() -> Dict[str, Any]:
 
                             if updated_usdt >= SAFE_MIN_USDT:
                                 logger.info(
-                                    f"✅ Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading"
+                                    f"[EMOJI] Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading"
                                 )
                                 # Continuar con el ciclo normal
                             else:
                                 logger.warning(
-                                    f"⚠️ Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT"
+                                    f"[EMOJI] Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT"
                                 )
                                 return {
                                     "status": "skipped",
@@ -627,7 +627,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                                 )
                                 or f"status={rr.get('status')}"
                             )
-                            logger.warning("⚠️ Rebalanceo no exitoso: %s", detail)
+                            logger.warning("[EMOJI] Rebalanceo no exitoso: %s", detail)
                             return {
                                 "status": "skipped",
                                 "message": f"Rebalancing: {detail}",
@@ -638,7 +638,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                         loop.close()
 
                 except Exception as e:
-                    logger.error(f"❌ Error ejecutando rebalanceo automático: {e}")
+                    logger.error(f"[EMOJI] Error ejecutando rebalanceo automático: {e}")
                     return {"status": "skipped", "message": "Auto-rebalancing failed"}
 
                 return {"status": "skipped", "message": "Insufficient USDT"}
@@ -685,7 +685,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
             logger.warning(f"[Cycle] No se pudo ajustar universo/grilla dinámica: {e}")
 
         # Ejecutar ciclo de trading
-        logger.info("🔄 Ejecutando ciclo de grid trading...")
+        logger.info("[EMOJI] Ejecutando ciclo de grid trading...")
         # Comprobación rápida de conectividad y ejecución
         loop = asyncio.new_event_loop()
         try:
@@ -727,27 +727,27 @@ def execute_trading_cycle() -> Dict[str, Any]:
         }
 
         # Logging detallado
-        logger.info("📊 Resumen del ciclo de trading:")
-        logger.info(f"   🔄 Total operaciones: {total_trades}")
-        logger.info(f"   ✅ Operaciones ejecutadas: {trades_executed}")
-        logger.info(f"   📈 Tasa de éxito: {summary['success_rate']:.1f}%")
-        logger.info(f"   💰 Modo: {summary['mode']}")
+        logger.info("[EMOJI] Resumen del ciclo de trading:")
+        logger.info(f"   [EMOJI] Total operaciones: {total_trades}")
+        logger.info(f"   [EMOJI] Operaciones ejecutadas: {trades_executed}")
+        logger.info(f"   [EMOJI] Tasa de éxito: {summary['success_rate']:.1f}%")
+        logger.info(f"   [EMOJI] Modo: {summary['mode']}")
 
         # Enviar notificación si hay operaciones
         if trades_executed > 0:
             message = (
-                f"🔄 Resumen del ciclo de trading:\n"
-                f"🔄 Total operaciones: {total_trades}\n"
-                f"✅ Operaciones ejecutadas: {trades_executed}\n"
-                f"📈 Tasa de éxito: {summary['success_rate']:.1f}%\n"
-                f"💰 Modo: {summary['mode']}"
+                f"[EMOJI] Resumen del ciclo de trading:\n"
+                f"[EMOJI] Total operaciones: {total_trades}\n"
+                f"[EMOJI] Operaciones ejecutadas: {trades_executed}\n"
+                f"[EMOJI] Tasa de éxito: {summary['success_rate']:.1f}%\n"
+                f"[EMOJI] Modo: {summary['mode']}"
             )
 
             try:
                 send_telegram_alert.delay(message)
-                logger.info("✅ Notificación a Telegram encolada")
+                logger.info("[EMOJI] Notificación a Telegram encolada")
             except Exception as e:
-                logger.error(f"❌ Error encolando notificación: {e}")
+                logger.error(f"[EMOJI] Error encolando notificación: {e}")
 
         # Actualizar métricas
         try:
@@ -759,9 +759,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
             finally:
                 asyncio.set_event_loop(None)
                 loop.close()
-            logger.info("✅ Métricas actualizadas")
+            logger.info("[EMOJI] Métricas actualizadas")
         except Exception as e:
-            logger.error(f"❌ Error actualizando métricas: {e}")
+            logger.error(f"[EMOJI] Error actualizando métricas: {e}")
 
         return {
             "status": "success",
@@ -770,7 +770,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"❌ Error en ciclo de trading: {e}")
+        logger.error(f"[EMOJI] Error en ciclo de trading: {e}")
 
         # Enviar alerta de error
         error_message = f"🚨 Error en ciclo de trading:\n{str(e)}"
@@ -788,7 +788,7 @@ def assess_risk() -> Dict[str, Any]:
     Evalúa el riesgo del portafolio
     """
     try:
-        logger.info("🔍 Evaluando riesgo del portafolio")
+        logger.info("[EMOJI] Evaluando riesgo del portafolio")
 
         # Crear manager para obtener balances
         loop = asyncio.new_event_loop()
@@ -848,11 +848,11 @@ def assess_risk() -> Dict[str, Any]:
             "can_trade": trading_summary.get("can_trade", False),
         }
 
-        logger.info(f"✅ Evaluación de riesgo completada: {risk_assessment}")
+        logger.info(f"[EMOJI] Evaluación de riesgo completada: {risk_assessment}")
         return risk_assessment
 
     except Exception as e:
-        logger.error(f"❌ Error evaluando riesgo: {e}")
+        logger.error(f"[EMOJI] Error evaluando riesgo: {e}")
         return {"risk_level": "unknown", "error": str(e)}
 
 
@@ -862,7 +862,7 @@ def update_metrics() -> Dict[str, Any]:
     Actualiza todas las métricas del sistema
     """
     try:
-        logger.info("📊 Actualizando métricas del sistema")
+        logger.info("[EMOJI] Actualizando métricas del sistema")
 
         metrics_service = MetricsService()
         loop = asyncio.new_event_loop()
@@ -873,11 +873,11 @@ def update_metrics() -> Dict[str, Any]:
             asyncio.set_event_loop(None)
             loop.close()
 
-        logger.info("✅ Métricas actualizadas correctamente")
+        logger.info("[EMOJI] Métricas actualizadas correctamente")
         return {"status": "success", "message": "Métricas actualizadas"}
 
     except Exception as e:
-        logger.error(f"❌ Error actualizando métricas: {e}")
+        logger.error(f"[EMOJI] Error actualizando métricas: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -927,11 +927,11 @@ def health_check() -> Dict[str, Any]:
             "active_assets": len([a for a in config.assets.values() if a.is_active]),
         }
 
-        logger.info(f"✅ Verificación de salud completada: {health_status}")
+        logger.info(f"[EMOJI] Verificación de salud completada: {health_status}")
         return health_status
 
     except Exception as e:
-        logger.error(f"❌ Error en verificación de salud: {e}")
+        logger.error(f"[EMOJI] Error en verificación de salud: {e}")
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -948,7 +948,7 @@ def dust_sweep(dry_run: bool = True) -> dict:
     - Respetar whitelist y límites
     """
     try:
-        logger.info("🧹 Iniciando barrido de polvo (dry_run=%s)", dry_run)
+        logger.info("[EMOJI] Iniciando barrido de polvo (dry_run=%s)", dry_run)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         from app.services.binance_client_singleton import get_binance_client_singleton
@@ -1048,8 +1048,8 @@ def dust_sweep(dry_run: bool = True) -> dict:
             asyncio.set_event_loop(None)
             loop.close()
 
-        logger.info("🧹 Barrido de polvo: %s", result)
+        logger.info("[EMOJI] Barrido de polvo: %s", result)
         return result
     except Exception as e:
-        logger.error(f"❌ Error en dust_sweep: {e}")
+        logger.error(f"[EMOJI] Error en dust_sweep: {e}")
         return {"status": "error", "message": str(e)}

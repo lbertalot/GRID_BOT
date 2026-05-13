@@ -5,13 +5,15 @@ Combina circuit breakers, validación de precisión y monitoreo
 """
 
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 from datetime import datetime
+from decimal import Decimal
 
 # Importar sistemas de seguridad
 from app.core.circuit_breaker import check_trading_allowed, record_trade_result
 from app.core.precision_validator import validate_trading_order
 from app.core.monitoring import record_trade_event, get_monitoring_status
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class SafetyValidator:
         self.validation_history = []
 
     def validate_trade_request(
-        self, symbol: str, side: str, quantity: float, price: float
+        self, symbol: str, side: str, quantity: Decimal | float, price: Decimal | float
     ) -> Tuple[bool, Dict, str]:
         """
         Valida una solicitud de trade completa
@@ -55,16 +57,18 @@ class SafetyValidator:
             logger.warning(f"❌ Validación de precisión falló: {precision_msg}")
             return False, {}, f"Precisión: {precision_msg}"
 
-        # 3. Verificar balance suficiente (simulado)
+        # 3. Verificar balance suficiente
         balance_ok, balance_msg = self._check_sufficient_balance(
-            symbol, side, quantity, price
+            symbol, side, precision_data["quantity"], precision_data["price"]
         )
         if not balance_ok:
             logger.warning(f"❌ Balance insuficiente: {balance_msg}")
             return False, {}, f"Balance: {balance_msg}"
 
         # 4. Verificar límites de riesgo
-        risk_ok, risk_msg = self._check_risk_limits(symbol, quantity, price)
+        risk_ok, risk_msg = self._check_risk_limits(
+            symbol, precision_data["quantity"], precision_data["price"]
+        )
         if not risk_ok:
             logger.warning(f"❌ Límites de riesgo excedidos: {risk_msg}")
             return False, {}, f"Riesgo: {risk_msg}"
@@ -86,7 +90,7 @@ class SafetyValidator:
         return True, validated_data, "Trade validado exitosamente"
 
     def _check_sufficient_balance(
-        self, symbol: str, side: str, quantity: float, price: float
+        self, symbol: str, side: str, quantity: Decimal, price: Decimal
     ) -> Tuple[bool, str]:
         """
         Verifica si hay balance suficiente para el trade
@@ -94,22 +98,22 @@ class SafetyValidator:
         Args:
             symbol: Símbolo del trading pair
             side: Lado del trade (BUY/SELL)
-            quantity: Cantidad
-            price: Precio
+            quantity: Cantidad (Decimal)
+            price: Precio (Decimal)
 
         Returns:
             Tuple[bool, str]: (suficiente, mensaje)
         """
-        # TODO: Implementar verificación real de balance
-        # Por ahora, simular verificación
-
         notional_value = quantity * price
 
         if side == "BUY":
             # Para compra, necesitamos USDT
             required_usdt = notional_value
-            # Simular balance de USDT
-            available_usdt = 316.82  # Balance actual
+            
+            # Obtener balance disponible (de configuración o dinámico)
+            # TODO: Integrar con BalanceValidator para tiempo real
+            import os
+            available_usdt = Decimal(os.getenv("INITIAL_BALANCE", "316.82"))
 
             if required_usdt > available_usdt:
                 return (
@@ -119,33 +123,36 @@ class SafetyValidator:
 
         elif side == "SELL":
             # Para venta, necesitamos el asset base
-            # TODO: Verificar balance del asset base
+            # TODO: Implementar validación de balance de asset base
             pass
 
         return True, "Balance suficiente"
 
     def _check_risk_limits(
-        self, symbol: str, quantity: float, price: float
+        self, symbol: str, quantity: Decimal, price: Decimal
     ) -> Tuple[bool, str]:
         """
         Verifica límites de riesgo
 
         Args:
             symbol: Símbolo del trading pair
-            quantity: Cantidad
-            price: Precio
+            quantity: Cantidad (Decimal)
+            price: Precio (Decimal)
 
         Returns:
             Tuple[bool, str]: (dentro_limites, mensaje)
         """
         notional_value = quantity * price
 
-        # Verificar valor notional mínimo
-        if notional_value < 10:
+        # Verificar valor notional mínimo (Binance: $10)
+        if notional_value < Decimal("10.0"):
             return False, f"Valor notional muy bajo: ${notional_value:.2f} < $10"
 
         # Verificar valor notional máximo (ejemplo: 50% del balance)
-        max_notional = 316.82 * 0.5  # 50% del balance actual
+        import os
+        balance = Decimal(os.getenv("INITIAL_BALANCE", "316.82"))
+        max_notional = balance * Decimal("0.5") 
+
         if notional_value > max_notional:
             return (
                 False,
@@ -158,10 +165,10 @@ class SafetyValidator:
         self,
         symbol: str,
         side: str,
-        quantity: float,
-        price: float,
+        quantity: Decimal,
+        price: Decimal,
         success: bool,
-        profit_loss: float = 0.0,
+        profit_loss: Decimal = Decimal("0.0"),
     ):
         """
         Registra la ejecución de un trade
@@ -179,8 +186,10 @@ class SafetyValidator:
 
         # Registrar en circuit breaker
         if success:
+            import os
+            balance = Decimal(os.getenv("INITIAL_BALANCE", "316.82"))
             record_trade_result(
-                profit_loss, abs(profit_loss) / 316.82
+                profit_loss, abs(profit_loss) / balance
             )  # Usar balance actual como referencia
 
         logger.info(
@@ -242,7 +251,7 @@ safety_validator = SafetyValidator()
 
 
 def validate_and_execute_trade(
-    symbol: str, side: str, quantity: float, price: float
+    symbol: str, side: str, quantity: Decimal | float, price: Decimal | float
 ) -> Tuple[bool, Dict, str]:
     """
     Función de conveniencia para validar y simular ejecución de trade
