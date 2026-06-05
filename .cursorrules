@@ -188,6 +188,15 @@ when_editing_code:
     - update Docs/08-metrics-catalog.md and Docs/09-endpoints-map.md
 
 cursor_specific:
+  session_size_vs_inline_diff:
+    message: Cursor may suppress inline diffs when a single agent turn touches too many edits (IDE performance/UI cap; not a repo bug).
+    agent_should:
+      - batch work into smaller iterations (scoped module/feature per turn when scope is large)
+      - avoid one-shot mega-diffs spanning code plus large docs migrations and many tests unless user explicitly asks
+      - rely on Source Control sidebar for file-by-file review when inline chat diffs are suppressed
+    user_fallback:
+      - review diffs in Source Control view
+      - optional smaller commits or branch/stash splits for review sanity; never commit .env or secrets
   search_first:
     - use ripgrep-based search (Grep tool) broadly, then narrow
   editing:

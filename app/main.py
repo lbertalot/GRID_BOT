@@ -34,6 +34,7 @@ from app.api import (
     alert_routes,
     simulations,
     binance_sync_routes,
+    commission_routes,
 )
 from app.api import system_routes
 from app.api import config_routes
@@ -337,8 +338,23 @@ app.add_middleware(
 app.add_middleware(PrometheusHTTPMiddleware)
 
 # testserver: Host que usa Starlette/FastAPI TestClient en pytest/CI
-_trusted_hosts_raw = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
-_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
+# api / api_dev: DNS de servicios en Compose (Alertmanager → http://api:8000/...)
+# gridbot_*: container_name frecuente en compose; el header Host debe coincidir con la lista
+_TRUSTED_HOSTS_ALWAYS_ALLOW_DOCKER_INTERNAL = (
+    "api",
+    "api_dev",
+    "gridbot_api",
+    "gridbot_api_dev",
+)
+_trusted_hosts_raw = os.getenv(
+    "TRUSTED_HOSTS", "localhost,127.0.0.1,testserver,api,api_dev"
+)
+_base_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
+_trusted_hosts = list(
+    dict.fromkeys(
+        list(_base_trusted_hosts) + list(_TRUSTED_HOSTS_ALWAYS_ALLOW_DOCKER_INTERNAL)
+    )
+)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 # Middleware Integrity Guard (desactivable en tests)
@@ -372,6 +388,7 @@ app.include_router(alert_routes.router)
 # Exponer /metrics raíz para Prometheus y compatibilidad
 app.include_router(prometheus_routes.router)
 app.include_router(simulations.router)
+app.include_router(commission_routes.router)
 # /api/config requiere auth — gestión de configuración sensible
 from app.core.auth import require_auth as _require_auth  # noqa: E402
 
@@ -825,6 +842,11 @@ async def reconciliation_summary():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo resumen: {e}")
+
+
+# OpenTelemetry: en import-time después de registrar rutas/middleware — no en lifespan,
+# porque FastAPIInstrumentor añade middleware y Starlette lo rechaza tras arranque.
+setup_tracing(app)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,33 @@ _circuit_open_seconds: int = int(
 )  # 5m
 
 
+def fallback_ld_prefixed_spot_symbol(sym: str) -> Optional[str]:
+    """
+    Mapea símbolos sintéticos con prefijo LD (balances earning/staking) a un par spot.
+
+    No concatenar un USDT extra al final: p.ej. LDUSDTBTC debe resolver a USDTBTC,
+    no a USDTBTCUSDT. LDUSDTUSDT no tiene par spot válido (core == quote) → None.
+    """
+    s = sym.upper().replace("-", "").replace("_", "")
+    base: Optional[str] = None
+    quote: Optional[str] = None
+    for q in ("USDT", "BUSD", "BTC", "ETH", "BNB"):
+        if s.endswith(q):
+            quote = q
+            base = s[: -len(q)]
+            break
+    if not base or not quote:
+        return None
+    if not base.startswith("LD") or len(base) <= 2:
+        return None
+    core = base[2:]
+    if not core:
+        return None
+    if core == quote:
+        return None
+    return f"{core}{quote}"
+
+
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
     """Notifica por Telegram cuando hay un problema de IP con Binance"""
     global _last_ip_alert_ts
@@ -371,13 +398,6 @@ class BinanceClientSingleton:
             s = s.replace("-", "").replace("_", "")
             return s
 
-        def _fallback_symbol(sym: str) -> Optional[str]:
-            base = sym[:-4] if sym.endswith("USDT") else sym
-            # Reglas de normalización simples: tokens con prefijo 'LD' (ej. LDBNB) → base sin 'LD'
-            if base.startswith("LD") and len(base) > 2:
-                return f"{base[2:]}USDT"
-            return None
-
         client = self.client
         if client is None:
             logger.warning(
@@ -394,7 +414,7 @@ class BinanceClientSingleton:
             return float(ticker["price"])
         except BinanceAPIException as e:
             if getattr(e, "code", None) == -1121:  # Invalid symbol
-                fb = _fallback_symbol(symbol)
+                fb = fallback_ld_prefixed_spot_symbol(symbol)
                 if fb and fb != symbol:
                     _cache[symbol] = fb
                     # Limitar logs repetidos por símbolo cada 10 min
@@ -427,7 +447,7 @@ class BinanceClientSingleton:
         except Exception as e:
             # Compatibilidad con clientes que lanzan otras clases de excepción
             if "Invalid symbol" in str(e):
-                fb = _fallback_symbol(symbol)
+                fb = fallback_ld_prefixed_spot_symbol(symbol)
                 if fb and fb != symbol:
                     _cache[symbol] = fb
                     try:

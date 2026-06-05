@@ -4,9 +4,12 @@ GridBot v2.5 - Detección de discrepancias entre sistema interno y Binance
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional, Union
+
 from datetime import datetime, timedelta
+
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 
 from app.db.session import SessionLocal
 from app.models.trade import Trade
@@ -39,6 +42,12 @@ class TradeAuditor:
         }
 
         self.logger.info("🔍 Trade Auditor inicializado")
+
+    @staticmethod
+    def _normalize_order_id_key(order_id: Union[int, str, None]) -> str:
+        if order_id is None:
+            return ""
+        return str(order_id)
 
     async def audit_trades(
         self, symbol: str = None, hours_back: int = 24
@@ -118,19 +127,24 @@ class TradeAuditor:
 
             internal_trades = []
             for trade in trades:
+                oid = trade.order_id
+                order_id_norm: Union[int, str, None]
+                if oid is not None and str(oid).isdigit():
+                    order_id_norm = int(str(oid))
+                else:
+                    order_id_norm = oid
                 internal_trades.append(
                     {
                         "id": trade.id,
                         "symbol": trade.symbol,
                         "side": trade.side,
                         "quantity": float(trade.quantity),
-                        "price": float(trade.price),
+                        "price": float(trade.entry_price),
                         "timestamp": trade.timestamp,
                         "profit_loss": float(trade.profit_loss)
-                        if trade.profit_loss
+                        if trade.profit_loss is not None
                         else 0.0,
-                        "status": trade.status,
-                        "order_id": trade.order_id,
+                        "order_id": order_id_norm,
                     }
                 )
 
@@ -219,48 +233,68 @@ class TradeAuditor:
         """Comparar trades internos con Binance y detectar discrepancias"""
         discrepancies = []
 
-        # Crear índices para comparación rápida
+        # Crear índices para comparación rápida (order_id alineado como string)
         internal_by_order = {
-            trade["order_id"]: trade
+            self._normalize_order_id_key(trade.get("order_id")): trade
             for trade in internal_trades
-            if trade.get("order_id")
+            if trade.get("order_id") is not None
         }
-        binance_by_order = {trade["order_id"]: trade for trade in binance_trades}
+        binance_by_order = {
+            self._normalize_order_id_key(trade.get("order_id")): trade
+            for trade in binance_trades
+            if trade.get("order_id") is not None
+        }
 
         # Verificar trades en Binance que no están en sistema interno
-        for order_id, binance_trade in binance_by_order.items():
-            if order_id not in internal_by_order:
+        for order_id_key, binance_trade in binance_by_order.items():
+            if not order_id_key:
+                continue
+            if order_id_key not in internal_by_order:
                 discrepancies.append(
                     {
                         "type": "missing_internal",
-                        "order_id": order_id,
+                        "order_id": binance_trade.get("order_id"),
                         "binance_trade": binance_trade,
                         "severity": "high",
-                        "description": f"Trade {order_id} existe en Binance pero no en sistema interno",
+                        "description": (
+                            f"Trade {order_id_key} existe en Binance pero no "
+                            "en sistema interno"
+                        ),
                     }
                 )
 
         # Verificar trades en sistema interno que no están en Binance
-        for order_id, internal_trade in internal_by_order.items():
-            if order_id not in binance_by_order:
+        for order_id_key, internal_trade in internal_by_order.items():
+            if not order_id_key:
+                continue
+            if order_id_key not in binance_by_order:
                 discrepancies.append(
                     {
                         "type": "missing_binance",
-                        "order_id": order_id,
+                        "order_id": internal_trade.get("order_id"),
                         "internal_trade": internal_trade,
                         "severity": "medium",
-                        "description": f"Trade {order_id} existe en sistema interno pero no en Binance",
+                        "description": (
+                            f"Trade {order_id_key} existe en sistema interno "
+                            "pero no en Binance"
+                        ),
                     }
                 )
 
         # Verificar discrepancias en trades que existen en ambos
-        for order_id in set(internal_by_order.keys()) & set(binance_by_order.keys()):
-            internal_trade = internal_by_order[order_id]
-            binance_trade = binance_by_order[order_id]
+        shared_keys = set(internal_by_order.keys()) & set(binance_by_order.keys())
+        for order_id_key in shared_keys:
+            if not order_id_key:
+                continue
+            internal_trade = internal_by_order[order_id_key]
+            binance_trade = binance_by_order[order_id_key]
+            raw_order_id = internal_trade.get("order_id")
+            if raw_order_id is None:
+                raw_order_id = binance_trade.get("order_id")
 
             # Comparar campos críticos
             discrepancies.extend(
-                self._compare_trade_details(order_id, internal_trade, binance_trade)
+                self._compare_trade_details(raw_order_id, internal_trade, binance_trade)
             )
 
         return discrepancies
@@ -395,9 +429,14 @@ class TradeAuditor:
 
             except Exception as e:
                 self.logger.error(
-                    f"Error reconciliando discrepancia {discrepancy['order_id']}: {e}"
+                    f"Error reconciliando discrepancia {discrepancy.get('order_id')}: {e}"
                 )
-                failed.append({"order_id": discrepancy["order_id"], "error": str(e)})
+                failed.append(
+                    {
+                        "order_id": discrepancy.get("order_id"),
+                        "error": str(e),
+                    }
+                )
 
         return {
             "reconciled_count": len(reconciled),
@@ -406,20 +445,114 @@ class TradeAuditor:
             "failed_orders": failed,
         }
 
-    async def _create_missing_internal_trade(self, discrepancy: Dict):
-        """Crear trade faltante en sistema interno"""
-        # Implementar creación de trade faltante
-        pass
+    def _require_binance_fields_for_create(
+        self, binance_trade: Dict[str, Any]
+    ) -> tuple[str, str, float, float]:
+        symbol = binance_trade.get("symbol")
+        side_raw = binance_trade.get("side")
+        quantity = binance_trade.get("quantity")
+        price = binance_trade.get("price")
+        if not symbol or not side_raw:
+            raise ValueError(
+                "binance_trade debe incluir symbol y side para crear trade interno"
+            )
+        if quantity is None or price is None:
+            raise ValueError(
+                "binance_trade debe incluir quantity y price para crear trade interno"
+            )
+        return str(symbol), str(side_raw).upper(), float(quantity), float(price)
 
-    async def _update_trade_quantity(self, discrepancy: Dict):
-        """Actualizar cantidad de trade"""
-        # Implementar actualización de cantidad
-        pass
+    async def _create_missing_internal_trade(self, discrepancy: Dict[str, Any]) -> None:
+        """Insertar en BD un trade reportado en Binance y ausente localmente."""
+        binance_trade = discrepancy.get("binance_trade")
+        if not isinstance(binance_trade, dict):
+            raise ValueError("missing_internal requiere binance_trade (dict)")
+        order_id_raw = discrepancy.get("order_id")
+        if order_id_raw is None:
+            raise ValueError("missing_internal requiere order_id")
+        order_id_str = self._normalize_order_id_key(order_id_raw)
+        if not order_id_str:
+            raise ValueError("order_id inválido para reconciliación")
 
-    async def _update_trade_price(self, discrepancy: Dict):
-        """Actualizar precio de trade"""
-        # Implementar actualización de precio
-        pass
+        symbol, side, quantity, price = self._require_binance_fields_for_create(
+            binance_trade
+        )
+        ts_raw: Optional[datetime] = binance_trade.get("timestamp")
+        ts: Optional[datetime] = ts_raw if isinstance(ts_raw, datetime) else None
+
+        db = SessionLocal()
+        try:
+            existing = db.query(Trade).filter(Trade.order_id == order_id_str).first()
+            if existing:
+                self.logger.info(
+                    "Reconciliación: trade ya existe para order_id=%s, omitiendo",
+                    order_id_str,
+                )
+                return
+
+            row = Trade(
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                entry_price=price,
+                exit_price=None,
+                profit_loss=None,
+                order_id=order_id_str,
+                client_order_id=None,
+                strategy="reconciled_from_binance",
+            )
+            if ts is not None:
+                row.timestamp = ts
+            db.add(row)
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            self.logger.warning(
+                "IntegrityError al crear trade reconciliado order_id=%s: %s",
+                order_id_str,
+                exc,
+            )
+            raise
+        finally:
+            db.close()
+
+    async def _update_trade_quantity(self, discrepancy: Dict[str, Any]) -> None:
+        """Actualizar quantity local al valor de Binance."""
+        order_id_raw = discrepancy.get("order_id")
+        binance_value = discrepancy.get("binance_value")
+        if order_id_raw is None or binance_value is None:
+            raise ValueError("quantity_mismatch requiere order_id y binance_value")
+        order_id_str = self._normalize_order_id_key(order_id_raw)
+        new_qty = float(binance_value)
+
+        db = SessionLocal()
+        try:
+            row = db.query(Trade).filter(Trade.order_id == order_id_str).first()
+            if row is None:
+                raise ValueError(f"No hay trade interno con order_id={order_id_str}")
+            row.quantity = new_qty
+            db.commit()
+        finally:
+            db.close()
+
+    async def _update_trade_price(self, discrepancy: Dict[str, Any]) -> None:
+        """Actualizar entry_price local al valor de Binance."""
+        order_id_raw = discrepancy.get("order_id")
+        binance_value = discrepancy.get("binance_value")
+        if order_id_raw is None or binance_value is None:
+            raise ValueError("price_mismatch requiere order_id y binance_value")
+        order_id_str = self._normalize_order_id_key(order_id_raw)
+        new_price = float(binance_value)
+
+        db = SessionLocal()
+        try:
+            row = db.query(Trade).filter(Trade.order_id == order_id_str).first()
+            if row is None:
+                raise ValueError(f"No hay trade interno con order_id={order_id_str}")
+            row.entry_price = new_price
+            db.commit()
+        finally:
+            db.close()
 
 
 # Instancia global para uso en el sistema

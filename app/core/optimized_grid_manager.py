@@ -4,7 +4,7 @@ Following FastAPI best practices and .cursorrules
 """
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from decimal import Decimal, ROUND_DOWN, getcontext
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,6 +33,9 @@ from app.models.asset_limit import AssetLimit
 from app.services.strategy_manager import strategy_manager
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.commission_manager import commission_manager
+from app.services.broker_adapter import use_broker_adapter_for_trade_execution_from_env
+from app.services.broker_market_execution import place_spot_market_via_adapter
+from app.core.metrics import gridbot_spot_market_submit_path_total
 
 # Configurar logging optimizado
 from app.core.optimized_logging import setup_optimized_logging
@@ -849,10 +852,10 @@ class OptimizedGridManager:
                     f"💰 Creando orden real en Binance: {action} {qty_str} {symbol}"
                 )
 
-                # Ejecutar llamada bloqueante en hilo para no bloquear el loop
+                action_u = action.upper()
+
                 def _create_order():
-                    # Fallback para BUY con quoteOrderQty (evita problemas de cantidad en BTC)
-                    if action.upper() == "BUY":
+                    if action_u == "BUY":
                         try:
                             price_now = (
                                 float(current_price)
@@ -874,7 +877,37 @@ class OptimizedGridManager:
                         symbol=symbol, side=action, type="MARKET", quantity=qty_str
                     )
 
-                order = await asyncio.to_thread(_create_order)
+                used_broker_adapter = False
+                order: Optional[Dict[str, Any]] = None
+                if (
+                    action_u == "SELL"
+                    and use_broker_adapter_for_trade_execution_from_env()
+                ):
+                    try:
+                        order = await place_spot_market_via_adapter(
+                            symbol=symbol,
+                            side=action_u,
+                            quantity_base=float(qty_str),
+                            client_order_id=None,
+                            recv_window_ms=10_000,
+                            binance_wrapper=self.async_binance,
+                        )
+                        used_broker_adapter = True
+                    except Exception as adapter_err:
+                        if "-1021" not in str(adapter_err):
+                            raise
+                        logger.warning(
+                            "BrokerAdapter -1021 en grid SELL; fallback cliente sync: %s",
+                            adapter_err,
+                        )
+
+                if order is None:
+                    order = await asyncio.to_thread(_create_order)
+
+                path = "broker_adapter" if used_broker_adapter else "binance_client"
+                gridbot_spot_market_submit_path_total.labels(
+                    source="grid_manager", path=path
+                ).inc()
 
                 # Agregar información de comisión al resultado
                 order["commission_info"] = {
