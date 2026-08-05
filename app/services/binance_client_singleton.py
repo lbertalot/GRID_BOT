@@ -14,6 +14,7 @@ import ccxt  # Fallback para validación privada
 from dotenv import load_dotenv
 
 from app.core.binance_proxy import get_binance_proxies
+from app.core.secret_redaction import format_credential_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,8 @@ class BinanceClientSingleton:
                 raise ValueError("Credenciales de Binance no configuradas")
 
             logger.info(
-                f"🔧 Inicializando cliente Binance Singleton - API Key: {api_key[:10]}..., Testnet: {testnet}"
+                "🔧 Inicializando cliente Binance Singleton - "
+                f"{format_credential_for_log(api_key, label='api_key')}, Testnet: {testnet}"
             )
             from app.core.binance_proxy import log_proxy_status
 
@@ -184,7 +186,8 @@ class BinanceClientSingleton:
             # Verificar credenciales
             if hasattr(self._client, "api_key") and self._client.api_key:
                 logger.info(
-                    f"✅ Cliente Singleton creado con API key: {self._client.api_key[:10]}..."
+                    "✅ Cliente Singleton creado con "
+                    f"{format_credential_for_log(self._client.api_key, label='api_key')}"
                 )
             else:
                 raise ValueError("No se pudieron asignar las credenciales al cliente")
