@@ -98,6 +98,18 @@ gridbot_orders_total = Counter(
     ["side", "asset", "strategy"],
 )
 
+gridbot_trade_executor_order_path_total = Counter(
+    "gridbot_trade_executor_order_path_total",
+    "TradeExecutor: órdenes por implementación (legacy singleton vs BrokerAdapter)",
+    ["path"],
+)
+
+gridbot_spot_market_submit_path_total = Counter(
+    "gridbot_spot_market_submit_path_total",
+    "MARKET spot: origen y capa (API trade vs grid manager × adapter vs cliente directo)",
+    ["source", "path"],
+)
+
 # Tasa de éxito de trades (0-1)
 trades_success_rate = Gauge(
     "trades_success_rate", "Tasa de éxito de trades (0-1)", ["strategy"]
@@ -127,6 +139,35 @@ trades_successful_total = Counter(
 
 trades_failed_total = Counter(
     "trades_failed_total", "Total de trades fallidos", ["asset", "strategy"]
+)
+
+gridbot_transaction_cost_audit_requests_total = Counter(
+    "gridbot_transaction_cost_audit_requests_total",
+    "Solicitudes al endpoint de auditoría after-cost (simulación / sizing)",
+    ["order_type"],
+)
+
+gridbot_backtest_run_persist_total = Counter(
+    "gridbot_backtest_run_persist_total",
+    "Intentos de persistir corridas de backtest (tablas backtest_runs / backtest_metrics)",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_run_persist_total = Counter(
+    "gridbot_monte_carlo_run_persist_total",
+    "Intentos de persistir estudios Monte Carlo drawdown (tabla monte_carlo_runs)",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_retention_prune_total = Counter(
+    "gridbot_monte_carlo_retention_prune_total",
+    "Ejecuciones de poda de retención monte_carlo_runs por símbolo",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_retention_rows_deleted_total = Counter(
+    "gridbot_monte_carlo_retention_rows_deleted_total",
+    "Total de filas eliminadas por retención monte_carlo_runs (acumulado)",
 )
 
 # ============================================================================
@@ -238,6 +279,20 @@ ml_regime_fallback_total = Counter(
     "gridbot_ml_regime_fallback_total",
     "Veces que el ciclo usó fallback estático (RANGE) en lugar de ML",
     ["symbol", "reason"],
+)
+
+# TQS / Monte Carlo promotion gate (Fase C)
+ml_promotion_gate_blocks_total = Counter(
+    "gridbot_ml_promotion_gate_blocks_total",
+    "Veces que el gate TQS+MC bloqueó confiar en el régimen ML híbrido",
+    ["symbol", "reason"],
+)
+
+# Kelly fraccional escalado por sentimiento (Fase C residual, opt-in)
+gridbot_kelly_sentiment_scale_total = Counter(
+    "gridbot_kelly_sentiment_scale_total",
+    "Aplicaciones de escala Kelly por sentimiento en el ciclo de evaluación",
+    ["symbol", "band"],
 )
 
 # ============================================================================

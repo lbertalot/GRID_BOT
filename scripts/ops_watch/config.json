@@ -1,0 +1,18 @@
+{
+  "compose_file": "docker-compose.local.yml",
+  "since": "72h",
+  "services": [
+    "api",
+    "worker",
+    "beat",
+    "db",
+    "redis",
+    "prometheus",
+    "grafana",
+    "cadvisor",
+    "migrate"
+  ],
+  "max_log_bytes": 26214400,
+  "docker_timeout_sec": 300,
+  "output_dir": "reports/ops_watch"
+}

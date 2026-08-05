@@ -7,15 +7,37 @@ import logging
 import time
 import asyncio
 import requests
+import concurrent.futures
 from decimal import Decimal
 from typing import Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from app.core.binance_proxy import get_binance_proxies
+from app.core.metrics import gridbot_trade_executor_order_path_total
 from app.services.binance_client_singleton import get_binance_client_singleton
 from app.services.balance_service import BalanceService
+from app.services.broker_adapter import (
+    BrokerMarketOrderRequest,
+    create_broker_adapter_from_env,
+    use_broker_adapter_for_trade_execution_from_env,
+)
 from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_run_async_coroutine(coroutine):
+    """Ejecuta una corrutina en un hilo con loop propio (evita conflictos si hay loop activo)."""
+
+    def _runner():
+        return asyncio.run(coroutine)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(_runner).result(timeout=180)
+
+
+def _trade_executor_adapter_kwargs_ok(kwargs: Dict[str, Any]) -> bool:
+    allowed = {"recvWindow", "newClientOrderId"}
+    return set(kwargs.keys()).issubset(allowed)
 
 
 class TradeExecutor:
@@ -26,6 +48,66 @@ class TradeExecutor:
     def __init__(self):
         self.binance_client = get_binance_client_singleton()
         self.balance_service = BalanceService()
+
+    def _finalize_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: str,
+        order_result: Dict[str, Any],
+        db: Optional[Session] = None,
+        update_balance: bool = True,
+    ) -> Dict[str, Any]:
+        if not order_result or order_result.get("status") not in [
+            "FILLED",
+            "PARTIALLY_FILLED",
+        ]:
+            logger.warning(f"⚠️ Orden no ejecutada completamente: {order_result}")
+            return order_result
+
+        if update_balance:
+            self._update_balances_after_trade(
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                order_result=order_result,
+                db=db,
+            )
+
+        logger.info(
+            f"✅ Orden ejecutada: {side} {quantity} {symbol} - OrderID: {order_result.get('orderId')}"
+        )
+        return order_result
+
+    def _execute_market_via_broker_adapter(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        quantity: str,
+        recv_window: int,
+        client_order_id: str | None,
+    ) -> Dict[str, Any]:
+        side_u = side.upper()
+        if side_u not in ("BUY", "SELL"):
+            raise ValueError(f"Lado inválido para BrokerAdapter: {side!r}")
+
+        async def _run() -> Dict[str, Any]:
+            adapter = create_broker_adapter_from_env()
+            req = BrokerMarketOrderRequest(
+                symbol_code=symbol.upper(),
+                side=side_u,  # type: ignore[arg-type]
+                quantity_base=Decimal(str(quantity)),
+                client_order_id=client_order_id,
+                recv_window_ms=recv_window,
+            )
+            ack = await adapter.place_market_order(req)
+            raw = ack.raw
+            if not isinstance(raw, dict):
+                raise TypeError("BrokerAdapter devolvió raw inválido")
+            return raw
+
+        return _sync_run_async_coroutine(_run())
 
     def execute_order(
         self,
@@ -61,6 +143,7 @@ class TradeExecutor:
             # Esto es la última línea de defensa antes de Binance.
             try:
                 from app.core.circuit_breakers import CircuitBreakers as _CB
+
                 _cb = _CB()
                 if _cb.is_trading_halted():
                     active = _cb.get_all_breakers_status().get("active_breakers", [])
@@ -74,40 +157,71 @@ class TradeExecutor:
             except ValueError:
                 raise
             except Exception as cb_err:
-                logger.warning(f"[Guard] No se pudo verificar circuit breakers: {cb_err}")
+                logger.warning(
+                    f"[Guard] No se pudo verificar circuit breakers: {cb_err}"
+                )
 
-            # 1. Ejecutar orden en Binance (con mitigación -1021)
+            merged_kwargs: Dict[str, Any] = dict(kwargs)
+            merged_kwargs.setdefault("recvWindow", 10000)
+
+            if (
+                order_type == "MARKET"
+                and "timestamp" not in merged_kwargs
+                and use_broker_adapter_for_trade_execution_from_env()
+                and _trade_executor_adapter_kwargs_ok(merged_kwargs)
+            ):
+                try:
+                    order_result = self._execute_market_via_broker_adapter(
+                        symbol=symbol,
+                        side=side,
+                        quantity=quantity,
+                        recv_window=int(merged_kwargs["recvWindow"]),
+                        client_order_id=merged_kwargs.get("newClientOrderId"),
+                    )
+                    gridbot_trade_executor_order_path_total.labels(
+                        path="broker_adapter"
+                    ).inc()
+                    return self._finalize_order(
+                        symbol,
+                        side,
+                        quantity,
+                        order_result,
+                        db,
+                        update_balance,
+                    )
+                except Exception as adapter_err:
+                    if "-1021" not in str(adapter_err):
+                        raise
+                    logger.warning(
+                        "BrokerAdapter falló con desfase -1021; "
+                        "reintento vía cliente legacy: %s",
+                        adapter_err,
+                    )
+
             logger.info(
                 f"🔄 Ejecutando orden: {side} {quantity} {symbol} ({order_type})"
             )
-            # recvWindow amplio para evitar skew menor
-            kwargs.setdefault("recvWindow", 10000)
             try:
                 order_result = self.binance_client.create_order(
                     symbol=symbol,
                     side=side,
                     order_type=order_type,
                     quantity=quantity,
-                    **kwargs,
+                    **merged_kwargs,
                 )
             except Exception as e:
                 # Mitigación de error -1021: reintentar sincronizando tiempo
                 if "-1021" in str(e):
                     try:
-                        # ✅ FIX: Envolver requests.get() en thread para no bloquear si se llama desde async
-                        # Esta función es sync, pero puede ser llamada desde contextos async
-                        # Usar asyncio.to_thread de forma segura
                         try:
-                            # Intentar obtener event loop
-                            loop = asyncio.get_running_loop()
-                            # Si hay loop corriendo, usar asyncio.to_thread
-                            import concurrent.futures
+                            asyncio.get_running_loop()
+                            import concurrent.futures as _cf
 
                             _proxies = get_binance_proxies()
                             _kw: Dict[str, Any] = {"timeout": 3}
                             if _proxies:
                                 _kw["proxies"] = _proxies
-                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                            with _cf.ThreadPoolExecutor() as executor:
                                 future = executor.submit(
                                     lambda: requests.get(
                                         "https://api.binance.com/api/v3/time", **_kw
@@ -115,7 +229,6 @@ class TradeExecutor:
                                 )
                                 srv_time = future.result()
                         except RuntimeError:
-                            # No hay event loop, ejecutar directamente (contexto sync)
                             _proxies = get_binance_proxies()
                             _kw = {"timeout": 3}
                             if _proxies:
@@ -127,17 +240,14 @@ class TradeExecutor:
                         now_ms = int(time.time() * 1000)
                         drift = abs(now_ms - int(srv_time))
                         if drift > 1000:
-                            # Pequeña espera para reintento
-                            # Nota: time.sleep() está bien aquí porque execute_order es sync
                             time.sleep(1.0)
-                        # Reintentar
-                        kwargs["timestamp"] = int(time.time() * 1000)
+                        merged_kwargs["timestamp"] = int(time.time() * 1000)
                         order_result = self.binance_client.create_order(
                             symbol=symbol,
                             side=side,
                             order_type=order_type,
                             quantity=quantity,
-                            **kwargs,
+                            **merged_kwargs,
                         )
                     except Exception as ee:
                         logger.error(f"❌ Reintento tras -1021 falló: {ee}")
@@ -145,28 +255,10 @@ class TradeExecutor:
                 else:
                     raise
 
-            # 2. Verificar que se ejecutó
-            if not order_result or order_result.get("status") not in [
-                "FILLED",
-                "PARTIALLY_FILLED",
-            ]:
-                logger.warning(f"⚠️ Orden no ejecutada completamente: {order_result}")
-                return order_result
-
-            # 3. Actualizar balances internos si está habilitado
-            if update_balance:
-                self._update_balances_after_trade(
-                    symbol=symbol,
-                    side=side,
-                    quantity=quantity,
-                    order_result=order_result,
-                    db=db,
-                )
-
-            logger.info(
-                f"✅ Orden ejecutada: {side} {quantity} {symbol} - OrderID: {order_result.get('orderId')}"
+            gridbot_trade_executor_order_path_total.labels(path="legacy").inc()
+            return self._finalize_order(
+                symbol, side, quantity, order_result, db, update_balance
             )
-            return order_result
 
         except Exception as e:
             logger.error(f"❌ Error ejecutando orden {side} {quantity} {symbol}: {e}")
@@ -291,7 +383,11 @@ class TradeExecutor:
         return self.execute_order(symbol, "SELL", "MARKET", quantity, db=db)
 
     def execute_limit_buy(
-        self, symbol: str, quantity: Union[Decimal, str], price: Union[Decimal, str], db: Optional[Session] = None
+        self,
+        symbol: str,
+        quantity: Union[Decimal, str],
+        price: Union[Decimal, str],
+        db: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """Shortcut para orden LIMIT BUY"""
         return self.execute_order(
@@ -299,7 +395,11 @@ class TradeExecutor:
         )
 
     def execute_limit_sell(
-        self, symbol: str, quantity: Union[Decimal, str], price: Union[Decimal, str], db: Optional[Session] = None
+        self,
+        symbol: str,
+        quantity: Union[Decimal, str],
+        price: Union[Decimal, str],
+        db: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """Shortcut para orden LIMIT SELL"""
         return self.execute_order(
