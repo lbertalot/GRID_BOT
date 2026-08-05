@@ -17,6 +17,8 @@ HALLAZGOS:
 
 import os
 import sys
+from decimal import Decimal
+
 import pytest
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -59,9 +61,9 @@ class TestKellyFractionalCalculation:
 
     def test_kelly_formula_correct(self, risk_manager):
         """Verificar que la fórmula de Kelly es correcta: f = W - (1-W)/R."""
-        W = 0.6
-        R = 1.5
-        expected_kelly = W - (1 - W) / R  # 0.6 - 0.4/1.5 = 0.333...
+        W = Decimal("0.6")
+        R = Decimal("1.5")
+        expected_kelly = W - (Decimal("1") - W) / R  # 0.6 - 0.4/1.5 = 0.333...
         fractional = expected_kelly * risk_manager.fractional_kelly  # 0.333 * 0.25
 
         params = self._make_params(winrate_estimate=W, avg_win_loss_ratio=R)
@@ -71,6 +73,7 @@ class TestKellyFractionalCalculation:
         max_expected = params.account_equity * fractional
         assert size > 0, "Kelly debe dar un tamaño positivo con winrate > 0.5"
         assert size <= params.account_equity, "Kelly nunca debe exceder 100% del equity"
+        assert size <= max_expected
 
     def test_kelly_negative_when_losing_strategy(self, risk_manager):
         """Kelly negativo (winrate baja) debe resultar en tamaño fallback (ATR)."""
@@ -81,7 +84,7 @@ class TestKellyFractionalCalculation:
         size = risk_manager.calculate_dynamic_position_size(params)
         assert size > 0, "Debe usar fallback ATR incluso con Kelly negativo"
         assert (
-            size < params.account_equity * 0.5
+            size < params.account_equity * Decimal("0.5")
         ), "Con Kelly negativo, el tamaño debe ser conservador"
 
     def test_kelly_with_50_50_winrate(self, risk_manager):
@@ -193,7 +196,7 @@ class TestPositionLimits:
         params = self._make_params(account_equity=-1000.0)
         size = risk_manager.calculate_dynamic_position_size(params)
         # El resultado puede ser negativo o 0; lo importante es que no crashee
-        assert isinstance(size, (int, float))
+        assert isinstance(size, (int, float, Decimal))
 
 
 # ===========================================================================
@@ -435,11 +438,13 @@ class TestRiskStatus:
         """max_loss_remaining debe ser 5% - daily_loss."""
         rm = RiskManager()
         rm.update_metrics(daily_loss=0.03, total_exposure=0.5)
-        expected = round(max(0.0, 0.05 - 0.03), 2)
+        expected = max(Decimal("0"), Decimal("0.05") - Decimal("0.03")).quantize(
+            Decimal("0.01")
+        )
         assert rm.max_loss_remaining == expected
 
     def test_max_loss_remaining_zero_when_exceeded(self):
         """max_loss_remaining debe ser 0 cuando daily_loss >= 5%."""
         rm = RiskManager()
         rm.update_metrics(daily_loss=0.07, total_exposure=0.5)
-        assert rm.max_loss_remaining == 0.0
+        assert rm.max_loss_remaining == Decimal("0")
