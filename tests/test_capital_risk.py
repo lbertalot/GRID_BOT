@@ -1048,17 +1048,39 @@ def test_ops_provider_is_injectable(monkeypatch):
     assert data["ops"]["remaining"] == "24.50"
 
 
+def _collect_app_paths(routes) -> set[str]:
+    """Recorre rutas FastAPI 0.141+ donde `include_router` mete `_IncludedRouter` sin `.path`."""
+    paths: set[str] = set()
+    for route in routes:
+        path = getattr(route, "path", None)
+        if path is not None:
+            paths.add(path)
+        ctx = getattr(route, "include_context", None)
+        orig = getattr(route, "original_router", None)
+        if orig is not None:
+            sub_prefix = getattr(ctx, "prefix", "") or "" if ctx is not None else ""
+            for sub in getattr(orig, "routes", []) or []:
+                sub_path = getattr(sub, "path", None)
+                if sub_path is not None:
+                    paths.add(f"{sub_prefix}{sub_path}")
+                paths |= _collect_app_paths([sub])
+        nested = getattr(route, "routes", None)
+        if nested:
+            paths |= _collect_app_paths(nested)
+    return paths
+
+
 def test_route_is_registered_in_main_app():
     """Si el router no queda wired, el dashboard (ADR-005) se queda sin datos."""
     from app.main import app as main_app
 
-    assert "/api/risk/capital-status" in {route.path for route in main_app.routes}
+    assert "/api/risk/capital-status" in _collect_app_paths(main_app.routes)
 
 
 def test_orphan_risk_routes_stay_unregistered():
     """`risk_routes.py` expone POST /emergency-stop sin auth: no debe quedar wired."""
     from app.main import app as main_app
 
-    paths = {route.path for route in main_app.routes}
+    paths = _collect_app_paths(main_app.routes)
     assert "/api/v2/risk/emergency-stop" not in paths
     assert "/api/v2/risk/status" not in paths

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +10,16 @@ import pytest
 # ──────────────────────────────────────────────────────────────────────────────
 # _compute_portfolio_value_sync — LD* asset handling
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _disable_paper_equity_sot():
+    """Estos tests ejercitan el path Binance; en paper el ledger es SoT."""
+    with patch(
+        "app.services.portfolio_snapshot_service.paper_equity_is_source_of_truth",
+        return_value=False,
+    ):
+        yield
 
 
 def _make_binance_mock(balances, ticker_prices=None):
