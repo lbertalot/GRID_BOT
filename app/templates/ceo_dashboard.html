@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>CEO Overview — GridBot</title>
+    <style>
+        :root {
+            --ok: #1b7f4b;
+            --stale: #b07500;
+            --unavailable: #6b7280;
+            --danger: #b3261e;
+            --ink: #14181f;
+            --surface: #ffffff;
+            --bg: #f3f4f6;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 16px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.45;
+        }
+
+        header { max-width: 1100px; margin: 0 auto 16px; }
+
+        .mode-banner {
+            border-radius: 12px;
+            padding: 16px 20px;
+            color: #fff;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 12px;
+        }
+
+        .mode-banner .mode-word {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+
+        .gate-badge {
+            margin-left: auto;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.28);
+        }
+
+        .mode-paper { background: #1f6feb; }
+        .mode-blocked { background: #6b7280; }
+        .mode-armed { background: var(--danger); }
+
+        .verdict {
+            max-width: 1100px;
+            margin: 0 auto 16px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: var(--surface);
+            border-left: 8px solid var(--danger);
+        }
+
+        .verdict.ready { border-left-color: var(--ok); }
+
+        .verdict h2 { margin: 0 0 6px; font-size: 1.1rem; }
+        .verdict ul { margin: 8px 0 0; padding-left: 20px; }
+        .verdict li { font-size: 0.9rem; overflow-wrap: anywhere; }
+        .verdict summary { cursor: pointer; font-size: 0.9rem; }
+        .public-note { font-size: 0.8rem; color: #4b5563; margin: 10px 0 0; }
+
+        main {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 14px 16px;
+            border-top: 6px solid var(--unavailable);
+        }
+
+        .card.status-ok { border-top-color: var(--ok); }
+        .card.status-stale { border-top-color: var(--stale); }
+        .card.status-unavailable { border-top-color: var(--unavailable); background: #eceef1; }
+
+        /* El color mira el riesgo; la chapa de estado mira la frescura del dato. */
+        .card.risk-ok { border-top-color: var(--ok); }
+        .card.risk-warn { border-top-color: var(--stale); }
+        .card.risk-danger { border-top-color: var(--danger); }
+        .card.risk-unknown { border-top-color: var(--unavailable); }
+        .card.risk-danger .value { color: var(--danger); }
+        .card.risk-warn .value { color: var(--stale); }
+
+        .card .label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #4b5563;
+        }
+
+        .card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 6px 0 4px;
+            word-break: break-word;
+        }
+
+        .card.status-unavailable .value { color: var(--unavailable); font-style: italic; }
+        .card.status-stale .value { color: var(--stale); }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 2px 8px;
+            border-radius: 999px;
+            color: #fff;
+            background: var(--unavailable);
+        }
+
+        .status-ok .badge { background: var(--ok); }
+        .status-stale .badge { background: var(--stale); }
+
+        .meta { font-size: 0.75rem; color: #4b5563; margin-top: 6px; }
+
+        footer {
+            max-width: 1100px;
+            margin: 20px auto 0;
+            font-size: 0.8rem;
+            color: #4b5563;
+        }
+
+        @media (max-width: 480px) {
+            .mode-banner .mode-word { font-size: 1.5rem; }
+            .card .value { font-size: 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="mode-banner {{ mode_css }}">
+        <span class="mode-word">{{ mode_label }}</span>
+        <span>{{ mode_hint }}</span>
+        <span class="gate-badge {{ gate_badge_css }}">{{ gate_badge }}</span>
+    </div>
+</header>
+
+<section class="verdict {% if gate_ready %}ready{% endif %}">
+    <h2>Veredicto del gate: {% if gate_ready %}GO (firma dual presente){% else %}NO-GO{% endif %}</h2>
+    {% if blocking_reasons and authenticated %}
+    <details {% if blocking_reasons|length <= 3 %}open{% endif %}>
+        <summary>{{ blocking_reasons|length }} bloqueo(s) abierto(s) — ver detalle</summary>
+        <ul>
+            {% for reason in blocking_reasons %}
+            <li>{{ reason }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% elif blocking_reasons %}
+    <p>{{ blocking_reasons[0] }}</p>
+    {% else %}
+    <p>Sin bloqueos registrados. La autorización sigue siendo un acto humano.</p>
+    {% endif %}
+    {% if not authenticated %}
+    <p class="public-note">Vista pública: sólo modo y estado de firma del gate.
+       Ver el detalle con autenticación (firmantes, hash de config y lista de bloqueos).</p>
+    {% endif %}
+</section>
+
+<main>
+    {% for card in cards %}
+    <article class="card {{ card.css }}">
+        <div class="label">{{ card.label }}</div>
+        <div class="value">{{ card.display }}</div>
+        <span class="badge">{{ card.status }}</span>
+        <div class="meta">
+            {% if card.as_of %}Dato de {{ card.as_of }}{% else %}Sin timestamp{% endif %}
+            {% if card.reason %}<br>{{ card.reason }}{% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</main>
+
+<footer>
+    <p>Generado {{ overview.generated_at }} · vista de sólo lectura (ADR-005 / RFC-004).</p>
+    <p>Un widget en gris significa que la fuente no respondió: no hay número, no es un cero.
+       Este tablero no habilita live; firmar y armar son actos humanos fuera de esta pantalla.</p>
+</footer>
+</body>
+</html>
