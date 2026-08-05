@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from app.core.strategy_blacklist import StrategyBlacklist
 from app.db.session import SessionLocal
 from app.models.trade import Trade
@@ -54,7 +54,7 @@ class AutoRebalancerV2:
         self.binance_client = get_binance_client_singleton().client
 
         # Integración con sistemas de defensa
-        self.circuit_breakers = CircuitBreakers()
+        self.circuit_breakers = get_shared_breakers()
         self.strategy_blacklist = StrategyBlacklist()
 
         # Estado del rebalanceo

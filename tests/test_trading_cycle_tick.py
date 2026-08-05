@@ -131,7 +131,7 @@ def test_execution_phase_enqueues_when_no_breakers(setup_tick, monkeypatch):
         def get_all_breakers_status(self):
             return {"critical_mode": False, "active_breakers": []}
 
-    monkeypatch.setattr(tt, "CircuitBreakers", FakeCB, raising=True)
+    monkeypatch.setattr(tt, "get_shared_breakers", FakeCB, raising=True)
 
     # Capturar encolado de ejecución
     called = {"delay": 0}
@@ -158,7 +158,7 @@ def test_execution_skipped_when_breakers_active(setup_tick, monkeypatch):
         def get_all_breakers_status(self):
             return {"critical_mode": True, "active_breakers": ["system_integrity"]}
 
-    monkeypatch.setattr(tt, "CircuitBreakers", FakeCB, raising=True)
+    monkeypatch.setattr(tt, "get_shared_breakers", FakeCB, raising=True)
 
     called = {"delay": 0}
 

@@ -40,7 +40,7 @@ from app.api import system_routes
 from app.api import gate_routes
 from app.api import config_routes
 from app.api import prometheus as prometheus_routes
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from app.core.metrics import cycle_phase
 from app.core.tracing import setup_tracing
 
@@ -94,7 +94,7 @@ logger = _configure_logging()
 balance_validator = None
 operation_tracker = None
 integrity_monitor = None
-app_breakers = CircuitBreakers()
+app_breakers = get_shared_breakers()  # B1 shared
 
 
 @asynccontextmanager

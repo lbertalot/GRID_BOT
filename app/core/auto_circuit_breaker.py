@@ -4,14 +4,14 @@ GridBot v2.5 - Sistema de protección automática
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.db.session import SessionLocal
 from app.models.trade import Trade
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import CircuitBreakers, get_shared_breakers
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,9 @@ class AutoCircuitBreaker:
     Sistema de activación automática de circuit breakers basado en métricas de pérdida
     """
 
-    def __init__(self):
-        self.breakers = CircuitBreakers()
+    def __init__(self, breakers: Optional[CircuitBreakers] = None):
+        # B1: override solo para tests; en prod siempre get_shared_breakers().
+        self._breakers_override = breakers
         self.logger = logger
 
         # Umbrales de activación (configurables)
@@ -35,6 +36,13 @@ class AutoCircuitBreaker:
         }
 
         self.logger.info("🛡️ Auto Circuit Breaker inicializado")
+
+    @property
+    def breakers(self) -> CircuitBreakers:
+        """Fuente de verdad compartida (B1); no instancia privada."""
+        if self._breakers_override is not None:
+            return self._breakers_override
+        return get_shared_breakers()
 
     async def check_and_activate_breakers(self) -> Dict[str, Any]:
         """

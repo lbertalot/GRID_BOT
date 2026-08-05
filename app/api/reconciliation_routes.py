@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.services.reconciliation_service import ReconciliationService  # type: ignore
 from app.services.binance_client_singleton import get_binance_client_singleton  # type: ignore
-from app.core.circuit_breakers import CircuitBreakers  # type: ignore
+from app.core.circuit_breakers import get_shared_breakers  # type: ignore
 
 
 router = APIRouter(
@@ -19,9 +19,9 @@ router = APIRouter(
 async def reconciliation_summary() -> Dict[str, Any]:
     try:
         client_singleton = get_binance_client_singleton()
-        breakers: CircuitBreakers | None = getattr(router, "breakers", None)
+        breakers = getattr(router, "breakers", None)
         if breakers is None:
-            breakers = CircuitBreakers()
+            breakers = get_shared_breakers()
 
         svc = ReconciliationService(client_singleton.client, breakers)
         result = await svc.run_reconciliation_cycle()

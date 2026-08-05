@@ -20,7 +20,7 @@ from app.core.metrics import (
     order_validation_rejects_total,
     gridbot_spot_market_submit_path_total,
 )
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from fastapi import Request
 from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
 from app.core.operation_tracker import OperationTracker, OperationStatus
@@ -236,11 +236,10 @@ async def place_order(
 ):
     # Bloqueo por breakers (si está en modo crítico/protegido, rechazar)
     try:
-        breakers = (
-            getattr(request.app.state, "breakers", CircuitBreakers())
-            if request
-            else CircuitBreakers()
-        )
+        if request is not None:
+            breakers = getattr(request.app.state, "breakers", None) or get_shared_breakers()
+        else:
+            breakers = get_shared_breakers()
         summary = breakers.get_all_breakers_status()
         if summary.get("critical_mode") or summary.get("total_active", 0) > 0:
             order_validation_rejects_total.labels(
