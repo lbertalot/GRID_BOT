@@ -84,6 +84,7 @@ x-app-volumes: &app-volumes
   - ./alembic.ini:/app/alembic.ini
   - ./grid_config_optimized.json:/app/grid_config_optimized.json
   - ./grid_config_paper_l0.json:/app/grid_config_paper_l0.json
+  - ./grid_config_paper_l0.hash:/app/grid_config_paper_l0.hash:ro
   - ./paper_telemetry:/app/paper_telemetry
   - ./logs:/app/logs
   - ./cache:/app/cache
