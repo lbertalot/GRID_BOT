@@ -102,23 +102,35 @@ class HealthChecker:
             return False
 
 
+    def is_paper_mode(self) -> bool:
+        """Modo paper efectivo: PAPER_TRADING activo y FORCE_REAL_MODE no forzado."""
+        paper_trading = os.getenv("PAPER_TRADING", "true").lower() in {"1", "true", "yes", "on"}
+        force_real = os.getenv("FORCE_REAL_MODE", "false").lower() in {"1", "true", "yes", "on"}
+        return paper_trading and not force_real
+
     def check_binance_env_vars(self) -> bool:
-        """Valida credenciales Binance."""
-        api_key = self.check_env_var("BINANCE_API_KEY", required=True)
-        api_secret = self.check_env_var("BINANCE_SECRET_KEY", required=True)
-        
+        """Valida credenciales Binance.
+
+        En paper el stack simula órdenes, así que credenciales ausentes o
+        placeholder son advertencia y no bloquean el arranque: el checklist paper
+        debe poder correrse desde un clon limpio con env.example.
+        """
+        paper_mode = self.is_paper_mode()
+        api_key = self.check_env_var("BINANCE_API_KEY", required=not paper_mode)
+        api_secret = self.check_env_var("BINANCE_SECRET_KEY", required=not paper_mode)
+
         if not (api_key and api_secret):
-            self.log_fail("CRÍTICO: Credenciales Binance incompletas")
-            return False
-        
+            self.log_fail("Credenciales Binance incompletas", is_warning=paper_mode)
+            return paper_mode
+
         # Validar longitud mínima
         if len(api_key) < 30:
-            self.log_fail(f"BINANCE_API_KEY demasiado corto (got {len(api_key)})")
-            return False
+            self.log_fail(f"BINANCE_API_KEY demasiado corto (got {len(api_key)})", is_warning=paper_mode)
+            return paper_mode
         if len(api_secret) < 60:
-            self.log_fail(f"BINANCE_SECRET_KEY demasiado corto (got {len(api_secret)})")
-            return False
-        
+            self.log_fail(f"BINANCE_SECRET_KEY demasiado corto (got {len(api_secret)})", is_warning=paper_mode)
+            return paper_mode
+
         self.log_pass("Credenciales Binance tienen formato válido (no validadas contra API)")
         return True
 
@@ -169,6 +181,13 @@ class HealthChecker:
         paper_trading = os.getenv("PAPER_TRADING", "true").lower() == "true"
         force_real = os.getenv("FORCE_REAL_MODE", "false").lower() == "true"
         trading_enabled = os.getenv("TRADING_ENABLED", "false").lower() == "true"
+
+        # FORCE_REAL_MODE anula PAPER_TRADING en BinanceService: pedir ambos es
+        # una config contradictoria que en runtime termina en real. Fail closed.
+        if force_real and paper_trading:
+            self.log_fail("CRÍTICO: FORCE_REAL_MODE=true junto a PAPER_TRADING=true. "
+                          "FORCE_REAL_MODE anula paper; corregí la config antes de arrancar.")
+            return False
 
         if not trading_enabled:
             self.log_info("Trading desactivado (TRADING_ENABLED=false)")

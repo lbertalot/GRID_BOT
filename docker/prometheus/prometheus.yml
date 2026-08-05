@@ -6,6 +6,13 @@ global:
 rule_files:
   - "rules/*.yml"
 
+# Sin este bloque las reglas de rules/ evalúan pero no notifican a nadie
+# (breakers, error rate de órdenes y desync de reconciliación quedaban mudos).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # Prometheus se scrapea a sí mismo
   - job_name: 'prometheus'
