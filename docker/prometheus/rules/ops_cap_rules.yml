@@ -1,0 +1,29 @@
+# ADR-008 / B20 — alertas de cap mensual y proyección de reserva ops.
+# Métricas publicadas por app.core.ops_cap_alerts (gauges 0/1).
+groups:
+  - name: gridbot.ops_cap
+    interval: 30s
+    rules:
+      - alert: OpsMonthlyCapExceeded
+        expr: ops_monthly_cap_exceeded == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: ops_ledger
+        annotations:
+          summary: "Ops monthly cap excedido (ADR-008)"
+          description: >
+            Burn MTD de ops supera OPS_MONTHLY_CAP_USD
+            (ops_monthly_cap_exceeded=1). Revisar /api/ops/summary.
+
+      - alert: OpsReserveExhaustedProjection
+        expr: ops_reserve_exhausted_projection == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: ops_ledger
+        annotations:
+          summary: "Proyección anual de ops supera la reserva (ADR-008 #4)"
+          description: >
+            projected_annual_burn > OPS_RESERVE_USD
+            (ops_reserve_exhausted_projection=1). Revisar /api/ops/summary.
