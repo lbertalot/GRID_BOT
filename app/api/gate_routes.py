@@ -3,6 +3,10 @@
 Consumed by the go-live dashboard to render the signoff state. Read-only by
 design: there is no endpoint to sign, approve or bypass the gate — signing is a
 human act on a file outside the application.
+
+Auth is applied where the router is mounted (``app/main.py``): the detail below
+names people and enumerates which controls are still pending, so it is not
+public. The unauthenticated mode badge lives in ``/health/trading-mode``.
 """
 
 from datetime import datetime

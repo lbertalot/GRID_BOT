@@ -8,6 +8,9 @@ Regla dura: `.cursor/rules/40-no-live-without-gate.mdc`.
 archivo cuyo nombre contenga `TEMPLATE`, y los placeholders `<...>` no cuentan
 como firma.
 
+Fechas vigentes: firma del checklist **2026-09-14**, go-live **2026-09-15**.
+El gate de esa ronda es `LIVE_GATE_20260914.md`.
+
 ## Cómo se usa
 
 1. Copiar a `Docs/gates/LIVE_GATE_<YYYYMMDD>.md` **fuera de git** (los gates
@@ -20,6 +23,7 @@ como firma.
 5. Apuntar el runtime con `LIVE_GATE_PATH=/ruta/LIVE_GATE_<YYYYMMDD>.md`
    (o `LIVE_GATE_DIR=/ruta/gates`, default `Docs/gates`).
 6. Verificar con `GET /api/gates/live-status` antes de tocar cualquier flag.
+   Requiere auth: `Authorization: Bearer <API_KEY>`.
 
 El gate es condición **necesaria y no suficiente**: `EMERGENCY_STOP`,
 `TRADING_ENABLED` y los circuit breakers siguen mandando.
@@ -27,7 +31,9 @@ El gate es condición **necesaria y no suficiente**: `EMERGENCY_STOP`,
 ## Checklist
 
 - [ ] Dashboard en verde (`effective_mode`, equity, DD% vs aportado, PnL MTD)
-- [ ] Risk engine con límites de capital y kill floor verificados
+- [ ] Risk engine con límites de capital verificados
+- [ ] Kill floor medido sobre **capital tradable** (aportado − ops devengada),
+      no sobre el pool
 - [ ] Mode clarity expuesto y correcto en `/health/trading-mode`
 - [ ] Tear sheet paper ≥ 3 semanas con expectancy semanal ≥ 0 tras fees
 - [ ] Sin breach de reglas de riesgo en paper
