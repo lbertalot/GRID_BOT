@@ -96,8 +96,9 @@ services:
       # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
       - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
-      - TRADING_ENABLED=${TRADING_ENABLED}
-      - EMERGENCY_STOP=${EMERGENCY_STOP}
+      # Fail-closed: sin env explícito → trading off + stop off (S-GATE / B26).
+      - TRADING_ENABLED=${TRADING_ENABLED:-false}
+      - EMERGENCY_STOP=${EMERGENCY_STOP:-false}
       - GRAFANA_URL=http://grafana:3000/api/health
       - PROMETHEUS_URL=http://prometheus:9090/-/healthy
       - PROM_URL=http://prometheus:9090/api/v1/targets
@@ -177,8 +178,9 @@ services:
       # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
       - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
-      - TRADING_ENABLED=${TRADING_ENABLED}
-      - EMERGENCY_STOP=${EMERGENCY_STOP}
+      # Fail-closed: sin env explícito → trading off + stop off (S-GATE / B26).
+      - TRADING_ENABLED=${TRADING_ENABLED:-false}
+      - EMERGENCY_STOP=${EMERGENCY_STOP:-false}
       - CELERYD_HIJACK_ROOT_LOGGER=false
       - CELERY_WORKER_REDIRECT_STDOUTS_LEVEL=${CELERY_LOG_LEVEL:-WARNING}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
@@ -244,8 +246,9 @@ services:
       # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
       - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
-      - TRADING_ENABLED=${TRADING_ENABLED}
-      - EMERGENCY_STOP=${EMERGENCY_STOP}
+      # Fail-closed: sin env explícito → trading off + stop off (S-GATE / B26).
+      - TRADING_ENABLED=${TRADING_ENABLED:-false}
+      - EMERGENCY_STOP=${EMERGENCY_STOP:-false}
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
       - MPLCONFIGDIR=/tmp/matplotlib
