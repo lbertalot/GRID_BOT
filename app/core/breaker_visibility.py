@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.circuit_breakers import CircuitBreakers, get_shared_breakers
+from app.core.capital_risk import DEFAULT_DAILY_LOSS_LIMIT_PCT
 
 BREAKER_STATE_CLOSED = "closed"
 BREAKER_STATE_OPEN = "open"
@@ -23,7 +24,7 @@ BREAKER_STATE_HALF_OPEN = "half_open"
 # Umbral que dispara cada breaker en `AutoCircuitBreaker`. Se usa como fallback
 # si el módulo no puede importarse (p. ej. sin DB configurada).
 _THRESHOLD_BY_BREAKER: Dict[str, Tuple[str, float]] = {
-    "balance_discrepancy": ("max_daily_loss_pct", 0.05),
+    "balance_discrepancy": ("max_daily_loss_pct", float(DEFAULT_DAILY_LOSS_LIMIT_PCT)),
     "operation_failure_rate": ("max_total_loss_pct", 0.10),
     "system_integrity": ("max_consecutive_losses", 5),
     "critical_mode": ("critical_loss_pct", 0.20),

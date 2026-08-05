@@ -12,6 +12,7 @@ from sqlalchemy import func
 from app.db.session import SessionLocal
 from app.models.trade import Trade
 from app.core.circuit_breakers import CircuitBreakers, get_shared_breakers
+from app.core.capital_risk import daily_loss_limit_fraction
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,9 @@ class AutoCircuitBreaker:
         self._breakers_override = breakers
         self.logger = logger
 
-        # Umbrales de activación (configurables)
+        # Umbrales de activación. max_daily_loss_pct deriva del SoT ADR-003 (B3).
         self.thresholds = {
-            "max_daily_loss_pct": 0.05,  # 5% pérdida diaria máxima
+            "max_daily_loss_pct": float(daily_loss_limit_fraction()),
             "max_total_loss_pct": 0.10,  # 10% pérdida total máxima
             "max_consecutive_losses": 5,  # 5 pérdidas consecutivas máximo
             "max_hourly_loss_pct": 0.03,  # 3% pérdida por hora máxima

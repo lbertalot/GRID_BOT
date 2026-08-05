@@ -154,7 +154,7 @@
     "total_assets": 11
   },
   "_safety_limits": {
-    "max_daily_loss": 0.06,
+    "max_daily_loss": 0.03,
     "max_total_loss": 0.12,
     "max_trade_loss": 0.025,
     "max_consecutive_losses": 4,
