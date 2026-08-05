@@ -256,9 +256,9 @@ async def ceo_dashboard(
     )
 
     return templates.TemplateResponse(
+        request,
         "ceo_dashboard.html",
         {
-            "request": request,
             "overview": overview,
             "cards": _build_cards(overview),
             "mode_label": mode_label,
