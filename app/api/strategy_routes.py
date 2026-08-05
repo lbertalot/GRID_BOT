@@ -60,6 +60,7 @@ class BacktestRequest(BaseModel):
     walk_forward: bool = True
     commission: float = 0.001
     slippage: float = 0.0005
+    persist_run_to_db: bool = False
 
 
 @router.post("/execute_intelligent")
@@ -292,6 +293,7 @@ async def run_backtest(
             commission=request.commission,
             slippage=request.slippage,
             walk_forward=request.walk_forward,
+            persist_run_to_db=request.persist_run_to_db,
         )
 
         if request.walk_forward:

@@ -28,10 +28,11 @@ x-app-env: &app-env
   ACCESS_LOG: "false"
   DOCKER_ENV: "true"
   TZ: UTC
-  # Trading — objetivo inmediato local: PAPER (simulación en app; sin órdenes reales).
+  # Trading — defaults seguros (DoD Docker local): paper + ciclo de estrategia desactivado
+  # hasta decisión explícita del operador (ver Docs/DOCKER_LOCAL_DOD_CHECKLIST.md).
   # FORCE_REAL_MODE vacío o "false" para no anular PAPER_TRADING.
   PAPER_TRADING: "true"
-  TRADING_ENABLED: "true"
+  TRADING_ENABLED: "false"
   EMERGENCY_STOP: "false"
   FORCE_REAL_MODE: ""
   BINANCE_TESTNET: "false"
