@@ -185,16 +185,16 @@ class MetricsService:
         try:
             total_value = 0.0
 
-            stablecoins_approx_1_1 = {"USDT", "BUSD", "USDC", "TUSD", "FDUSD", "DAI"}
-
             from app.services.binance_client_singleton import (
+                STABLECOIN_ASSETS,
+                binance_earn_underlying_asset,
                 get_binance_client_singleton,
             )
 
             client_singleton = get_binance_client_singleton()
 
             def price_usdt_for(asset_symbol: str) -> float:
-                if asset_symbol in stablecoins_approx_1_1:
+                if asset_symbol in STABLECOIN_ASSETS:
                     return 1.0
                 # Intentar par directo a USDT
                 direct = client_singleton.get_symbol_price(f"{asset_symbol}USDT")
@@ -224,7 +224,11 @@ class MetricsService:
             for asset, amount in balances.items():
                 if amount <= 0:
                     continue
-                if asset in stablecoins_approx_1_1:
+                # Binance Earn (LD*): valuár el subyacente; LDUSDT ≈ USDT 1:1.
+                underlying = binance_earn_underlying_asset(asset)
+                if underlying is not None:
+                    asset = underlying
+                if asset in STABLECOIN_ASSETS:
                     total_value += amount  # 1:1 USDT
                     continue
                 price = price_usdt_for(asset)

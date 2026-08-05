@@ -27,6 +27,25 @@ _circuit_open_seconds: int = int(
 )  # 5m
 
 
+# Stablecoins con valoración ≈ 1 USDT (Earn LD*USDT y spot).
+STABLECOIN_ASSETS = frozenset({"USDT", "USDC", "BUSD", "FDUSD", "DAI", "TUSD"})
+
+
+def binance_earn_underlying_asset(asset: str) -> Optional[str]:
+    """
+    Binance Simple Earn marca balances como LD{ASSET} (p.ej. LDUSDT, LDETH).
+
+    Retorna el activo subyacente o None si no es un balance Earn.
+    No construye pares de trading: LDUSDT no tiene ticker spot válido.
+    """
+    if not asset:
+        return None
+    a = asset.upper().replace("-", "").replace("_", "")
+    if not a.startswith("LD") or len(a) <= 2:
+        return None
+    return a[2:] or None
+
+
 def fallback_ld_prefixed_spot_symbol(sym: str) -> Optional[str]:
     """
     Mapea símbolos sintéticos con prefijo LD (balances earning/staking) a un par spot.
@@ -51,7 +70,37 @@ def fallback_ld_prefixed_spot_symbol(sym: str) -> Optional[str]:
         return None
     if core == quote:
         return None
+    # Evitar mapear LDUSDT{BTC|ETH|...} → USDT{BTC|...} (ruido Earn mal formado).
+    if core in STABLECOIN_ASSETS:
+        return None
     return f"{core}{quote}"
+
+
+def _looks_like_earn_synthetic_symbol(symbol: str) -> bool:
+    """True si el ticker parece LD* Earn (con o sin quote concatenado)."""
+    s = (symbol or "").upper().replace("-", "").replace("_", "")
+    if s.startswith("LD"):
+        return True
+    for q in ("USDT", "BUSD", "BTC", "ETH", "BNB"):
+        if s.endswith(q):
+            base = s[: -len(q)]
+            if binance_earn_underlying_asset(base) is not None:
+                return True
+    return False
+
+
+def _rate_limited_debug_skip_earn(owner: object, symbol: str) -> None:
+    _key = f"skip_earn_symbol:{symbol}"
+    if not hasattr(owner, "_last_invalid_symbol_ts"):
+        owner._last_invalid_symbol_ts = {}
+    last_ts = owner._last_invalid_symbol_ts.get(_key, 0.0)
+    now_ts = time.time()
+    if now_ts - last_ts > 600:
+        logger.debug(
+            "Omitiendo precio Earn/sintético inválido %s (sin par spot)",
+            symbol,
+        )
+        owner._last_invalid_symbol_ts[_key] = now_ts
 
 
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
@@ -445,6 +494,9 @@ class BinanceClientSingleton:
                             f"Fallback de símbolo fallido {symbol}->{fb}: {inner}"
                         )
                         return 0.0
+                if _looks_like_earn_synthetic_symbol(symbol):
+                    _rate_limited_debug_skip_earn(self, symbol)
+                    return 0.0
             logger.error(f"Error obteniendo precio para {symbol}: {e}")
             return 0.0
         except Exception as e:
@@ -477,6 +529,9 @@ class BinanceClientSingleton:
                             f"Fallback de símbolo fallido {symbol}->{fb}: {inner}"
                         )
                         return 0.0
+                if _looks_like_earn_synthetic_symbol(symbol):
+                    _rate_limited_debug_skip_earn(self, symbol)
+                    return 0.0
             logger.error(f"Error obteniendo precio para {symbol}: {e}")
             return 0.0
 
