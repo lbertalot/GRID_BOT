@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.paper_equity_ledger import (
+    DAILY_CLOSE_TOLERANCE,
     PaperEquitySeries,
     get_paper_equity_series,
     to_money,
@@ -91,9 +92,12 @@ def compute_pnl_from_series(
 ) -> Dict[str, Any]:
     """Calcula PnL MTD MtM: `E_as_of − E_start` en el mes calendario UTC.
 
-    Ancla de inicio:
+    Ancla de inicio (honesta — DAY0 CEO-5 / N9):
     1. último sample con `at <= month_start`, si existe;
-    2. si no, el primer sample del mes (solo si hay un sample posterior).
+    2. si no, el primer cierre diario 00:00 UTC (`daily_close_at` / E_0) del mes.
+
+    Ticks intradiarios sin E_0 ni sample pre-mes **no** son serie MTD usable:
+    devolverían `0` fingido (p.ej. cash paper plano). → `PnlUnavailableError`.
 
     Sin samples, o con un único punto usable → `PnlUnavailableError`.
     """
@@ -105,28 +109,36 @@ def compute_pnl_from_series(
         raise PnlUnavailableError("sin serie equity MtM paper (0 samples)")
 
     before_or_at = [(t, e) for t, e in path if t <= month_start]
-    in_or_after_month = [(t, e) for t, e in path if t >= month_start]
+    daily_closes = [
+        (t, e) for t, e in series.daily_closes() if month_start <= t <= moment
+    ]
 
     if before_or_at:
         start_at, equity_start = before_or_at[-1]
         anchor = "pre_month_or_eom"
-    elif in_or_after_month:
-        start_at, equity_start = in_or_after_month[0]
-        anchor = "first_in_month"
+        # Cualquier marca estrictamente posterior al ancla pre-mes.
+        as_of_candidates = [(t, e) for t, e in path if t > start_at]
+    elif daily_closes:
+        start_at, equity_start = daily_closes[0]
+        anchor = "first_daily_close_in_month"
+        # Excluir la ventana ±30m del propio E_0: un solo cierre no es MTD.
+        close_horizon = start_at + DAILY_CLOSE_TOLERANCE
+        as_of_candidates = [(t, e) for t, e in path if t > close_horizon]
     else:
         raise PnlUnavailableError(
-            "sin samples MtM en el mes calendario UTC en curso"
+            "serie MtM sin ancla usable del mes (falta E_0 / cierre diario "
+            "00:00 UTC o sample previo al mes)"
         )
 
-    as_of_at, equity_as_of = path[-1]
-    if as_of_at < month_start:
-        raise PnlUnavailableError("serie MtM sin samples en el mes en curso")
-
-    if as_of_at <= start_at:
+    if not as_of_candidates:
         raise PnlUnavailableError(
             "serie MtM insuficiente: se necesita al menos un sample posterior "
             "al ancla MTD"
         )
+
+    as_of_at, equity_as_of = as_of_candidates[-1]
+    if as_of_at < month_start:
+        raise PnlUnavailableError("serie MtM sin samples en el mes en curso")
 
     pnl_mtd = _normalize(equity_as_of - equity_start)
     daily = _daily_pnl_fraction(series)
