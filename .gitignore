@@ -58,6 +58,11 @@ monitoring_data/**
 reports/**
 !reports/.gitkeep
 
+# Telemetría de equity paper (S10): ledger y serie MtM del proceso.
+# Es estado contable de una ventana concreta, no configuración versionable.
+paper_telemetry/**
+!paper_telemetry/.gitkeep
+
 # Artefactos JSON en raíz generados por scripts (migrados a reports/)
 /*.json
 !/grid_config_minimal.json
