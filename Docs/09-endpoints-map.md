@@ -43,6 +43,9 @@
 | Endpoint | Método | Archivo | Función | Auth |
 |---|---|---|---|---|
 | `/breakers/summary` | GET | `app/api/breakers_routes.py` | `breakers_summary()` | No |
+| `/breakers/status` | GET | `app/api/breakers_routes.py` | `breakers_status()` | No |
+| `/api/breakers/summary` | GET | `app/api/breakers_routes.py` | `breakers_summary_api()` | No |
+| `/api/breakers/status` | GET | `app/api/breakers_routes.py` | `breakers_status_api()` | No |
 | `/api/reconciliation/summary` | GET | `app/api/reconciliation_routes.py` | `reconciliation_summary()` | No |
 | `/integrity/status` | GET | `app/main.py` | `get_integrity_status()` | No |
 | `/integrity/validate-balances` | POST | `app/main.py` | `force_balance_validation()` | No |

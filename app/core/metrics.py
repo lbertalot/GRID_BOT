@@ -50,6 +50,21 @@ breaker_state = Gauge(
     "breaker_state", "Estado de breaker (0 inactivo, 1 activo)", ["type"]
 )
 
+# Aperturas acumuladas por tipo de breaker (edge-trigger, no re-cuenta si ya está abierto)
+breaker_opens_total = Counter(
+    "breaker_opens_total", "Total de aperturas de circuit breaker por tipo", ["type"]
+)
+
+# Agregado para alerta única del operador: 1 si hay al menos un breaker abierto
+breaker_any_open = Gauge(
+    "breaker_any_open", "1 si al menos un circuit breaker está abierto, 0 si ninguno"
+)
+
+# Emergency stop efectivo (env EMERGENCY_STOP o modo crítico activo)
+emergency_stop_active = Gauge(
+    "emergency_stop_active", "1 si el emergency stop está activo, 0 si no"
+)
+
 # Scores de integridad por componente
 integrity_score = Gauge(
     "integrity_score", "Score de integridad (0-100) por componente", ["component"]
