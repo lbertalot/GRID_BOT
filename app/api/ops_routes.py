@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.auth import require_auth
+from app.core.ops_cap_alerts import emit_ops_cap_alerts
 from app.core.ops_ledger import (
     CURRENCY,
     OPS_CATEGORIES,
@@ -64,9 +65,12 @@ async def ops_summary() -> Dict[str, Any]:
     """
     ledger = _ledger()
     try:
-        return serialize_summary(ledger.summary())
+        summary = ledger.summary()
     except OpsLedgerStorageError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    # B20 / ADR-008: métricas Prometheus + Telegram en rising-edge.
+    emit_ops_cap_alerts(summary)
+    return serialize_summary(summary)
 
 
 @router.get("/ledger")
@@ -108,7 +112,10 @@ async def add_ops_entry(
     except OpsLedgerError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    summary = ledger.summary()
+    # POST puede disparar cap/reserva; emitir en el mismo path que GET /summary.
+    emit_ops_cap_alerts(summary)
     return {
         "entry": serialize_entry(entry),
-        "summary": serialize_summary(ledger.summary()),
+        "summary": serialize_summary(summary),
     }
