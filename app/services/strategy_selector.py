@@ -1,23 +1,39 @@
 """
 StrategySelector para V2.5 "Low-Risk, Predictive & Adaptive Grid".
 Selecciona estrategias basado en predicciones de régimen y estado de la cuenta.
+
+Montos y ratios financieros usan Decimal (no float×Decimal).
 """
 
-import logging
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
-from enum import Enum
-from datetime import datetime
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import logging
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+
 from prometheus_client import Counter, Gauge, REGISTRY
+from pydantic import BaseModel, Field
 
 from app.core.risk_manager import (
     MarketRegime,
+    PositionSizeParams,
     RegimePrediction,
     RiskManager,
-    PositionSizeParams,
 )
+
+NumberLike = Union[Decimal, float, int, str]
+
+
+def _d(value: Optional[NumberLike], default: str = "0") -> Decimal:
+    """Convierte un valor numérico a Decimal de forma segura (estilo pnl_service)."""
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
 
 
 class StrategyType(Enum):
@@ -40,16 +56,30 @@ class VolatilityLevel(Enum):
 
 @dataclass
 class StrategyParams:
-    """Parámetros específicos de estrategia"""
+    """Parámetros específicos de estrategia (montos/ratios en Decimal)."""
 
     grid_spacing_bps: Optional[int] = None
     grid_levels: Optional[int] = None
-    order_size_usdt: Optional[float] = None
-    tranche_size: Optional[float] = None
+    order_size_usdt: Optional[Decimal] = None
+    tranche_size: Optional[Decimal] = None
     interval: Optional[int] = None
-    take_profit: Optional[float] = None
-    stop_loss: Optional[float] = None
-    max_exposure: Optional[float] = None
+    take_profit: Optional[Decimal] = None
+    stop_loss: Optional[Decimal] = None
+    max_exposure: Optional[Decimal] = None
+
+    _DECIMAL_FIELDS = (
+        "order_size_usdt",
+        "tranche_size",
+        "take_profit",
+        "stop_loss",
+        "max_exposure",
+    )
+
+    def __post_init__(self) -> None:
+        for name in self._DECIMAL_FIELDS:
+            raw = getattr(self, name)
+            if raw is not None and not isinstance(raw, Decimal):
+                setattr(self, name, _d(raw))
 
 
 class StrategySpec(BaseModel):
@@ -57,21 +87,23 @@ class StrategySpec(BaseModel):
 
     strategy_name: StrategyType
     params: StrategyParams
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"))
     reasoning: str
     regime_prediction: RegimePrediction
     timestamp: datetime = Field(default_factory=datetime.now)
 
+    model_config = {"arbitrary_types_allowed": True}
+
 
 class AccountState(BaseModel):
-    """Estado de la cuenta"""
+    """Estado de la cuenta (equity/balances en Decimal)."""
 
-    total_equity: float
-    available_balance: float
-    total_exposure: float
-    daily_pnl: float
-    max_drawdown: float
-    risk_score: float
+    total_equity: Decimal
+    available_balance: Decimal
+    total_exposure: Decimal
+    daily_pnl: Decimal
+    max_drawdown: Decimal
+    risk_score: Decimal
 
 
 class StrategySelector:
@@ -90,26 +122,26 @@ class StrategySelector:
                 "default_params": {
                     "grid_spacing_bps": 50,
                     "grid_levels": 10,
-                    "order_size_usdt": 50.0,
+                    "order_size_usdt": Decimal("50"),
                 },
             },
             # BULL_TREND + MODERATE_VOL
             (MarketRegime.BULL_TREND, VolatilityLevel.MODERATE): {
                 "strategy": StrategyType.DCA,
                 "default_params": {
-                    "tranche_size": 100.0,
+                    "tranche_size": Decimal("100"),
                     "interval": 3600,  # 1 hora
-                    "take_profit": 0.05,  # 5%
+                    "take_profit": Decimal("0.05"),  # 5%
                 },
             },
             # BULL_TREND + HIGH_VOL
             (MarketRegime.BULL_TREND, VolatilityLevel.HIGH): {
                 "strategy": StrategyType.SCALPING,
                 "default_params": {
-                    "order_size_usdt": 25.0,
-                    "take_profit": 0.02,  # 2%
-                    "stop_loss": 0.01,  # 1%
-                    "max_exposure": 0.3,  # 30%
+                    "order_size_usdt": Decimal("25"),
+                    "take_profit": Decimal("0.02"),  # 2%
+                    "stop_loss": Decimal("0.01"),  # 1%
+                    "max_exposure": Decimal("0.3"),  # 30%
                 },
             },
             # BEAR_TREND
@@ -121,8 +153,8 @@ class StrategySelector:
             (MarketRegime.HIGH_VOLATILITY_BEAR, None): {
                 "strategy": StrategyType.HEDGING,
                 "default_params": {
-                    "max_exposure": 0.2,  # 20%
-                    "stop_loss": 0.03,  # 3%
+                    "max_exposure": Decimal("0.2"),  # 20%
+                    "stop_loss": Decimal("0.03"),  # 3%
                 },
             },
             # CRASH_IMMINENT
@@ -183,9 +215,10 @@ class StrategySelector:
             return VolatilityLevel.HIGH
 
         # Usar métricas de la cuenta como fallback
-        if account_state.risk_score > 0.7:
+        risk_score = _d(account_state.risk_score)
+        if risk_score > Decimal("0.7"):
             return VolatilityLevel.HIGH
-        elif account_state.risk_score > 0.4:
+        elif risk_score > Decimal("0.4"):
             return VolatilityLevel.MODERATE
         else:
             return VolatilityLevel.LOW
@@ -209,23 +242,26 @@ class StrategySelector:
         """
         params = StrategyParams()
 
+        total_equity = _d(account_state.total_equity)
+        available_balance = _d(account_state.available_balance)
+
         # Calcular tamaño de orden basado en Kelly
-        if account_state.total_equity > 0:
+        if total_equity > Decimal("0"):
             # Usar RiskManager para calcular tamaño dinámico
             position_params = PositionSizeParams(
                 symbol="GENERIC",
-                account_equity=account_state.total_equity,
-                atr=0.02,  # ATR estimado
-                winrate_estimate=0.6,
-                avg_win_loss_ratio=1.5,
-                price=1.0,
+                account_equity=total_equity,
+                atr=Decimal("0.02"),  # ATR estimado
+                winrate_estimate=Decimal("0.6"),
+                avg_win_loss_ratio=Decimal("1.5"),
+                price=Decimal("1.0"),
             )
 
-            dynamic_size = self.risk_manager.calculate_dynamic_position_size(
-                position_params
+            dynamic_size = _d(
+                self.risk_manager.calculate_dynamic_position_size(position_params)
             )
         else:
-            dynamic_size = 50.0  # Tamaño por defecto
+            dynamic_size = Decimal("50")  # Tamaño por defecto
 
         if strategy_type == StrategyType.GRID_TRADING:
             # Ajustar spacing basado en volatilidad
@@ -237,25 +273,26 @@ class StrategySelector:
                 spacing_bps = 30
 
             params.grid_spacing_bps = spacing_bps
-            params.grid_levels = min(
-                15, int(account_state.available_balance / dynamic_size)
-            )
+            if dynamic_size > Decimal("0"):
+                params.grid_levels = min(15, int(available_balance / dynamic_size))
+            else:
+                params.grid_levels = 0
             params.order_size_usdt = dynamic_size
 
         elif strategy_type == StrategyType.DCA:
             params.tranche_size = dynamic_size
             params.interval = 3600  # 1 hora
-            params.take_profit = 0.05  # 5%
+            params.take_profit = Decimal("0.05")  # 5%
 
         elif strategy_type == StrategyType.SCALPING:
-            params.order_size_usdt = dynamic_size * 0.5  # Mitad del tamaño normal
-            params.take_profit = 0.02  # 2%
-            params.stop_loss = 0.01  # 1%
-            params.max_exposure = 0.3  # 30%
+            params.order_size_usdt = dynamic_size * Decimal("0.5")  # Mitad del tamaño
+            params.take_profit = Decimal("0.02")  # 2%
+            params.stop_loss = Decimal("0.01")  # 1%
+            params.max_exposure = Decimal("0.3")  # 30%
 
         elif strategy_type == StrategyType.HEDGING:
-            params.max_exposure = 0.2  # 20%
-            params.stop_loss = 0.03  # 3%
+            params.max_exposure = Decimal("0.2")  # 20%
+            params.stop_loss = Decimal("0.03")  # 3%
 
         return params
 
@@ -308,7 +345,7 @@ class StrategySelector:
                 return StrategySpec(
                     strategy_name=StrategyType.HOLD,
                     params=StrategyParams(),
-                    confidence=1.0,
+                    confidence=Decimal("1.0"),
                     reasoning="Emergency stop active - holding all positions",
                     regime_prediction=regime_prediction,
                 )
@@ -328,7 +365,7 @@ class StrategySelector:
                 return StrategySpec(
                     strategy_name=StrategyType.HOLD,
                     params=StrategyParams(),
-                    confidence=0.5,
+                    confidence=Decimal("0.5"),
                     reasoning="No strategy configuration found - holding",
                     regime_prediction=regime_prediction,
                 )
@@ -340,27 +377,30 @@ class StrategySelector:
                 strategy_type, regime_prediction, account_state
             )
 
-            # Calcular confianza basada en predicciones
+            # Calcular confianza basada en predicciones (Decimal end-to-end)
             confidence = (
-                regime_prediction.long_conf + regime_prediction.short_conf
-            ) / 2
+                _d(regime_prediction.long_conf) + _d(regime_prediction.short_conf)
+            ) / Decimal("2")
 
             # Ajustar confianza basada en estado de la cuenta
-            if account_state.risk_score > 0.8:
-                confidence *= (
-                    0.69  # Reducir confianza si riesgo alto (estrictamente menor)
-                )
+            risk_score = _d(account_state.risk_score)
+            daily_pnl = _d(account_state.daily_pnl)
 
-            if account_state.daily_pnl < -0.05:  # Pérdida diaria > 5%
-                confidence *= (
-                    0.49  # Reducir confianza si pérdidas (estrictamente menor)
-                )
+            if risk_score > Decimal("0.8"):
+                confidence *= Decimal(
+                    "0.69"
+                )  # Reducir confianza si riesgo alto (estrictamente menor)
+
+            if daily_pnl < Decimal("-0.05"):  # Pérdida diaria > 5%
+                confidence *= Decimal(
+                    "0.49"
+                )  # Reducir confianza si pérdidas (estrictamente menor)
 
             # Si el régimen es BULL_TREND en ambos horizontes con confianza suficiente, preferir DCA
             if (
                 regime_prediction.long_regime == MarketRegime.BULL_TREND
                 and regime_prediction.short_regime == MarketRegime.BULL_TREND
-                and confidence >= 0.7
+                and confidence >= Decimal("0.7")
             ):
                 strategy_type = StrategyType.DCA
                 params = self._calculate_dynamic_params(
@@ -397,7 +437,7 @@ class StrategySelector:
                     self.strategy_confidence.labels(
                         strategy=strategy_type.value,
                         regime=regime_prediction.short_regime.value,
-                    ).set(confidence)
+                    ).set(float(confidence))
             except Exception:
                 pass
 
@@ -415,7 +455,7 @@ class StrategySelector:
             return StrategySpec(
                 strategy_name=StrategyType.HOLD,
                 params=StrategyParams(),
-                confidence=0.5,
+                confidence=Decimal("0.5"),
                 reasoning=f"Error in strategy selection: {str(e)} - holding for safety",
                 regime_prediction=regime_prediction,
             )
@@ -426,7 +466,7 @@ class StrategySelector:
         regime_prediction: RegimePrediction,
         volatility: VolatilityLevel,
         account_state: AccountState,
-        confidence: float,
+        confidence: Decimal,
     ) -> str:
         """
         Genera explicación del razonamiento para la selección de estrategia.
@@ -446,16 +486,16 @@ class StrategySelector:
         # Régimen de mercado
         reasoning_parts.append(
             f"Market regime: {regime_prediction.short_regime.value} "
-            f"(confidence: {regime_prediction.short_conf:.2f})"
+            f"(confidence: {_d(regime_prediction.short_conf):.2f})"
         )
 
         # Volatilidad
         reasoning_parts.append(f"Volatility level: {volatility.value}")
 
         # Estado de la cuenta
-        if account_state.risk_score > 0.7:
+        if _d(account_state.risk_score) > Decimal("0.7"):
             reasoning_parts.append("High risk score - conservative approach")
-        if account_state.daily_pnl < 0:
+        if _d(account_state.daily_pnl) < Decimal("0"):
             reasoning_parts.append("Daily losses detected")
 
         # Justificación de estrategia
@@ -481,9 +521,9 @@ class StrategySelector:
             )
 
         # Confianza
-        if confidence >= 0.8:
+        if confidence >= Decimal("0.8"):
             reasoning_parts.append("High confidence")
-        elif confidence <= 0.6:
+        elif confidence <= Decimal("0.6"):
             reasoning_parts.append("Low confidence")
 
         return " | ".join(reasoning_parts)
