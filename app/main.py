@@ -386,6 +386,7 @@ from app.api.reconciliation_routes import router as reconciliation_router  # noq
 from app.api.breakers_routes import router as breakers_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
+from app.api.capital_routes import router as capital_router  # noqa: E402
 
 # /integrity/* requiere auth — estado interno de integridad financiera
 app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
@@ -395,6 +396,8 @@ app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
 app.include_router(breakers_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
+# /api/capital/* read-only y sin secrets — lo consume el dashboard CEO (ADR-004/ADR-005)
+app.include_router(capital_router)
 
 
 # Endpoint directo para /api/positions (compatibilidad con auditoría)
