@@ -49,9 +49,10 @@ def compute_effective_mode(
 
 
 def get_trading_mode_snapshot() -> Dict[str, Any]:
-    paper_trading = _env_bool("PAPER_TRADING", "false")
+    # Fail-closed defaults: sin env explícito → paper + trading off.
+    paper_trading = _env_bool("PAPER_TRADING", "true")
     force_real_mode = _env_bool("FORCE_REAL_MODE", "false")
-    trading_enabled = _env_bool("TRADING_ENABLED", "true")
+    trading_enabled = _env_bool("TRADING_ENABLED", "false")
     emergency_stop = _env_bool("EMERGENCY_STOP", "false")
     binance_testnet = _env_bool("BINANCE_TESTNET", "false")
     # Fail-closed: an unreadable or unsigned gate resolves to False.
