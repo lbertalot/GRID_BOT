@@ -641,38 +641,43 @@ class BinanceService:
     # MÉTODOS DE SIMULACIÓN
     # ============================================================================
 
-    def _get_simulated_account_info(self) -> Dict[str, Any]:
-        """Retorna información simulada de cuenta"""
+    def _get_simulated_account_info(self, ledger=None) -> Dict[str, Any]:
+        """Cuenta simulada derivada del ledger paper (S10, gap I-3/I-4).
+
+        Antes devolvía balances fijos (1000 USDT / 0,01 BTC / 0,1 ETH), lo que hacía
+        que la serie de equity paper fuera literalmente ficticia. Ahora el cash y el
+        inventario salen de `PaperEquityLedger`, que sí tiene fees y slippage
+        descontados.
+        """
+        from app.core.paper_equity_ledger import get_paper_ledger
+
+        paper_ledger = ledger if ledger is not None else get_paper_ledger()
+        maker_bps = int(paper_ledger.cost_model.maker_fee_bps)
+        taker_bps = int(paper_ledger.cost_model.taker_fee_bps)
         return {
             "accountType": "SPOT",
-            "makerCommission": 15,
-            "takerCommission": 15,
+            "makerCommission": maker_bps,
+            "takerCommission": taker_bps,
             "buyerCommission": 0,
             "sellerCommission": 0,
             "canTrade": True,
             "canWithdraw": True,
             "canDeposit": True,
             "updateTime": int(time.time() * 1000),
-            "balances": [
-                {"asset": "USDT", "free": "1000.0", "locked": "0.0"},
-                {"asset": "BTC", "free": "0.01", "locked": "0.0"},
-                {"asset": "ETH", "free": "0.1", "locked": "0.0"},
-            ],
+            "balances": paper_ledger.as_binance_balances(),
         }
 
     def _get_simulated_balance(self, asset: str) -> Dict[str, Any]:
-        """Retorna balance simulado"""
-        balances = {
-            "USDT": {"free": "1000.0", "locked": "0.0"},
-            "BTC": {"free": "0.01", "locked": "0.0"},
-            "ETH": {"free": "0.1", "locked": "0.0"},
-        }
-
-        return {
-            "asset": asset,
-            "free": balances.get(asset, "0.0")["free"],
-            "locked": balances.get(asset, "0.0")["locked"],
-        }
+        """Balance simulado de un activo, tomado del ledger paper."""
+        account = self._get_simulated_account_info()
+        for balance in account["balances"]:
+            if balance["asset"] == asset.upper():
+                return {
+                    "asset": asset,
+                    "free": balance["free"],
+                    "locked": balance["locked"],
+                }
+        return {"asset": asset, "free": "0", "locked": "0"}
 
     def _get_simulated_symbol_info(self, symbol: str) -> Dict[str, Any]:
         """Retorna información simulada de símbolo"""
@@ -693,9 +698,17 @@ class BinanceService:
         }
 
     def _get_simulated_price(self, symbol: str) -> float:
-        """Retorna precio simulado"""
-        prices = {"BTCUSDT": 50000.0, "ETHUSDT": 3000.0, "ADAUSDT": 0.5, "DOTUSDT": 7.0}
-        return prices.get(symbol, 100.0)
+        """Precio de marcación real incluso en simulación (S10, gap I-7 / gate A6).
+
+        Antes devolvía constantes (BTC=50000, ETH=3000): un MaxDD calculado sobre esa
+        serie es indistinguible de cero porque el inventario nunca se movía. Ahora
+        consulta el ticker y **falla cerrado** con `MarkPriceUnavailable` si no hay
+        precio: un hueco en la serie es detectable por el gate A2, un precio
+        inventado no.
+        """
+        from app.core.paper_equity_ledger import mark_price_from_client
+
+        return float(mark_price_from_client(self.client, symbol))
 
     def _simulate_order(
         self,

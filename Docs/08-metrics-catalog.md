@@ -42,7 +42,14 @@
 | `trades_successful_total` | Counter | `asset`, `strategy` | Total de trades exitosos |
 | `trades_failed_total` | Counter | `asset`, `strategy` | Total de trades fallidos |
 | `trades_success_rate` | Gauge | `strategy` | Tasa de éxito de trades (0-1) |
+| `gridbot_transaction_cost_audit_requests_total` | Counter | `order_type` | Llamadas a `/api/simulations/transaction-cost-audit` |
+| `gridbot_backtest_run_persist_total` | Counter | `outcome` | Persistencia de corridas de backtest (`success` / `failure`) |
+| `gridbot_monte_carlo_run_persist_total` | Counter | `outcome` | Persistencia de estudios MC drawdown del promotion gate (`success` / `failure`) |
+| `gridbot_monte_carlo_retention_prune_total` | Counter | `outcome` | Poda de retención `monte_carlo_runs` (`success` / `failure`) |
+| `gridbot_monte_carlo_retention_rows_deleted_total` | Counter | – | Filas eliminadas por retención MC: `KEEP_LAST` y/o `MAX_AGE_DAYS` (acumulado) |
 | `gridbot_orders_total` | Counter | `side`, `asset`, `strategy` | Total de órdenes procesadas por GridBot |
+| `gridbot_trade_executor_order_path_total` | Counter | `path` | TradeExecutor: `broker_adapter` vs `legacy` (singleton python-binance) |
+| `gridbot_spot_market_submit_path_total` | Counter | `source`, `path` | MARKET spot: `source` = `http_trade` \| `grid_manager`; `path` = `broker_adapter` \| `binance_client` |
 | `gridbot_volume_total` | Counter | `asset`, `strategy` | Volumen total de trading en USDT |
 | `trade_execution_duration_seconds` | Histogram | `asset`, `strategy` | Duración de ejecución de trades |
 | `partial_fills_total` | Counter | – | Total de órdenes parcialmente llenadas |
@@ -55,6 +62,10 @@
 | `cycle_decision_ready` | Gauge | `symbol`, `strategy` | Decisión de ciclo lista (minuto 4) |
 | `cycle_order_executed` | Gauge | `symbol`, `status` | Orden ejecutada en el ciclo (minuto 5) |
 | `grid_cycle_duration_seconds` | Histogram | – | Duración del ciclo grid en segundos |
+| `gridbot_ml_regime_used_in_cycle_total` | Counter | `symbol` | Ciclos que aplicaron régimen ML híbrido |
+| `gridbot_ml_regime_fallback_total` | Counter | `symbol`, `reason` | Fallback a régimen estático (`disabled`, `error`, `promotion_gate`, …) |
+| `gridbot_ml_promotion_gate_blocks_total` | Counter | `symbol`, `reason` | Bloqueos del gate (TQS + Monte Carlo + backtest after-cost + sentimiento opcional vía Redis). Razones típicas: `tqs_direction_flat`, `tqs_combined_too_weak`, `monte_carlo_required_missing`, `monte_carlo_p95_exceeds_cap`, `after_cost_backtest_required_missing`, `after_cost_sharpe_below_min`, `after_cost_sharpe_unavailable`, `after_cost_drawdown_unavailable`, `after_cost_drawdown_exceeds_cap`, `after_cost_total_return_unavailable`, `after_cost_total_return_below_min`, `after_cost_backtest_dd_too_small_for_mc_alignment`, `mc_p95_exceeds_backtest_dd_ratio`, `nlp_sentiment_below_min`, `nlp_sentiment_unavailable`. |
+| `gridbot_kelly_sentiment_scale_total` | Counter | `symbol`, `band` | Con `KELLY_SENTIMENT_SCALE_ENABLED=true`, una muestra por símbolo y ciclo en fase evaluación: `no_score`, `scaled_down`, `unchanged`, `scaled_up` (según multiplicador vs 1.0). |
 
 ### MÉTRICAS DE API Y REQUESTS
 

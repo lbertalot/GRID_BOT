@@ -34,8 +34,10 @@ from app.api import (
     alert_routes,
     simulations,
     binance_sync_routes,
+    commission_routes,
 )
 from app.api import system_routes
+from app.api import gate_routes
 from app.api import config_routes
 from app.api import prometheus as prometheus_routes
 from app.core.circuit_breakers import CircuitBreakers
@@ -337,8 +339,23 @@ app.add_middleware(
 app.add_middleware(PrometheusHTTPMiddleware)
 
 # testserver: Host que usa Starlette/FastAPI TestClient en pytest/CI
-_trusted_hosts_raw = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
-_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
+# api / api_dev: DNS de servicios en Compose (Alertmanager → http://api:8000/...)
+# gridbot_*: container_name frecuente en compose; el header Host debe coincidir con la lista
+_TRUSTED_HOSTS_ALWAYS_ALLOW_DOCKER_INTERNAL = (
+    "api",
+    "api_dev",
+    "gridbot_api",
+    "gridbot_api_dev",
+)
+_trusted_hosts_raw = os.getenv(
+    "TRUSTED_HOSTS", "localhost,127.0.0.1,testserver,api,api_dev"
+)
+_base_trusted_hosts = [h.strip() for h in _trusted_hosts_raw.split(",") if h.strip()]
+_trusted_hosts = list(
+    dict.fromkeys(
+        list(_base_trusted_hosts) + list(_TRUSTED_HOSTS_ALWAYS_ALLOW_DOCKER_INTERNAL)
+    )
+)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 # Middleware Integrity Guard (desactivable en tests)
@@ -372,11 +389,16 @@ app.include_router(alert_routes.router)
 # Exponer /metrics raíz para Prometheus y compatibilidad
 app.include_router(prometheus_routes.router)
 app.include_router(simulations.router)
+app.include_router(commission_routes.router)
 # /api/config requiere auth — gestión de configuración sensible
 from app.core.auth import require_auth as _require_auth  # noqa: E402
 
 app.include_router(config_routes.router, dependencies=[Depends(_require_auth)])
 app.include_router(system_routes.router)
+# /api/gates/live-status requiere auth — el detalle del gate (identidad de los
+# firmantes, controles pendientes, fecha de go-live) es reconocimiento útil para
+# un atacante. El badge público de modo ya sale por /health/trading-mode.
+app.include_router(gate_routes.router, dependencies=[Depends(_require_auth)])
 # /api/v1/binance requiere auth — sincronización de cuenta Binance
 app.include_router(binance_sync_routes.router, dependencies=[Depends(_require_auth)])
 
@@ -384,9 +406,11 @@ app.include_router(binance_sync_routes.router, dependencies=[Depends(_require_au
 from app.api.integrity_routes import router as integrity_router  # noqa: E402
 from app.api.reconciliation_routes import router as reconciliation_router  # noqa: E402
 from app.api.breakers_routes import router as breakers_router  # noqa: E402
+from app.api.breakers_routes import api_router as breakers_api_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
 from app.api.capital_routes import router as capital_router  # noqa: E402
+from app.api.ops_routes import router as ops_router  # noqa: E402
 
 # /integrity/* requiere auth — estado interno de integridad financiera
 app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
@@ -394,10 +418,15 @@ app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
 app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
 # /breakers/* público — dashboards de monitoreo (Grafana/Prometheus)
 app.include_router(breakers_router)
+# /api/breakers/* público — mismo payload bajo el prefijo /api del dashboard
+app.include_router(breakers_api_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
 # /api/capital/* read-only y sin secrets — lo consume el dashboard CEO (ADR-004/ADR-005)
 app.include_router(capital_router)
+# /api/ops/* — GET público para el dashboard del CEO (ops burn / reserva),
+# el POST del ledger exige auth en la propia ruta (ADR-008)
+app.include_router(ops_router)
 
 
 # Endpoint directo para /api/positions (compatibilidad con auditoría)
@@ -828,6 +857,11 @@ async def reconciliation_summary():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo resumen: {e}")
+
+
+# OpenTelemetry: en import-time después de registrar rutas/middleware — no en lifespan,
+# porque FastAPIInstrumentor añade middleware y Starlette lo rechaza tras arranque.
+setup_tracing(app)
 
 
 if __name__ == "__main__":
