@@ -260,6 +260,23 @@ def mock_binance_client_autouse(monkeypatch):
     yield
 
 
+@pytest.fixture
+def allow_real_orders_unit(monkeypatch):
+    """Bypass S-GATE para tests unitarios que mockean el path de orden real.
+
+    CI fuerza ``EMERGENCY_STOP=true`` + paper; sin este bypass el guard bloquea
+    antes de ejercitar la lógica bajo test.
+    """
+
+    def _allow(*, context: str = ""):
+        return {"effective_mode": "real_armed", "context": context}
+
+    import app.core.order_execution_guard as guard
+
+    monkeypatch.setattr(guard, "assert_real_order_allowed", _allow)
+    yield
+
+
 def _build_mock_config() -> GridManagerConfig:
     # Configuración mínima para OptimizedGridManager en tests
     assets = {
