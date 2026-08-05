@@ -60,6 +60,20 @@ breaker_any_open = Gauge(
     "breaker_any_open", "1 si al menos un circuit breaker está abierto, 0 si ninguno"
 )
 
+# B5: backend del store compartido (1 activo / 0 inactivo por label)
+breaker_store_backend = Gauge(
+    "breaker_store_backend",
+    "1 si el backend indicado es el store activo de breakers",
+    ["backend"],
+)
+
+# B5: errores de sync Redis (read/write/decode/clear/connect)
+breaker_store_sync_errors_total = Counter(
+    "breaker_store_sync_errors_total",
+    "Errores al sincronizar estado de breakers con el store compartido",
+    ["op"],
+)
+
 # Emergency stop efectivo (env EMERGENCY_STOP o modo crítico activo)
 emergency_stop_active = Gauge(
     "emergency_stop_active", "1 si el emergency stop está activo, 0 si no"
