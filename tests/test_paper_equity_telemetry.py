@@ -409,6 +409,39 @@ def test_deployed_capital_viaja_en_el_snapshot(ledger):
     assert muestra["inventory_value"] == "50"
 
 
+def test_mtm_persiste_ledger_con_fees_y_slippage(tmp_path):
+    """C3 / Celery: el path MtM debe dejar fees/slippage en disco, no solo la serie.
+
+    Sin fills el autosave de buys no corre: el snapshot paper tiene que persistir
+    el ledger (cost_model + acumulados) para que el tick E2E sea auditable.
+    """
+    ledger_path = tmp_path / "paper_equity_ledger.json"
+    series_path = tmp_path / "paper_equity_series.json"
+    ledger = PaperEquityLedger(
+        initial_cash=D("1000"),
+        deployed_capital=D("200"),
+        storage_path=ledger_path,
+    )
+    series = PaperEquitySeries(config_hash="hash-congelado", storage_path=series_path)
+
+    assert not ledger_path.exists()
+    compute_paper_portfolio_value(ledger=ledger, price_feed=FakeMarkPriceFeed({}), series=series)
+
+    assert ledger_path.exists()
+    recuperado = PaperEquityLedger.load(ledger_path)
+    payload = recuperado.to_dict()
+    assert recuperado.deployed_capital == D("200")
+    assert payload["fees_total_usdt"] == "0"
+    assert payload["slippage_total_usdt"] == "0"
+    assert recuperado.cost_model.round_trip_bps == D("24")
+    assert payload["cost_model"]["maker_fee_bps"] == "10"
+    assert payload["cost_model"]["adverse_selection_bps"] == "2"
+    assert series_path.exists()
+    sample = PaperEquitySeries.load(series_path).samples[-1]
+    assert sample["config_hash"] == "hash-congelado"
+    assert sample["deployed_capital"] == "200"
+
+
 # ---------------------------------------------------------------------------
 # I-12 (BLOQUEANTE) — config_hash: el freeze deja de ser palabra contra palabra
 # ---------------------------------------------------------------------------
