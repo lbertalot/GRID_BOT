@@ -131,15 +131,16 @@ async def test_activate_breaker_edge_trigger_no_relogea(cb_no_cooldown):
 
 
 @pytest.mark.asyncio
-async def test_activate_breaker_cooldown_bloquea_reactivacion(cb_long_cooldown):
-    """Tras desactivar, reactivar dentro del cooldown debe ser ignorado."""
-    # Primera activación: pasa
-    ok1 = await cb_long_cooldown.activate_breaker("system_integrity", "first")
+async def test_activate_breaker_cooldown_bloquea_mismo_evento(cb_long_cooldown):
+    """Tras desactivar, reactivar con la MISMA razón dentro del cooldown
+    debe omitirse (anti-flap B4). Razón distinta sí abre — ver
+    tests/test_s_breakers_b1_b4.py.
+    """
+    reason = "mismo evento de flapping"
+    ok1 = await cb_long_cooldown.activate_breaker("system_integrity", reason)
     assert ok1 is True
-    # Desactivar para volver a evaluar cooldown en próxima activación
     await cb_long_cooldown.deactivate_breaker("system_integrity")
-    # Re-activar dentro del cooldown (3600s) → bloqueado
-    ok2 = await cb_long_cooldown.activate_breaker("system_integrity", "second")
+    ok2 = await cb_long_cooldown.activate_breaker("system_integrity", reason)
     assert ok2 is False
     assert cb_long_cooldown.is_breaker_active("system_integrity") is False
 

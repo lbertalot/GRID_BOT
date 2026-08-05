@@ -13,7 +13,7 @@ from app.core.balance_validator import BalanceValidator
 from app.core.operation_tracker import OperationTracker
 from app.core.telegram_bot import TelegramBot
 from app.core.grafana_metrics import GrafanaMetrics
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from app.core.database import Database
 from app.core.config import settings
 from app.core.metrics import integrity_score
@@ -27,7 +27,7 @@ class IntegrityMonitor:
         self.db = Database()
         self.telegram_bot = TelegramBot()
         self.grafana_metrics = GrafanaMetrics()
-        self.circuit_breakers = CircuitBreakers()
+        self.circuit_breakers = get_shared_breakers()
 
         # Referencias a otros componentes (se establecerán después de la inicialización)
         self.balance_validator = None

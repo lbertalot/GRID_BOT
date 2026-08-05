@@ -5,10 +5,17 @@ GridBot v2.5 - Componente de Integridad Integrado
 
 import logging
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_reason(reason: Optional[str]) -> str:
+    """Normaliza razón para comparar eventos (anti-flap)."""
+    if reason is None:
+        return ""
+    return " ".join(str(reason).strip().casefold().split())
 
 
 class CircuitBreakers:
@@ -33,6 +40,7 @@ class CircuitBreakers:
         self.logger.info("🔧 Módulo de circuit breakers inicializado")
         # Cooldown por breaker y estado
         self._last_activation_ts: Dict[str, float] = {}
+        self._last_activation_reason: Dict[str, str] = {}
         # Aperturas acumuladas por breaker (solo observabilidad)
         self._activation_count: Dict[str, int] = {}
         import os
@@ -42,8 +50,24 @@ class CircuitBreakers:
         except Exception:
             self._cooldown_seconds = 300  # 5 minutos
 
-    async def activate_breaker(self, breaker_type: str, reason: str = None) -> bool:
-        """Activar un circuit breaker específico"""
+    async def activate_breaker(
+        self,
+        breaker_type: str,
+        reason: str = None,
+        *,
+        force: bool = False,
+    ) -> bool:
+        """Activar un circuit breaker específico.
+
+        Contrato de cooldown (B4 — anti-flap, no anti-protección):
+        - Si ya está activo: edge-trigger; retorna True sin re-loggear ni
+          cambiar ``activated_at`` / razón.
+        - Si está inactivo y la última apertura fue hace < cooldown:
+          - Misma razón (normalizada) que el último trip → omitir (anti-flap
+            del mismo evento).
+          - Razón distinta → permitir (trip de pérdida / evento real distinto).
+        - ``force=True`` (p. ej. modo crítico) ignora el cooldown.
+        """
         try:
             if breaker_type not in self.breakers:
                 self.logger.warning(
@@ -53,20 +77,34 @@ class CircuitBreakers:
 
             # Edge-trigger: solo loggear/cambiar estado si pasa de inactivo a activo
             if not self.breakers[breaker_type]["active"]:
-                # Cooldown: evitar flapping
                 now = time.time()
                 last = self._last_activation_ts.get(breaker_type, 0.0)
-                if now - last < self._cooldown_seconds:
+                norm_reason = _normalize_reason(reason)
+                last_reason = self._last_activation_reason.get(breaker_type, "")
+
+                if (
+                    not force
+                    and self._cooldown_seconds > 0
+                    and now - last < self._cooldown_seconds
+                    and norm_reason == last_reason
+                    and last_reason != ""
+                ):
                     self.logger.warning(
-                        f"⏳ Cooldown activo para '{breaker_type}', activación omitida"
+                        f"⏳ Cooldown anti-flap para '{breaker_type}' "
+                        f"(mismo evento), activación omitida"
                     )
                     return False
+
                 self.breakers[breaker_type]["active"] = True
                 self.breakers[breaker_type]["activated_at"] = datetime.now().isoformat()
                 self.breakers[breaker_type]["reason"] = (
                     reason or "Activado automáticamente"
                 )
                 self._last_activation_ts[breaker_type] = now
+                self._last_activation_reason[breaker_type] = (
+                    norm_reason
+                    or _normalize_reason(self.breakers[breaker_type]["reason"])
+                )
                 self.logger.warning(
                     f"🚨 Circuit breaker '{breaker_type}' activado: {reason}"
                 )
@@ -121,10 +159,15 @@ class CircuitBreakers:
             return False
 
     async def activate_critical_mode(self) -> bool:
-        """Activar modo crítico (todos los circuit breakers)"""
+        """Activar modo crítico (todos los circuit breakers).
+
+        Usa ``force=True`` para ignorar cooldown anti-flap: es emergencia.
+        """
         try:
             for breaker_type in self.breakers:
-                await self.activate_breaker(breaker_type, "Modo crítico activado")
+                await self.activate_breaker(
+                    breaker_type, "Modo crítico activado", force=True
+                )
 
             # Activar modo crítico especial
             self.breakers["critical_mode"]["active"] = True
@@ -180,7 +223,7 @@ class CircuitBreakers:
         return self.breakers[breaker_type].copy()
 
     def get_cooldown_seconds(self) -> int:
-        """Ventana de cooldown configurada (segundos) que bloquea reactivaciones."""
+        """Ventana de cooldown configurada (segundos) anti-flap del mismo evento."""
         return self._cooldown_seconds
 
     def get_last_activation_ts(self, breaker_type: str) -> float:
@@ -234,13 +277,24 @@ _shared_breakers: "CircuitBreakers | None" = None
 
 
 def get_shared_breakers() -> "CircuitBreakers":
-    """Instancia compartida para lectura desde la capa API.
+    """Única fuente de verdad in-process para breakers (API ↔ worker).
 
-    Los endpoints creaban un `CircuitBreakers()` nuevo por request, así que el
-    estado observado cambiaba entre llamadas. Compartir una sola instancia de
-    lectura no altera el comportamiento de ningún breaker.
+    B1: componentes (``AutoCircuitBreaker``, rutas ``/breakers``, tareas Celery,
+    lifespan de FastAPI) deben usar esta instancia. Crear ``CircuitBreakers()``
+    fresco deja el dashboard con ``any_open: false`` mientras hay trips reales
+    en otra instancia.
+
+    Nota: el estado es por proceso; Redis cross-process queda fuera de este
+    slice (no hay patrón Redis de breakers hoy).
     """
     global _shared_breakers
     if _shared_breakers is None:
         _shared_breakers = CircuitBreakers()
+    return _shared_breakers
+
+
+def reset_shared_breakers() -> "CircuitBreakers":
+    """Reemplaza el singleton (tests / reinicio controlado). Paper-safe."""
+    global _shared_breakers
+    _shared_breakers = CircuitBreakers()
     return _shared_breakers

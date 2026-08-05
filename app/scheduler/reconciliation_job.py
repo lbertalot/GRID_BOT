@@ -5,12 +5,12 @@ from typing import Any, Dict
 
 from app.services.binance_client_singleton import get_binance_client_singleton  # type: ignore
 from app.services.reconciliation_service import ReconciliationService  # type: ignore
-from app.core.circuit_breakers import CircuitBreakers  # type: ignore
+from app.core.circuit_breakers import get_shared_breakers  # type: ignore
 
 
 async def run_reconciliation_forever(interval_seconds: int = 60) -> None:
     client_singleton = get_binance_client_singleton()
-    breakers = CircuitBreakers()
+    breakers = get_shared_breakers()
     svc = ReconciliationService(client_singleton.client, breakers)
     while True:
         try:
@@ -22,6 +22,6 @@ async def run_reconciliation_forever(interval_seconds: int = 60) -> None:
 
 async def run_reconciliation_once() -> Dict[str, Any]:
     client_singleton = get_binance_client_singleton()
-    breakers = CircuitBreakers()
+    breakers = get_shared_breakers()
     svc = ReconciliationService(client_singleton.client, breakers)
     return await svc.run_reconciliation_cycle()

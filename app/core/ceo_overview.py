@@ -326,9 +326,9 @@ def _flag(raw: Any) -> Optional[bool]:
 
 def _local_breakers_status(now: datetime) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
-        from app.core.circuit_breakers import CircuitBreakers
+        from app.core.circuit_breakers import get_shared_breakers
 
-        summary = CircuitBreakers().get_all_breakers_status()
+        summary = get_shared_breakers().get_all_breakers_status()
     except Exception as exc:
         return None, f"breakers locales con error ({type(exc).__name__})"
 

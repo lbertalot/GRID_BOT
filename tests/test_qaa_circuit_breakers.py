@@ -160,34 +160,42 @@ class TestCooldownBehavior:
         return cb
 
     @pytest.mark.asyncio
-    async def test_cooldown_blocks_reactivation(self, breakers_with_cooldown):
+    async def test_cooldown_blocks_same_event_anti_flap(self, breakers_with_cooldown):
         """
-        Verificar que el cooldown bloquea reactivación.
-        ESTO ES UN RIESGO: una segunda emergencia real sería ignorada.
+        Contrato B4: cooldown anti-flap solo bloquea el MISMO evento (misma razón).
+        Una segunda emergencia con razón distinta debe abrirse (ver test siguiente).
         """
         breakers = breakers_with_cooldown
+        reason = "primera alerta"
 
-        # Primera activación
-        result1 = await breakers.activate_breaker(
-            "balance_discrepancy", "primera alerta"
-        )
+        result1 = await breakers.activate_breaker("balance_discrepancy", reason)
         assert result1 is True
 
-        # Desactivar
         await breakers.deactivate_breaker("balance_discrepancy")
         assert not breakers.is_breaker_active("balance_discrepancy")
 
-        # Intentar reactivar inmediatamente (dentro del cooldown)
-        result2 = await breakers.activate_breaker(
-            "balance_discrepancy", "segunda alerta REAL"
-        )
+        result2 = await breakers.activate_breaker("balance_discrepancy", reason)
+        assert result2 is False
+        assert not breakers.is_breaker_active("balance_discrepancy")
 
-        # HALLAZGO: result2 es False por cooldown
-        # Esto significa que una emergencia real fue IGNORADA
-        if not result2:
-            assert not breakers.is_breaker_active(
-                "balance_discrepancy"
-            ), "Breaker debería estar inactivo debido al cooldown"
+    @pytest.mark.asyncio
+    async def test_cooldown_allows_distinct_loss_trip(self, breakers_with_cooldown):
+        """B4: segunda pérdida real con razón distinta debe abrir el breaker."""
+        breakers = breakers_with_cooldown
+
+        assert (
+            await breakers.activate_breaker(
+                "balance_discrepancy", "pérdida diaria 6%"
+            )
+            is True
+        )
+        await breakers.deactivate_breaker("balance_discrepancy")
+
+        result2 = await breakers.activate_breaker(
+            "balance_discrepancy", "pérdida total 12%"
+        )
+        assert result2 is True
+        assert breakers.is_breaker_active("balance_discrepancy")
 
     @pytest.mark.asyncio
     async def test_cooldown_zero_allows_immediate_reactivation(self):
