@@ -1,8 +1,10 @@
-"""Endpoints de la reserva de ops (ADR-008 / RFC-001).
+"""Endpoints de la reserva de ops (ADR-008 / RFC-001, enmienda CEO-01).
 
 GET públicos: los consume el dashboard del CEO (`ops_burn_mtd`,
-`ops_reserve_remaining`). No exponen secrets ni datos de exchange.
-POST protegido con el patrón de auth del repo (Bearer + `require_auth`).
+`ops_reserve_remaining`) y el risk engine (`ops_reserve_committed`). No exponen
+secrets ni datos de exchange.
+POST protegido con el patrón de auth del repo (Bearer + `require_auth`); las
+categorías excluidas en L0 (`llm`) se rechazan con 400.
 """
 
 from __future__ import annotations
@@ -34,7 +36,11 @@ class OpsEntryIn(BaseModel):
 
     date: str = Field(..., description="Fecha ISO YYYY-MM-DD")
     category: str = Field(
-        ..., description=f"Una de: {', '.join(OPS_CATEGORIES)}"
+        ...,
+        description=(
+            f"Una de: {', '.join(OPS_CATEGORIES)}. Las excluidas por política L0 "
+            "(llm) se rechazan con 400."
+        ),
     )
     amount_usd: Decimal = Field(..., description="Importe USD > 0 (Decimal)")
     note: str = Field("", max_length=500)
@@ -51,7 +57,11 @@ def _ledger():
 
 @router.get("/summary")
 async def ops_summary() -> Dict[str, Any]:
-    """Agregados de burn/reserva. Dinero como string decimal de 2 posiciones."""
+    """Agregados de burn/reserva. Dinero como string decimal de 2 posiciones.
+
+    `ops_reserve_total` es el techo; `ops_reserve_committed` es lo devengado a
+    hoy y el único campo que el risk engine debe restar al capital aportado.
+    """
     ledger = _ledger()
     try:
         return serialize_summary(ledger.summary())
