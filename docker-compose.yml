@@ -119,6 +119,8 @@ services:
       - MPLCONFIGDIR=/tmp/matplotlib
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
+      # B19 / ADR-008: ledger de ops en volume nombrado (kill floor).
+      - OPS_LEDGER_PATH=${OPS_LEDGER_PATH:-/var/lib/gridbot/ops/ops_ledger.json}
     volumes:
       - ./app:/app/app
       - ./tests:/app/tests
@@ -126,6 +128,7 @@ services:
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
+      - ops_ledger_data:/var/lib/gridbot/ops
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
       - ./.venv:/app/.venv
@@ -189,12 +192,14 @@ services:
       - REPORTS_DIR=/app/reports
       # Evita mkdir bajo /home/gridbot (usuario sin home escribible en imagen)
       - MPLCONFIGDIR=/tmp/matplotlib
+      - OPS_LEDGER_PATH=${OPS_LEDGER_PATH:-/var/lib/gridbot/ops/ops_ledger.json}
     volumes:
       - ./app:/app/app
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
       - ./logs:/app/logs
       - ./cache:/app/cache
       - ./data:/app/data
+      - ops_ledger_data:/var/lib/gridbot/ops
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
       - ./.venv:/app/.venv
@@ -244,11 +249,13 @@ services:
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
       - MPLCONFIGDIR=/tmp/matplotlib
+      - OPS_LEDGER_PATH=${OPS_LEDGER_PATH:-/var/lib/gridbot/ops/ops_ledger.json}
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
+      - ops_ledger_data:/var/lib/gridbot/ops
       - ./.venv:/app/.venv
     command: celery -A app.core.celery_app beat --loglevel=warning --schedule /tmp/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
     healthcheck:
@@ -514,6 +521,8 @@ volumes:
   grafana_data:
   alertmanager_data:
   numba_cache:
+  # B19: JSON ops ledger (OPS_LEDGER_PATH). Sobrevive recreate sin `down -v`.
+  ops_ledger_data:
 
 networks:
   gridbot_network:

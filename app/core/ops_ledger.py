@@ -27,7 +27,11 @@ Diseño:
   sea reproducible y testeable.
 - El almacenamiento está detrás de ``OpsLedgerStore`` para poder migrar a
   Postgres sin cambiar la API del ledger. La implementación por defecto es un
-  JSON versionable en el repo.
+  JSON versionable (ADR-008 autoriza tabla **o** JSON). Sin migración Alembic
+  en este slice: en Docker Compose el path va a un **volume nombrado**
+  (``ops_ledger_data`` → ``/var/lib/gridbot/ops``) para que el gasto sobreviva
+  recreate de contenedor; el FS efímero de dynos Heroku sigue siendo riesgo
+  hasta Postgres P1 o disco persistente. Ver ``Docs/ops/ops-ledger-persistence.md``.
 - Módulo sin efectos secundarios de trading: no abre órdenes ni lee flags de
   modo. Paper/live es irrelevante acá.
 """
@@ -52,7 +56,10 @@ DEFAULT_OPS_MONTHLY_CAP_USD = Decimal("10")  # CEO Acta 02: cap 10; pico mes mal
 DEFAULT_OPS_ACCRUAL_START = date_type(2026, 8, 5)
 # LLM pago no consume presupuesto hasta que el Core demuestre PnL.
 DEFAULT_OPS_EXCLUDED_CATEGORIES: tuple[str, ...] = ("llm",)
+# Default no-Docker / repo checkout. Compose monta volume nombrado y overridea
+# OPS_LEDGER_PATH a PERSISTENT_OPS_LEDGER_PATH (B19 / kill floor).
 DEFAULT_OPS_LEDGER_PATH = "data/ops_ledger.json"
+PERSISTENT_OPS_LEDGER_PATH = "/var/lib/gridbot/ops/ops_ledger.json"
 
 LEDGER_SCHEMA_VERSION = 1
 CURRENCY = "USD"
