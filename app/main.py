@@ -407,6 +407,7 @@ from app.api.integrity_routes import router as integrity_router  # noqa: E402
 from app.api.reconciliation_routes import router as reconciliation_router  # noqa: E402
 from app.api.breakers_routes import router as breakers_router  # noqa: E402
 from app.api.breakers_routes import api_router as breakers_api_router  # noqa: E402
+from app.api.capital_risk_routes import router as capital_risk_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
 from app.api.capital_routes import router as capital_router  # noqa: E402
@@ -420,6 +421,9 @@ app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
 app.include_router(breakers_router)
 # /api/breakers/* público — mismo payload bajo el prefijo /api del dashboard
 app.include_router(breakers_api_router)
+# /api/risk/capital-status público read-only — mismo tier que /breakers/*: el
+# dashboard CEO (ADR-005) lo consume y el payload no contiene secrets
+app.include_router(capital_risk_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
 # /api/capital/* read-only y sin secrets — lo consume el dashboard CEO (ADR-004/ADR-005)
