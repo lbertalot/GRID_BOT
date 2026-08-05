@@ -317,15 +317,15 @@ def test_snapshot_does_not_leak_secrets(gate_env, monkeypatch, tmp_path):
 # ── compute_effective_mode backwards compatibility ────────────────────────────
 
 
-def test_compute_effective_mode_gate_kwarg_is_additive():
-    """Omitting the kwarg keeps the legacy flag algebra (S1 contract)."""
-    legacy = compute_effective_mode(
+def test_compute_effective_mode_gate_kwarg_defaults_to_unsigned():
+    """Omitting the kwarg means "gate not verified", so never real_armed."""
+    defaulted = compute_effective_mode(
         paper_trading=False,
         force_real_mode=True,
         trading_enabled=True,
         emergency_stop=False,
     )
-    assert legacy == "real_armed"
+    assert defaulted == "real_blocked"
 
     blocked = compute_effective_mode(
         paper_trading=False,
@@ -359,12 +359,34 @@ def test_force_real_over_paper_still_needs_gate():
     )
 
 
-# ── Read-only endpoint ────────────────────────────────────────────────────────
+# ── Read-only, authenticated endpoint ─────────────────────────────────────────
+
+FAKE_API_KEY = "fake-api-key-for-tests"
 
 
-def test_live_status_endpoint_contract(gate_env, monkeypatch, tmp_path, client):
+@pytest.fixture
+def auth_headers(monkeypatch):
+    monkeypatch.setenv("API_KEY", FAKE_API_KEY)
+    return {"Authorization": f"Bearer {FAKE_API_KEY}"}
+
+
+def test_live_status_endpoint_requires_auth(gate_env, auth_headers, client):
+    """Gate detail (signer identities, pending controls) is not public recon."""
+    assert client.get("/api/gates/live-status").status_code == 401
+    assert (
+        client.get(
+            "/api/gates/live-status", headers={"Authorization": "Bearer wrong-key"}
+        ).status_code
+        == 401
+    )
+    assert client.get("/api/gates/live-status", headers=auth_headers).status_code == 200
+
+
+def test_live_status_endpoint_contract(
+    gate_env, monkeypatch, tmp_path, client, auth_headers
+):
     _write_gate(tmp_path, _md_gate())
-    resp = client.get("/api/gates/live-status")
+    resp = client.get("/api/gates/live-status", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert set(body) == {"timestamp", "gate"}
@@ -385,23 +407,22 @@ def test_live_status_endpoint_contract(gate_env, monkeypatch, tmp_path, client):
 
 
 def test_live_status_endpoint_payload_has_no_secrets(
-    gate_env, monkeypatch, tmp_path, client
+    gate_env, monkeypatch, tmp_path, client, auth_headers
 ):
-    monkeypatch.setenv("API_KEY", "fake-api-key-for-tests")
     monkeypatch.setenv("BINANCE_API_SECRET", "fake-secret-for-tests")
     monkeypatch.setenv("SECRET_KEY", "fake-secret-key-for-tests")
     _write_gate(tmp_path, _md_gate())
 
-    raw = client.get("/api/gates/live-status").text
+    raw = client.get("/api/gates/live-status", headers=auth_headers).text
     for leaked in (
-        "fake-api-key-for-tests",
+        FAKE_API_KEY,
         "fake-secret-for-tests",
         "fake-secret-key-for-tests",
         str(tmp_path),
     ):
         assert leaked not in raw
 
-    body = client.get("/api/gates/live-status").json()
+    body = client.get("/api/gates/live-status", headers=auth_headers).json()
 
     def _keys(node):
         if isinstance(node, dict):
@@ -417,5 +438,11 @@ def test_live_status_endpoint_payload_has_no_secrets(
         assert not any(bad in key.lower() for bad in forbidden), key
 
 
-def test_live_status_endpoint_is_read_only(gate_env, client):
-    assert client.post("/api/gates/live-status").status_code == 405
+def test_live_status_endpoint_is_read_only(gate_env, client, auth_headers):
+    """There is no way to sign, approve or bypass the gate over HTTP."""
+    assert (
+        client.post("/api/gates/live-status", headers=auth_headers).status_code == 405
+    )
+    assert (
+        client.put("/api/gates/live-status", headers=auth_headers).status_code == 405
+    )

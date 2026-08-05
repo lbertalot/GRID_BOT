@@ -7,7 +7,7 @@ No secrets are included in the snapshot.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal
 
 from app.core.live_gate import gate_allows_real
 
@@ -24,7 +24,7 @@ def compute_effective_mode(
     force_real_mode: bool,
     trading_enabled: bool,
     emergency_stop: bool,
-    live_gate_signed: Optional[bool] = None,
+    live_gate_signed: bool = False,
 ) -> EffectiveMode:
     """Derive a single UX-facing mode label.
 
@@ -32,22 +32,18 @@ def compute_effective_mode(
     - real_blocked: would-be real but not armed / stopped / disabled / ungated
     - real_armed: real trading flags set *and* live gate dual signoff present
 
-    ``live_gate_signed`` (ADR-007) is tri-state on purpose so the S1 contract
-    stays intact:
-
-    - ``False`` → never ``real_armed``, not even with ``FORCE_REAL_MODE=true``.
-    - ``True``  → dual signoff verified by the caller.
-    - ``None``  → flag algebra only, gate *not evaluated by this call*.
-
-    Anything that can actually arm real trading MUST pass an explicit bool.
-    ``get_trading_mode_snapshot()`` — the single runtime entry point — always
-    resolves the gate itself and fails closed.
+    ``live_gate_signed`` (ADR-007) defaults to ``False`` and that default is a
+    control, not a convenience: **omitting it means "gate not verified", so the
+    result can never be ``real_armed``** — not even with ``FORCE_REAL_MODE=true``.
+    A caller that forgets to propagate the gate state gets the safe answer.
+    Only pass ``True`` after verifying the dual signoff, which is what
+    ``get_trading_mode_snapshot()`` does via ``gate_allows_real()``.
     """
     if paper_trading and not force_real_mode:
         return "paper"
     if emergency_stop or not trading_enabled or not force_real_mode:
         return "real_blocked"
-    if live_gate_signed is False:
+    if not live_gate_signed:
         return "real_blocked"
     return "real_armed"
 
