@@ -80,11 +80,13 @@ x-app-env: &app-env
 
 x-app-volumes: &app-volumes
   - ./app:/app/app
+  - ./scripts:/app/scripts
   - ./alembic:/app/alembic
   - ./alembic.ini:/app/alembic.ini
   - ./grid_config_optimized.json:/app/grid_config_optimized.json
   - ./grid_config_paper_l0.json:/app/grid_config_paper_l0.json
   - ./grid_config_paper_l0.hash:/app/grid_config_paper_l0.hash:ro
+  - ./paper_trading_state.json:/app/paper_trading_state.json
   - ./paper_telemetry:/app/paper_telemetry
   - ./logs:/app/logs
   - ./cache:/app/cache
