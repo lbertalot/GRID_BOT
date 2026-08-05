@@ -27,7 +27,7 @@ async def config_manager_page(request: Request):
     """
     Página principal del gestor de configuración
     """
-    return templates.TemplateResponse("config_manager.html", {"request": request})
+    return templates.TemplateResponse(request, "config_manager.html")
 
 
 @router.get("/summary")
