@@ -47,7 +47,7 @@ No registrado en main. Remediación: **410 Gone** + `require_auth` (defense-in-d
 
 ## Media
 
-- Compose: `TRADING_ENABLED=${TRADING_ENABLED:-false}` (follow-up).
+- ~~Compose: `TRADING_ENABLED=${TRADING_ENABLED:-false}` (follow-up).~~ **Hecho** en D2 (`chore/kill-switch-live-checklist`).
 - Unificar ejecución vía TradeExecutor.
 - Inventariar `optimized_routes` emergency huérfano.
 

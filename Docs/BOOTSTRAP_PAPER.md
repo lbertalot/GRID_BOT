@@ -72,9 +72,9 @@ El servicio `migrate` corre `alembic upgrade head` una vez antes de `api`/`worke
 | Variable | Valor paper bootstrap | Nota |
 |----------|----------------------|------|
 | `PAPER_TRADING` | `true` | Simula fills; ledger paper es SoT de equity |
-| `TRADING_ENABLED` | `false` | Compose local fuerza false; **B26:** el env no corta el path de órdenes en RiskManager |
-| `FORCE_REAL_MODE` | vacío / false | **Prohibido** `true` sin gate humano |
-| `EMERGENCY_STOP` | `false` | **B26:** documentado; no confiar solo en env |
+| `TRADING_ENABLED` | `false` | Compose fail-closed `:-false`; **B26 cerrado (S-GATE):** corta órdenes reales vía `assert_real_order_allowed` |
+| `FORCE_REAL_MODE` | vacío / false | **Prohibido** `true` sin gate humano + firma dual |
+| `EMERGENCY_STOP` | `false` | **B26 cerrado (S-GATE):** `true` → `RealOrderBlocked` en path de ejecución |
 | `KILL_BASIS` | `trading` | Kill sobre capital tradable (aportado − ops), Amendment 01 |
 | `BINANCE_TESTNET` | `false` | Paper no requiere exchange; evitar mainnet keys |
 
@@ -124,11 +124,11 @@ Fuente: [`pre-live-blockers.md`](pre-live-blockers.md).
 |----|---------------------|-------|
 | B1 | Parcial | Breakers API vs worker no compartidos; en paper el badge puede mentir bajo carga |
 | B14 | Sí (métricas) | Varios simuladores; SoT de equity = `PaperEquityLedger` (S10) |
-| B15 | No para paper | Gate no bloquea `create_order` — crítico solo hacia live |
+| B15 | Mitigado (S-GATE) | Guard en path de órdenes; live sigue exigiendo firma dual |
 | B19 | Mitigado local | `./data` montado en compose local; en Heroku sí es efímero |
 | B22 / B23 | Negocio | Ops vs PnL / techo mensual — decisión CEO, no bloquea stack |
-| B26 | Sí (confianza) | `TRADING_ENABLED` / `EMERGENCY_STOP` env no cortan órdenes |
-| B27 | Riesgo | `CommissionManager` puede pegarle a Binance aunque paper; dejar keys vacías |
+| B26 | Mitigado (S-GATE) | Env kill-switch corta órdenes reales; ver `Docs/LIVE_CHECKLIST.md` |
+| B27 | Mitigado (S-PAPER-ISO) | CommissionManager paper-iso; keys vacías siguen siendo buena higiene |
 | pnl_mtd CEO | Sí (UI) | Sin `pnl_ledger` → card `unavailable` (esperado hasta ADR-004 PnL) |
 
 ## 7. Seguridad runtime (checklist)
