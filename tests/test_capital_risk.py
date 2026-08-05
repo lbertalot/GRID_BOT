@@ -576,6 +576,104 @@ def test_resolve_ops_snapshot_uses_ledger_when_available():
     assert snap.source == "ops_ledger"
 
 
+class _GoLiveOpsLedger:
+    """Contrato final de Track B (#36) con el ledger vacío al 2026-09-15."""
+
+    def get_ops_snapshot(self):
+        return {
+            "ops_reserve_total": "100.00",  # techo: NO se debe consumir
+            "ops_reserve_committed": "15.00",  # devengado: esto es lo que manda
+            "ops_burn_total": "0.00",
+            "as_of": "2026-09-15T00:00:00+00:00",
+        }
+
+    def compute_tradable_capital(self, contributed, now=None):
+        return Decimal("985.00")
+
+
+def test_resolve_ops_snapshot_reads_committed_not_total():
+    """Restar el techo en vez del devengado corre el kill floor ~USD 64."""
+    snap = resolve_ops_snapshot(
+        env={}, ledger=_GoLiveOpsLedger(), contributed=Decimal("1000")
+    )
+    assert snap.reserve_committed == Decimal("15.00")
+    assert snap.spent == Decimal("0.00")
+    assert snap.tradable_capital == Decimal("985.00")
+    assert snap.source == "ops_ledger"
+    assert snap.assumed is False
+
+
+def test_resolve_ops_snapshot_ignores_summary_without_committed_field():
+    """Un summary con solo el techo no habilita usar el techo como devengado."""
+
+    class _TotalOnlyLedger:
+        def get_ops_snapshot(self):
+            return {"ops_reserve_total": "100.00", "ops_burn_total": "0.00"}
+
+    snap = resolve_ops_snapshot(
+        env={"OPS_RESERVE_USD": "100"},
+        ledger=_TotalOnlyLedger(),
+        contributed=Decimal("1000"),
+    )
+    assert snap.source == "env_default"
+    assert snap.assumed is True
+    assert snap.assumption == OPS_ASSUMPTION_CEILING
+    assert snap.reserve_committed == Decimal("100")
+
+
+def test_resolve_ops_snapshot_accepts_burn_total_as_spent():
+    class _BurnLedger:
+        def get_ops_snapshot(self):
+            return {"ops_reserve_committed": "45", "ops_burn_total": "45"}
+
+    snap = resolve_ops_snapshot(env={}, ledger=_BurnLedger())
+    assert snap.reserve_committed == Decimal("45")
+    assert snap.spent == Decimal("45")
+
+
+def test_go_live_numbers_from_ops_ledger():
+    """Al go-live 2026-09-15: committed 15 -> tradable 985 -> kill floor 738.75."""
+    snap = resolve_ops_snapshot(
+        env={}, ledger=_GoLiveOpsLedger(), contributed=Decimal("1000")
+    )
+    st = evaluate_capital_risk(equity=Decimal("985"), ops=snap)
+    assert st.tradable_capital == Decimal("985.00")
+    assert st.kill_floor_trading == Decimal("738.75")
+    assert st.kill_floor == Decimal("738.75")
+    assert st.tradable_capital_source == "ops_ledger"
+    assert st.dd_trading == Decimal("0")
+    assert st.kill_triggered is False
+
+
+def test_ceiling_assumption_numbers():
+    """Sin ledger: techo 100 -> tradable 900 -> kill floor 675 (más permisivo)."""
+    st = evaluate_capital_risk(equity=Decimal("985"))
+    assert st.tradable_capital == Decimal("900.00")
+    assert st.kill_floor_trading == Decimal("675.00")
+    assert st.tradable_capital_source == "local_derivation"
+    assert st.ops_assumption == OPS_ASSUMPTION_CEILING
+
+
+def test_ledger_tradable_mismatch_falls_back_to_local_derivation():
+    """Si B contradice `aportado - committed`, el payload no puede auto-contradecirse."""
+
+    class _InconsistentLedger:
+        def get_ops_snapshot(self):
+            return {"ops_reserve_committed": "15.00", "ops_spent_usd": "0"}
+
+        def compute_tradable_capital(self, contributed, now=None):
+            return Decimal("900.00")  # equivale a restar el techo
+
+    snap = resolve_ops_snapshot(
+        env={}, ledger=_InconsistentLedger(), contributed=Decimal("1000")
+    )
+    st = evaluate_capital_risk(equity=Decimal("985"), ops=snap)
+    assert st.tradable_capital == Decimal("985.00")
+    assert st.kill_floor_trading == Decimal("738.75")
+    assert st.tradable_capital_source == "local_derivation_mismatch"
+    assert any("985.00" in reason and "900.00" in reason for reason in st.reasons)
+
+
 def test_resolve_ops_snapshot_falls_back_when_ledger_breaks():
     class _BrokenLedger:
         def get_ops_snapshot(self):
@@ -604,6 +702,7 @@ def test_status_is_json_serializable_and_has_no_secrets():
 
     assert payload["contributed_capital"] == "1000.00"
     assert payload["tradable_capital"] == "800.00"
+    assert payload["tradable_capital_source"] == "local_derivation"
     assert payload["equity"] == "800.00"
     assert payload["kill_basis"] == "trading"
     assert payload["kill_floor"] == "600.00"  # floor de la base que gobierna
