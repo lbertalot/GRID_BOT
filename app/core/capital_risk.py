@@ -256,6 +256,9 @@ class OpsSnapshot:
     source: str
     assumed: bool
     assumption: Optional[str] = None
+    # Derivación de B (`compute_tradable_capital`) cuando está disponible, para no
+    # tener dos fuentes de la misma resta.
+    tradable_capital: Optional[Decimal] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +272,7 @@ class CapitalRiskStatus:
 
     contributed_capital: Decimal
     tradable_capital: Decimal
+    tradable_capital_source: str
     equity: Decimal
     equity_trading: Decimal
     equity_pool: Decimal
@@ -337,6 +341,7 @@ class CapitalRiskStatus:
         return {
             "contributed_capital": str(self.contributed_capital),
             "tradable_capital": str(self.tradable_capital),
+            "tradable_capital_source": self.tradable_capital_source,
             "equity": str(self.equity),
             "equity_prev_eod": (
                 None if self.equity_prev_eod is None else str(self.equity_prev_eod)
@@ -469,7 +474,30 @@ def evaluate_capital_risk(
     spent = _require_non_negative(
         _to_decimal(ops_snapshot.spent, "ops_spent"), "ops_spent"
     )
-    tradable = tradable_capital(contributed, committed)
+    # Preferimos la derivación de Track B (una sola resta en el sistema), pero el
+    # payload no puede contradecirse: si difiere de `aportado - committed`, gana la
+    # local y la discrepancia queda registrada.
+    tradable_local = tradable_capital(contributed, committed)
+    tradable = tradable_local
+    tradable_source = "local_derivation"
+    tradable_mismatch: Optional[Decimal] = None
+    if ops_snapshot.tradable_capital is not None:
+        ledger_tradable = _quantize_money(
+            _to_decimal(ops_snapshot.tradable_capital, "ops.tradable_capital")
+        )
+        if ledger_tradable == tradable_local:
+            tradable = ledger_tradable
+            tradable_source = "ops_ledger"
+        else:
+            tradable_mismatch = ledger_tradable
+            tradable_source = "local_derivation_mismatch"
+            logger.warning(
+                "ops ledger informa tradable_capital %s pero aportado - committed da "
+                "%s; se usa la derivación local",
+                ledger_tradable,
+                tradable_local,
+            )
+
     ops_overspent = spent > committed
     # Sobregasto: el exceso ya salió del equity de trading; el colchón es 0, no negativo.
     ops_remaining = _quantize_money(max(committed - spent, Decimal("0")))
@@ -542,6 +570,12 @@ def evaluate_capital_risk(
             f"(ops gastado {spent} de {committed}; dd_trading {dd_trading}). "
             "Revisar devengo de ops antes de liquidar."
         )
+    if tradable_mismatch is not None:
+        reasons.append(
+            f"Discrepancia de tradable_capital: ops ledger informa "
+            f"{tradable_mismatch} y aportado - committed da {tradable_local}. "
+            "Se usa la derivación local; revisar contrato con Track B."
+        )
     ops_assumption = ops_snapshot.assumption or (
         OPS_ASSUMPTION_CEILING if ops_snapshot.assumed else None
     )
@@ -567,6 +601,7 @@ def evaluate_capital_risk(
     return CapitalRiskStatus(
         contributed_capital=_quantize_money(contributed),
         tradable_capital=tradable,
+        tradable_capital_source=tradable_source,
         equity=equity_trading,
         equity_trading=equity_trading,
         equity_pool=equity_pool,
@@ -776,37 +811,93 @@ def resolve_equity_snapshot(
     return EquitySnapshot(equity=equity, equity_prev_eod=prev_eod, source="paper_state")
 
 
+def _import_ops_ledger() -> Any:
+    """Track B (`app/core/ops_ledger.py`) puede no estar en el branch todavía."""
+    try:
+        from app.core import ops_ledger  # type: ignore
+
+        return ops_ledger
+    except Exception as exc:  # noqa: BLE001 - módulo opcional por diseño
+        logger.debug("ops_ledger no disponible: %s", exc)
+        return None
+
+
+# Campos del summary de ops que sí representan el devengado. `ops_reserve_total`
+# (antes `ops_reserve_usd`) es el **techo** y nunca debe usarse como committed:
+# restarlo corre el kill floor de trading ~USD 64 sobre el capital actual.
+_OPS_COMMITTED_KEYS = ("ops_reserve_committed_usd", "ops_reserve_committed")
+_OPS_SPENT_KEYS = ("ops_spent_usd", "ops_spent", "ops_burn_total")
+
+
+def _first_present(raw: Mapping[str, Any], keys: tuple, field_name: str) -> Decimal:
+    for key in keys:
+        if key in raw and raw[key] is not None:
+            return _to_decimal(raw[key], key)
+    raise CapitalRiskInputError(
+        f"el summary de ops no expone {field_name} (buscado en {', '.join(keys)})"
+    )
+
+
 def resolve_ops_snapshot(
     env: Optional[Mapping[str, str]] = None,
     ledger: Any = None,
+    contributed: Optional[Decimal] = None,
 ) -> OpsSnapshot:
-    """Resuelve el gasto de ops sin depender de Track B.
+    """Resuelve el devengo de ops; funciona con o sin Track B.
 
-    Contrato esperado del ops ledger (Track B, `app/core/ops_ledger.py`): un objeto
-    con `get_ops_snapshot()` que devuelva un mapping con
-    `ops_reserve_committed_usd` (el **devengado**, no el techo) y `ops_spent_usd`
-    (str/Decimal, USD) y opcionalmente `as_of`.
+    Contrato del ops ledger (Track B #36, `app/core/ops_ledger.py`):
 
-    Si el ledger no está o falla, se usa `OPS_RESERVE_USD` (default 100 = techo del
-    Amendment 01) asumiendo la reserva íntegra comprometida y gastada, y se marca
-    `assumed=True` con `assumption=OPS_ASSUMPTION_CEILING`. Ese supuesto da el
-    `tradable_capital` mínimo (`dd_pool` en su lectura más dura), así que el número
-    no debe sobrevivir al go-live sin el devengado real.
+    - `get_ops_snapshot()` → mapping con `ops_reserve_committed` (o
+      `ops_reserve_committed_usd`) = **devengado**, `max(ops_accrued_to_date,
+      ops_burn_total)`; gasto en `ops_spent_usd` / `ops_spent` / `ops_burn_total`.
+      `ops_reserve_total` (el techo) se ignora a propósito.
+    - `compute_tradable_capital(contributed, now)` → si existe, se adopta su
+      resultado para no rederivar la resta en dos lugares.
+
+    Si el summary no expone el devengado, o el ledger falla, se cae a
+    `OPS_RESERVE_USD` (default 100 = techo del Amendment 01) asumiendo la reserva
+    íntegra comprometida y gastada, con `assumed=True` y
+    `assumption=OPS_ASSUMPTION_CEILING`. Ese supuesto da el `tradable_capital`
+    mínimo y por lo tanto el kill floor de trading más bajo: es un supuesto, no un
+    dato, y no debería sobrevivir al go-live.
     """
     source_env = os.environ if env is None else env
+    ledger = ledger if ledger is not None else _import_ops_ledger()
+
+    if contributed is None:
+        contributed = _safe_decimal(
+            _env_value(
+                source_env, "CONTRIBUTED_CAPITAL_USD", DEFAULT_CONTRIBUTED_CAPITAL_USD
+            ),
+            "CONTRIBUTED_CAPITAL_USD",
+        )
 
     if ledger is not None:
         try:
             raw = ledger.get_ops_snapshot()
-            committed = _to_decimal(
-                raw["ops_reserve_committed_usd"], "ops_reserve_committed_usd"
+            committed = _first_present(
+                raw, _OPS_COMMITTED_KEYS, "ops_reserve_committed"
             )
-            spent = _to_decimal(raw["ops_spent_usd"], "ops_spent_usd")
+            spent = _first_present(raw, _OPS_SPENT_KEYS, "ops_spent")
+            ledger_tradable: Optional[Decimal] = None
+            compute = getattr(ledger, "compute_tradable_capital", None)
+            if callable(compute) and contributed is not None:
+                try:
+                    ledger_tradable = _to_decimal(
+                        compute(contributed, datetime.now(timezone.utc)),
+                        "compute_tradable_capital",
+                    )
+                except Exception as exc:  # noqa: BLE001 - opcional, se deriva local
+                    logger.warning(
+                        "compute_tradable_capital no utilizable, se deriva local: %s",
+                        exc,
+                    )
             return OpsSnapshot(
                 reserve_committed=committed,
                 spent=spent,
                 source="ops_ledger",
                 assumed=False,
+                tradable_capital=ledger_tradable,
             )
         except Exception as exc:  # noqa: BLE001 - fallback explícito, nunca romper el status
             logger.warning("ops ledger no utilizable, se usa supuesto de env: %s", exc)
