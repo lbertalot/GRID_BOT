@@ -29,7 +29,7 @@ Parámetros MM (sin reset de ventana — **no se tocan**): spacing **100 bps**, 
 | B2 freeze A1 | PASS | hash `630abf63…` · `PAPER_FROZEN` |
 | B3 params 200 / 100 bps | PASS | intactos |
 | B4 ≥1 tick válido (T1–T10) | PASS parcial | tick MtM OK; sin fills aún (fees/slip=0 coherentes) |
-| **B5 cierre diario 00:00 UTC ±30 min / `E_0`** | **FAIL** | `daily_close_at=null` en sample C3 |
+| **B5 cierre diario 00:00 UTC ±30 min / `E_0`** | **FAIL** (path Opción B listo) | samples aún `daily_close_at=null`; script §8 — ventana 23:30–00:30Z |
 | B10 acta Desk Lead + MM | FAIL | sin firma dual día 0 |
 | B11 sin claim edge / PROMOTE_LIVE | PASS | este log no emite edge ni live |
 
@@ -228,7 +228,7 @@ Alineado a [`DAY0_ACCEPTANCE.md`](product/DAY0_ACCEPTANCE.md) §3 (B1–B11).
 | **B4** (freeze --write) | Media | **Cerrado (C2)** | `PAPER_FROZEN` |
 | **B5** (tick E2E) | Media | **Cerrado (C3)** | sample serie + ledger con hash freeze |
 | **B6** (IC simulacro) | Baja | Abierto | desk A5 ~2026-08-20; no bloquea C3 |
-| **D0-CLOSE** | Alta (día 0) | **Abierto** | falta ancla `daily_close_at` / `E_0` (±30 min 00:00 UTC) |
+| **D0-CLOSE** | Alta (día 0) | **Abierto** (path Opción B listo) | esperar 23:30–00:30Z + `capture_paper_e0_daily_close.py --write` o Celery (§8) |
 | **D0-SIGNOFF** | Alta (día 0) | **Abierto** | firma dual Desk Lead + MM |
 
 Breakers: **no** blocker (`any_open=false` post-tick).
@@ -277,6 +277,80 @@ Params freeze — **no cambiar sin documentar reset de ventana**:
 
 ---
 
+## 8. WS-2 — B5 E_0 path + B9 pnl_mtd honesto + legacy (2026-08-05T21:30Z)
+
+**Rol:** `trading-backend-tdd` · **Modo:** paper-only · **Sin** `FORCE_REAL_MODE` / wipe serie / mid inventado · hash freeze **intact** `630abf63…`
+
+### 8.1 B9 — `pnl_mtd` honesto (CEO-5 / N9)
+
+| Antes | Después |
+|-------|---------|
+| `status=stale` `value="0"` con ticks cash-only flat (sin E_0) | `status=unavailable` `value=null` + reason ancla usable |
+
+**Fix:** `app/core/pnl_ledger.py` exige ancla MTD = sample pre-mes **o** primer `daily_close_at` (E_0). Ticks intradiarios solos → `PnlUnavailableError`.
+
+**Curl post-fix (docker api):**
+
+```json
+{
+  "status": "unavailable",
+  "value": null,
+  "reason": "serie MtM sin ancla usable del mes (falta E_0 / cierre diario 00:00 UTC o sample previo al mes)",
+  "source": "app.core.pnl_ledger (B4/MtM-paper)",
+  "unit": "usd"
+}
+```
+
+Tests: `tests/test_pnl_ledger.py` (+ never-zero / E_0 anchor) · `tests/test_e0_daily_close_path.py`.
+
+### 8.2 B5 — Opción B path E_0 (sin inventar mid)
+
+Script: `scripts/capture_paper_e0_daily_close.py`
+
+- Solo escribe si UTC ∈ ±30 min de 00:00 (`daily_close_anchor`).
+- Path = `compute_paper_portfolio_value()` + feed real (fail-closed si no hay mid).
+- Append-only a serie; **no** wipe; **no** toca freeze hash.
+
+**Estado al cierre WS-2:** fuera de ventana (~21:30Z). Próxima: **2026-08-05T23:30Z → 2026-08-06T00:30Z**.
+
+```bash
+docker compose -f docker-compose.local.yml exec -T worker \
+  python scripts/capture_paper_e0_daily_close.py --dry-run
+
+# En ventana (±30m 00:00 UTC):
+docker compose -f docker-compose.local.yml exec -T worker \
+  python scripts/capture_paper_e0_daily_close.py --write
+
+# Alternativa: Celery beat capture_portfolio_snapshot (900s) en esa ventana
+```
+
+Evidencia unitaria `daily_close_at` no null: `tests/test_e0_daily_close_path.py`.
+
+**B5 negocio** sigue **FAIL** hasta sample real en ventana (no se finge E_0).
+
+### 8.3 Legacy positions warning
+
+| Hallazgo | Mitigación |
+|----------|------------|
+| `paper_trading_state.json` tenía `BNBUSDT` legacy (floats 2025-09) no importado al ledger MtM | `scripts/quarantine_legacy_paper_positions.py --write` → `positions={}` + `_quarantined_positions` |
+| SoT | `PaperEquityLedger` — **no** se importó inventario legacy (evitar contaminar E_0) |
+| Compose local | mounts `./scripts` + `./paper_trading_state.json` |
+
+`load_state` deja de WARNING si cuarentenado.
+
+### 8.4 Smoke
+
+| Check | Resultado |
+|-------|-----------|
+| `effective_mode` health + CEO | **paper** |
+| `pnl_mtd` | **unavailable / null** |
+| breakers | `ok` / lista vacía |
+| `FORCE_REAL_MODE` | vacío |
+
+**Día 0:** `L0_DAY0_WINDOW_GO` sigue **NO-GO** (B5 E_0 runtime + B10 firmas). Sin claim edge / sin `PROMOTE_LIVE`.
+
+---
+
 ## Changelog
 
 | Fecha UTC | Cambio | Autor |
@@ -284,3 +358,5 @@ Params freeze — **no cambiar sin documentar reset de ventana**:
 | 2026-08-05T19:58:05Z | Smoke stack paper + dry-run freeze mid 1920.38 + checklist + blockers B1–B6; compose L0/telemetry | trading-devops |
 | 2026-08-05T20:46:42Z | **C2** freeze `--write` mid 1923.08 · hash `630abf63…` · `GRID_CONFIG_HASH` local · recreate | trader-market-maker |
 | 2026-08-05T20:50:58Z | **C3** primer tick MtM · sample serie+ledger · B5 técnico cerrado · `L0_DAY0_WINDOW_GO=NO-GO` (falta cierre diario + firmas) | trading-backend-tdd |
+| 2026-08-05T21:30Z | **WS-2** pnl_mtd unavailable honesto; script E_0 Opción B; quarantine legacy BNB; compose mounts scripts+legacy state | trading-backend-tdd |
+

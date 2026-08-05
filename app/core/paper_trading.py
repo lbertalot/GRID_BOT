@@ -104,13 +104,23 @@ class PaperTradingSystem:
                 return
             with open(self.paper_trading_file, "r") as handle:
                 data = json.load(handle)
-            self.trade_history = list(data.get("trade_history", []) or [])
-            if data.get("positions"):
+            self.trade_history = list(
+                data.get("trade_history") or data.get("trades") or []
+            )
+            positions = data.get("positions") or {}
+            reconciled = bool(data.get("legacy_positions_reconciled"))
+            quarantined = data.get("_quarantined_positions")
+            if positions and not reconciled and not quarantined:
                 logger.warning(
                     "[PaperTrading] El estado legacy tiene %s posiciones que no se "
                     "importan al ledger MtM: reconciliar antes de abrir la ventana "
-                    "del tear sheet",
-                    len(data["positions"]),
+                    "del tear sheet (scripts/quarantine_legacy_paper_positions.py)",
+                    len(positions),
+                )
+            elif quarantined or reconciled:
+                logger.info(
+                    "[PaperTrading] Legacy positions ya cuarentenadas/reconciliadas; "
+                    "SoT = PaperEquityLedger (no se importan al MtM)"
                 )
         except Exception as exc:
             logger.error("Error cargando estado de paper trading: %s", exc)
