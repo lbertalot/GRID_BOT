@@ -435,19 +435,40 @@ services:
           cpus: '0.10'
           memory: 128M
 
-  # cAdvisor para métricas de contenedores
+  # cAdvisor — en Docker Desktop montar containerd.sock (ver docker-compose.local.yml).
+  # Imagen antigua v0.47 sin containerd falla factory Docker con overlayfs moderno.
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    image: gcr.io/cadvisor/cadvisor:v0.54.1
     container_name: gridbot_cadvisor
     restart: always
+    privileged: true
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      - ./docker/cadvisor/machine-id:/etc/machine-id:ro
+      - ./docker/cadvisor/machine-id:/rootfs/etc/machine-id:ro
     devices:
       - /dev/kmsg
+    command:
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --docker_only
+      - --docker=unix:///var/run/docker.sock
+      - --containerd=/run/containerd/containerd.sock
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://localhost:8080/healthz >/dev/null && wget -q -O - http://localhost:8080/api/v1.3/docker | grep -q '\"' || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - gridbot_network
     deploy:
