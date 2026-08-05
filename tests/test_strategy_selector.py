@@ -2,6 +2,8 @@
 Tests unitarios para el StrategySelector V2.5.
 """
 
+from decimal import Decimal
+
 import pytest
 
 from app.services.strategy_selector import (
@@ -296,9 +298,12 @@ class TestStrategySelector:
 
         # La confianza debe ser menor debido al alto riesgo
         expected_confidence = (
-            mock_regime_prediction.long_conf + mock_regime_prediction.short_conf
-        ) / 2
-        expected_confidence *= 0.7 * 0.5  # Ajustes por riesgo alto y pérdidas
+            Decimal(str(mock_regime_prediction.long_conf))
+            + Decimal(str(mock_regime_prediction.short_conf))
+        ) / Decimal("2")
+        expected_confidence *= Decimal("0.7") * Decimal(
+            "0.5"
+        )  # Ajustes por riesgo alto y pérdidas
 
         assert strategy_spec.confidence < expected_confidence
 
