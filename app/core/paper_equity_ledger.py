@@ -41,11 +41,11 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +175,37 @@ def compute_config_hash(config: Mapping[str, Any]) -> str:
         _strip_secrets(config), sort_keys=True, separators=(",", ":"), default=str
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+DEFAULT_GRID_CONFIG_FILE = "grid_config_optimized.json"
+
+
+def resolve_grid_config_hash() -> Optional[str]:
+    """`config_hash` de la config de grid vigente, para el freeze de la ventana.
+
+    Orden de resolución: `GRID_CONFIG_HASH` explícito (lo que el desk congela en
+    `Docs/squad/desk-policy-l0.md` §6 C3) y, si no está, el hash del archivo de
+    config que efectivamente carga el bot. Devuelve `None` si no hay config
+    legible: es preferible una serie sin hash —y por lo tanto un gate A1 que no se
+    puede firmar— a un hash inventado que dé por congelado algo que no lo está.
+    """
+    explicit = os.getenv("GRID_CONFIG_HASH")
+    if explicit:
+        return explicit
+    path = Path(os.getenv("GRID_CONFIG_FILE", DEFAULT_GRID_CONFIG_FILE))
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning(
+            "[PaperLedger] Sin config_hash: %s no es legible (%s). El gate A1 no se "
+            "puede probar hasta que el desk congele GRID_CONFIG_HASH",
+            path,
+            exc,
+        )
+        return None
+    if not isinstance(config, Mapping):
+        return None
+    return compute_config_hash(config)
 
 
 # ---------------------------------------------------------------------------
@@ -1188,7 +1219,7 @@ def get_paper_equity_series() -> PaperEquitySeries:
                 )
         if _series is None:
             _series = PaperEquitySeries(
-                config_hash=os.getenv("GRID_CONFIG_HASH") or None,
+                config_hash=resolve_grid_config_hash(),
                 storage_path=path,
             )
     return _series
@@ -1288,6 +1319,7 @@ __all__ = [
     "compute_config_hash",
     "compute_paper_portfolio_value",
     "daily_close_anchor",
+    "resolve_grid_config_hash",
     "get_mark_price_feed",
     "get_paper_equity_series",
     "get_paper_ledger",
