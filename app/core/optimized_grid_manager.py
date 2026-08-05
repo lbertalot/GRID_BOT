@@ -856,7 +856,18 @@ class OptimizedGridManager:
                 return simulated_order
 
             else:
-                # Orden real en Binance
+                # Orden real en Binance — S-GATE (B15/B26): fail-closed
+                from app.core.order_execution_guard import (
+                    RealOrderBlocked,
+                    assert_real_order_allowed,
+                )
+
+                try:
+                    assert_real_order_allowed(context="OptimizedGridManager._place_order")
+                except RealOrderBlocked as blocked:
+                    logger.error("❌ Orden real rechazada por guard: %s", blocked.reason)
+                    return None
+
                 if not self.client:
                     logger.error(
                         "❌ Cliente de Binance no inicializado para orden real"

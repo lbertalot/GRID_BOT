@@ -30,6 +30,22 @@ class CommissionManager:
         self.default_maker_commission = 0.001  # 0.1%
         self.default_taker_commission = 0.001  # 0.1%
 
+        # S-PAPER-ISO / B27: en paper no crear cliente ni llamar get_account().
+        # FORCE_REAL_MODE anula paper solo para paths ya gated (S-GATE).
+        paper = os.getenv("PAPER_TRADING", "false").lower() in {"1", "true", "yes", "on"}
+        force_real = os.getenv("FORCE_REAL_MODE", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if paper and not force_real:
+            logger.info(
+                "📄 CommissionManager en paper: comisiones default locales "
+                "(sin get_account autenticado)"
+            )
+            return
+
         # Inicializar cliente si hay credenciales (con proxy QuotaGuard si está configurado)
         if self.api_key and self.api_secret:
             try:
@@ -47,6 +63,21 @@ class CommissionManager:
     def _update_commission_rates(self):
         """Actualizar tasas de comisión desde Binance"""
         try:
+            paper = os.getenv("PAPER_TRADING", "false").lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            force_real = os.getenv("FORCE_REAL_MODE", "false").lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if paper and not force_real:
+                return
+
             if not self.client:
                 return
 
