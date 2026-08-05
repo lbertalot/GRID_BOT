@@ -14,6 +14,7 @@ Denominador maestro del MaxDD: **capital desplegado** (desk-policy-l0 §3.3).
 Reglas: todo el dinero en `Decimal`, cero red, cero exchange.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -29,6 +30,7 @@ from app.core.paper_equity_ledger import (
     compute_config_hash,
     compute_paper_portfolio_value,
     daily_close_anchor,
+    resolve_grid_config_hash,
 )
 
 BTC = "BTCUSDT"
@@ -449,6 +451,31 @@ def test_config_hash_se_persiste_en_cada_marca_de_equity(ledger):
 
     assert series.samples[-1]["config_hash"] == esperado
     assert series.config_hashes() == {esperado}
+
+
+def test_config_hash_se_resuelve_del_archivo_de_config_del_bot(tmp_path, monkeypatch):
+    """El freeze no depende de que alguien recuerde exportar una variable."""
+    destino = tmp_path / "grid_config_optimized.json"
+    destino.write_text(json.dumps(CONFIG_VENTANA), encoding="utf-8")
+    monkeypatch.delenv("GRID_CONFIG_HASH", raising=False)
+    monkeypatch.setenv("GRID_CONFIG_FILE", str(destino))
+
+    assert resolve_grid_config_hash() == compute_config_hash(CONFIG_VENTANA)
+
+
+def test_config_hash_explicito_del_desk_tiene_prioridad(tmp_path, monkeypatch):
+    monkeypatch.setenv("GRID_CONFIG_HASH", "hash-congelado-por-el-desk")
+    monkeypatch.setenv("GRID_CONFIG_FILE", str(tmp_path / "no-existe.json"))
+
+    assert resolve_grid_config_hash() == "hash-congelado-por-el-desk"
+
+
+def test_sin_config_legible_no_hay_hash_inventado(tmp_path, monkeypatch):
+    monkeypatch.delenv("GRID_CONFIG_HASH", raising=False)
+    monkeypatch.setenv("GRID_CONFIG_FILE", str(tmp_path / "no-existe.json"))
+
+    # Falla cerrado: sin hash el gate A1 no se puede firmar, que es lo correcto.
+    assert resolve_grid_config_hash() is None
 
 
 def test_series_detecta_cambio_de_config_dentro_de_la_ventana():
