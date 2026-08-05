@@ -18,6 +18,9 @@ from app.services.broker_adapter import (
 from app.services.binance_async import AsyncBinanceWrapper
 
 
+pytestmark = pytest.mark.usefixtures("allow_real_orders_unit")
+
+
 def test_parse_trading_venue_defaults_to_binance_spot() -> None:
     assert parse_trading_venue_id(None) == "binance_spot"
     assert parse_trading_venue_id("") == "binance_spot"

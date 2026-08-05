@@ -483,7 +483,10 @@ class BinanceClientSingleton:
     def create_order(
         self, symbol: str, side: str, order_type: str, quantity: str, **kwargs
     ):
-        """Crea una orden en Binance"""
+        """Crea una orden en Binance (solo si effective_mode=real_armed)."""
+        from app.core.order_execution_guard import assert_real_order_allowed
+
+        assert_real_order_allowed(context="BinanceClientSingleton.create_order")
         return self.client.create_order(
             symbol=symbol, side=side, type=order_type, quantity=quantity, **kwargs
         )
