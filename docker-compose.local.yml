@@ -67,12 +67,21 @@ x-app-env: &app-env
   REPORTS_DIR: /app/reports
   # Watchdog pipeline_health_tasks (worker → Prometheus en la red compose)
   PROMETHEUS_URL: http://prometheus:9090
+  # S-TICK / L0 paper window — SoT de config + telemetría equity (paper-only).
+  # Tras freeze --write: poner en .env local (no commitear):
+  #   GRID_CONFIG_HASH=<contenido de grid_config_paper_l0.hash>
+  # Sin ese env, resolve_grid_config_hash() hashea el JSON (algoritmo distinto
+  # al sidecar) y el gate A1 no cierra contra el hash del desk.
+  GRID_CONFIG_FILE: grid_config_paper_l0.json
+  PAPER_TELEMETRY_DIR: /app/paper_telemetry
 
 x-app-volumes: &app-volumes
   - ./app:/app/app
   - ./alembic:/app/alembic
   - ./alembic.ini:/app/alembic.ini
   - ./grid_config_optimized.json:/app/grid_config_optimized.json
+  - ./grid_config_paper_l0.json:/app/grid_config_paper_l0.json
+  - ./paper_telemetry:/app/paper_telemetry
   - ./logs:/app/logs
   - ./cache:/app/cache
   - ./data:/app/data
