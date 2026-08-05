@@ -6,10 +6,11 @@ Usa vectorbt para simulación de estrategias con walk-forward analysis.
 import logging
 import os
 import json
+from decimal import Decimal
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configurar numba antes de importar vectorbt
 os.environ["NUMBA_DISABLE_CACHE"] = "1"
@@ -32,10 +33,16 @@ except Exception as e:
 
     vbt = MockVectorBT()
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from prometheus_client import Counter, Histogram, Gauge
 
 from app.services.strategy_selector import StrategySpec, StrategyType
+from app.services.transaction_cost_model import (
+    apply_two_sigma_execution_stress,
+    build_reference_transaction_cost_audit,
+    compute_execution_cost_sigma_proxies_from_ohlcv_arrays,
+    vectorbt_fees_and_slippage_from_backtest_fractions,
+)
 
 # Métricas Prometheus
 BACKTEST_RUNS_TOTAL = Counter(
@@ -57,12 +64,88 @@ class BacktestConfig(BaseModel):
     initial_capital: float = Field(default=10000.0, description="Capital inicial")
     commission: float = Field(default=0.001, description="Comisión maker/taker")
     slippage: float = Field(default=0.0005, description="Slippage model")
+    spread_bps: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Spread modelado (bps); se suma al slippage de vectorbt",
+    )
+    backtest_order_type: str = Field(
+        default="MARKET",
+        description="MARKET o LIMIT para auditoría de comisión en metrics_json",
+    )
+    cost_model_reference_notional_usdt: float = Field(
+        default=1000.0,
+        gt=0.0,
+        description="Notional quote (USDT) de referencia para transaction_cost_audit",
+    )
     walk_forward: bool = Field(default=True, description="Usar walk-forward analysis")
     window_size: int = Field(default=252, description="Tamaño de ventana (días)")
     step_size: int = Field(default=63, description="Paso de ventana (días)")
     min_samples: int = Field(
         default=100, description="Mínimo de muestras para entrenar"
     )
+    cost_stress_two_sigma: bool = Field(
+        default=False,
+        description=(
+            "Si True, spread_bps y slippage efectivos = baseline + 2σ de proxies OHLCV "
+            "(§5.2 protocolo Passive Income)."
+        ),
+    )
+    persist_run_to_db: bool = Field(
+        default=False,
+        description=(
+            "Si True, al completar run_backtest persiste en backtest_runs/backtest_metrics "
+            "(requiere migración Alembic aplicada)."
+        ),
+    )
+
+    @field_validator("backtest_order_type", mode="before")
+    @classmethod
+    def _normalize_order_type(cls, value: str) -> str:
+        u = str(value).upper()
+        if u not in ("MARKET", "LIMIT"):
+            raise ValueError("backtest_order_type debe ser MARKET o LIMIT")
+        return u
+
+
+def resolve_backtest_simulation_config(
+    config: BacktestConfig,
+    df: pd.DataFrame,
+) -> tuple[BacktestConfig, dict[str, Any]]:
+    """
+    Configuración usada en vectorbt y en transaction_cost_audit.
+
+    Con ``cost_stress_two_sigma`` aplica +2σ sobre spread y slippage respecto a
+    desviaciones empíricas de las barras del propio ``df``.
+    """
+    if not config.cost_stress_two_sigma:
+        return config, {}
+
+    sigma_sp, sigma_sl = compute_execution_cost_sigma_proxies_from_ohlcv_arrays(
+        df["high"].to_numpy(dtype=float, copy=False),
+        df["low"].to_numpy(dtype=float, copy=False),
+        df["close"].to_numpy(dtype=float, copy=False),
+        df["open"].to_numpy(dtype=float, copy=False),
+    )
+    eff_spread_bps, eff_slippage = apply_two_sigma_execution_stress(
+        spread_bps=config.spread_bps,
+        slippage_fraction=config.slippage,
+        sigma_spread_bps=sigma_sp,
+        sigma_slippage_fraction=sigma_sl,
+    )
+    stressed = config.model_copy(
+        update={"spread_bps": eff_spread_bps, "slippage": eff_slippage}
+    )
+    meta: dict[str, Any] = {
+        "cost_stress_two_sigma": True,
+        "cost_stress_sigma_spread_bps": sigma_sp,
+        "cost_stress_sigma_slippage_fraction": sigma_sl,
+        "backtest_spread_bps_baseline": float(config.spread_bps),
+        "backtest_slippage_baseline": float(config.slippage),
+        "backtest_spread_bps_effective": float(eff_spread_bps),
+        "backtest_slippage_effective": float(eff_slippage),
+    }
+    return stressed, meta
 
 
 class BacktestResult(BaseModel):
@@ -105,6 +188,51 @@ class BacktestingService:
         self.backtest_results: List[BacktestResult] = []
 
         self.logger = logging.getLogger(__name__)
+
+    def _vectorbt_fees_slippage(self, config: BacktestConfig) -> tuple[float, float]:
+        return vectorbt_fees_and_slippage_from_backtest_fractions(
+            config.commission,
+            config.slippage,
+            config.spread_bps,
+        )
+
+    def _persist_backtest_run_to_db(
+        self,
+        *,
+        baseline_config: BacktestConfig,
+        sim_config: BacktestConfig,
+        result: BacktestResult,
+        cost_stress_meta: dict[str, Any],
+        started_at: datetime,
+    ) -> None:
+        from app.core.metrics import gridbot_backtest_run_persist_total
+
+        try:
+            from app.db.session import SessionLocal
+            from app.services.backtest_persistence import persist_completed_backtest_run
+
+            db = SessionLocal()
+            try:
+                persist_completed_backtest_run(
+                    db,
+                    name=None,
+                    baseline_config=baseline_config,
+                    sim_config=sim_config,
+                    result=result,
+                    cost_stress_meta=cost_stress_meta,
+                    started_at=started_at,
+                    finished_at=datetime.now(timezone.utc),
+                )
+                db.commit()
+                gridbot_backtest_run_persist_total.labels(outcome="success").inc()
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+        except Exception as exc:
+            gridbot_backtest_run_persist_total.labels(outcome="failure").inc()
+            self.logger.warning("persist_run_to_db failed: %s", exc)
 
     async def download_ohlcv_data(
         self, symbol: str, start_date: datetime, end_date: datetime
@@ -246,14 +374,16 @@ class BacktestingService:
                 df["high"].shift(1) < price * (1 + grid_spacing)
             )
 
+        vt_fees, vt_slippage = self._vectorbt_fees_slippage(config)
+
         # Crear portfolio
         portfolio = vbt.Portfolio.from_signals(
             close=df["close"],
             entries=buy_signals,
             exits=sell_signals,
             size=order_size / df["close"],  # Tamaño en unidades
-            fees=config.commission,
-            slippage=config.slippage,
+            fees=vt_fees,
+            slippage=vt_slippage,
             init_cash=config.initial_capital,
             freq="1H",
         )
@@ -304,14 +434,16 @@ class BacktestingService:
                         exit_signals.iloc[j] = True
                         break
 
+        vt_fees, vt_slippage = self._vectorbt_fees_slippage(config)
+
         # Crear portfolio
         portfolio = vbt.Portfolio.from_signals(
             close=df["close"],
             entries=entry_signals,
             exits=exit_signals,
             size=tranche_size / df["close"],
-            fees=config.commission,
-            slippage=config.slippage,
+            fees=vt_fees,
+            slippage=vt_slippage,
             init_cash=config.initial_capital,
             freq="1H",
         )
@@ -364,14 +496,16 @@ class BacktestingService:
                         exit_signals.iloc[j] = True
                         break
 
+        vt_fees, vt_slippage = self._vectorbt_fees_slippage(config)
+
         # Crear portfolio
         portfolio = vbt.Portfolio.from_signals(
             close=df["close"],
             entries=entry_signals,
             exits=exit_signals,
             size=order_size / df["close"],
-            fees=config.commission,
-            slippage=config.slippage,
+            fees=vt_fees,
+            slippage=vt_slippage,
             init_cash=config.initial_capital,
             freq="1H",
         )
@@ -407,7 +541,7 @@ class BacktestingService:
         if initial_capital is not None:
             config.initial_capital = initial_capital
 
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
 
         try:
             self.logger.info(
@@ -422,17 +556,23 @@ class BacktestingService:
                     f"Insufficient data: {len(df)} samples < {config.min_samples}"
                 )
 
+            sim_config, cost_stress_meta = resolve_backtest_simulation_config(
+                config, df
+            )
+
             # Seleccionar estrategia de simulación
             if strategy_spec.strategy_name == StrategyType.GRID_TRADING:
-                portfolio = self._simulate_grid_trading(df, strategy_spec, config)
+                portfolio = self._simulate_grid_trading(df, strategy_spec, sim_config)
             elif strategy_spec.strategy_name == StrategyType.DCA:
-                portfolio = self._simulate_dca_strategy(df, strategy_spec, config)
+                portfolio = self._simulate_dca_strategy(df, strategy_spec, sim_config)
             elif strategy_spec.strategy_name == StrategyType.SCALPING:
-                portfolio = self._simulate_scalping_strategy(df, strategy_spec, config)
+                portfolio = self._simulate_scalping_strategy(
+                    df, strategy_spec, sim_config
+                )
             else:
                 # HOLD strategy - no trading
                 portfolio = vbt.Portfolio.from_holding(
-                    close=df["close"], init_cash=config.initial_capital, freq="1H"
+                    close=df["close"], init_cash=sim_config.initial_capital, freq="1H"
                 )
 
             # Calcular métricas
@@ -453,13 +593,41 @@ class BacktestingService:
             # Capital final
             final_capital = portfolio.value.iloc[-1]
 
-            # Crear resultado
+            vt_fees, vt_slippage = self._vectorbt_fees_slippage(sim_config)
+            ref_n = Decimal(str(sim_config.cost_model_reference_notional_usdt))
+            cost_audit = build_reference_transaction_cost_audit(
+                ref_n,
+                sim_config.commission,
+                sim_config.slippage,
+                sim_config.spread_bps,
+                sim_config.backtest_order_type,
+            )
+
+            metrics_body: dict[str, Any] = {
+                "total_return": float(total_return),
+                "max_drawdown": float(max_drawdown),
+                "sharpe_ratio": float(sharpe_ratio),
+                "sortino_ratio": float(sortino_ratio),
+                "win_rate": float(win_rate),
+                "profit_factor": float(profit_factor),
+                "total_trades": int(total_trades),
+                "avg_trade_duration": float(avg_trade_duration),
+                "final_capital": float(final_capital),
+                "backtest_spread_bps": float(sim_config.spread_bps),
+                "backtest_slippage": float(sim_config.slippage),
+                "backtest_order_type": sim_config.backtest_order_type,
+                "vectorbt_fees": vt_fees,
+                "vectorbt_slippage": vt_slippage,
+                "cost_model_reference_notional_quote": str(ref_n),
+                "transaction_cost_audit": cost_audit.to_serializable_dict(),
+            }
+            metrics_body.update(cost_stress_meta)
             result = BacktestResult(
                 symbol=symbol,
                 strategy_hash=strategy_spec.strategy_name.value,
                 start_date=start_date,
                 end_date=end_date,
-                initial_capital=config.initial_capital,
+                initial_capital=sim_config.initial_capital,
                 final_capital=final_capital,
                 total_return=total_return,
                 max_drawdown=max_drawdown,
@@ -469,18 +637,17 @@ class BacktestingService:
                 profit_factor=profit_factor,
                 total_trades=total_trades,
                 avg_trade_duration=avg_trade_duration,
-                metrics_json={
-                    "total_return": float(total_return),
-                    "max_drawdown": float(max_drawdown),
-                    "sharpe_ratio": float(sharpe_ratio),
-                    "sortino_ratio": float(sortino_ratio),
-                    "win_rate": float(win_rate),
-                    "profit_factor": float(profit_factor),
-                    "total_trades": int(total_trades),
-                    "avg_trade_duration": float(avg_trade_duration),
-                    "final_capital": float(final_capital),
-                },
+                metrics_json=metrics_body,
             )
+
+            if config.persist_run_to_db:
+                self._persist_backtest_run_to_db(
+                    baseline_config=config,
+                    sim_config=sim_config,
+                    result=result,
+                    cost_stress_meta=cost_stress_meta,
+                    started_at=start_time,
+                )
 
             # Guardar resultado
             self.backtest_results.append(result)
