@@ -401,6 +401,7 @@ app.include_router(binance_sync_routes.router, dependencies=[Depends(_require_au
 from app.api.integrity_routes import router as integrity_router  # noqa: E402
 from app.api.reconciliation_routes import router as reconciliation_router  # noqa: E402
 from app.api.breakers_routes import router as breakers_router  # noqa: E402
+from app.api.breakers_routes import api_router as breakers_api_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
 
@@ -410,6 +411,8 @@ app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
 app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
 # /breakers/* público — dashboards de monitoreo (Grafana/Prometheus)
 app.include_router(breakers_router)
+# /api/breakers/* público — mismo payload bajo el prefijo /api del dashboard
+app.include_router(breakers_api_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
 
