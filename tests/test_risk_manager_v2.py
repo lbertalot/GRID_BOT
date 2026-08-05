@@ -253,8 +253,9 @@ class TestRiskManager:
         assert "timestamp" in status
 
     def test_update_metrics(self, risk_manager):
-        """Test de actualización de métricas."""
-        daily_loss = Decimal("0.03")
+        """Test de actualización de métricas (SoT daily loss −3%)."""
+        # Pérdida parcial bajo el SoT 0.03 → remaining = 0.02
+        daily_loss = Decimal("0.01")
         total_exposure = Decimal("0.6")
 
         risk_manager.update_metrics(daily_loss, total_exposure)
