@@ -27,6 +27,8 @@ from app.models.asset_limit import AssetLimit
 from app.models.performance_metrics import PerformanceMetrics
 from app.models.alerts import Alert
 from app.models.system_config import SystemConfig
+from app.models.backtest_run import BacktestRun  # noqa: F401
+from app.models.monte_carlo_run import MonteCarloRun  # noqa: F401
 
 target_metadata = Base.metadata
 
