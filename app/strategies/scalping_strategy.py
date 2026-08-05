@@ -396,6 +396,9 @@ class ScalpingStrategy(TradingStrategy):
     async def _place_buy_order(self, quantity: float, price: float) -> Optional[Order]:
         """Coloca una orden de compra"""
         try:
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="ScalpingStrategy._place_buy_order")
             order = binance_client.order_market_buy(
                 symbol=self.config.symbol, quantity=quantity
             )
@@ -419,6 +422,9 @@ class ScalpingStrategy(TradingStrategy):
     async def _place_sell_order(self, quantity: float, price: float) -> Optional[Order]:
         """Coloca una orden de venta"""
         try:
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="ScalpingStrategy._place_sell_order")
             order = binance_client.order_market_sell(
                 symbol=self.config.symbol, quantity=quantity
             )

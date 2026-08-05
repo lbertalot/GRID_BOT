@@ -291,6 +291,9 @@ class DCAStrategy(TradingStrategy):
     async def _place_buy_order(self, quantity: float, price: float) -> Optional[Order]:
         """Coloca una orden de compra"""
         try:
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="DCAStrategy._place_buy_order")
             # Crear orden de mercado
             order = binance_client.order_market_buy(
                 symbol=self.config.symbol, quantity=quantity
