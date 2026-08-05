@@ -86,10 +86,15 @@ services:
       - NOISY_MODULE_LOG_LEVEL=${NOISY_MODULE_LOG_LEVEL:-ERROR}
       - ACCESS_LOG=${ACCESS_LOG:-false}
       - DOCKER_ENV=true
+      # "api" es el host con el que Prometheus scrapea /metrics dentro de la red
+      # compose; sin él el TrustedHostMiddleware devuelve 400 y no hay métricas.
+      - TRUSTED_HOSTS=${TRUSTED_HOSTS:-localhost,127.0.0.1,api}
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
-      - PAPER_TRADING=${PAPER_TRADING:-false}
+      # Sin PAPER_TRADING definido el stack arranca en simulación: operar real
+      # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
+      - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
       - TRADING_ENABLED=${TRADING_ENABLED}
       - EMERGENCY_STOP=${EMERGENCY_STOP}
@@ -165,7 +170,9 @@ services:
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
       - WEBSOCKET_ADVANCED=true
-      - PAPER_TRADING=${PAPER_TRADING:-false}
+      # Sin PAPER_TRADING definido el stack arranca en simulación: operar real
+      # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
+      - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
       - TRADING_ENABLED=${TRADING_ENABLED}
       - EMERGENCY_STOP=${EMERGENCY_STOP}
@@ -228,7 +235,9 @@ services:
       - BINANCE_API_KEY=${BINANCE_API_KEY}
       - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-false}
-      - PAPER_TRADING=${PAPER_TRADING:-false}
+      # Sin PAPER_TRADING definido el stack arranca en simulación: operar real
+      # exige declararlo explícitamente (PAPER_TRADING=false) + gate humano.
+      - PAPER_TRADING=${PAPER_TRADING:-true}
       - FORCE_REAL_MODE=${FORCE_REAL_MODE:-}
       - TRADING_ENABLED=${TRADING_ENABLED}
       - EMERGENCY_STOP=${EMERGENCY_STOP}
