@@ -835,17 +835,35 @@ async def reconciliation_summary():
                 balances[asset] = total
 
         cash_usdt = float(balances.get("USDT", 0.0))
+        # Binance Earn LDUSDT ≈ USDT (no scrapear LDUSDTUSDT).
+        from app.services.binance_client_singleton import (
+            STABLECOIN_ASSETS,
+            binance_earn_underlying_asset,
+        )
+
+        for asset, qty in list(balances.items()):
+            underlying = binance_earn_underlying_asset(asset)
+            if underlying in STABLECOIN_ASSETS:
+                cash_usdt += float(qty)
+                balances.pop(asset, None)
+            elif asset in STABLECOIN_ASSETS and asset != "USDT":
+                cash_usdt += float(qty)
+                balances.pop(asset, None)
+
         portfolio_total = cash_usdt
         valued = 0
         unvalued = 0
 
         for asset, qty in balances.items():
-            if asset == "USDT":
+            if asset == "USDT" or asset in STABLECOIN_ASSETS:
                 continue
+
+            underlying = binance_earn_underlying_asset(asset)
+            price_asset = underlying if underlying else asset
 
             # ✅ FIX: Ejecutar get_symbol_price en thread separado
             price = await asyncio.to_thread(
-                client_singleton.get_symbol_price, f"{asset}USDT"
+                client_singleton.get_symbol_price, f"{price_asset}USDT"
             )
 
             if price and price > 0:
