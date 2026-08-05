@@ -39,6 +39,7 @@ from app.core.metrics import gridbot_spot_market_submit_path_total
 
 # Configurar logging optimizado
 from app.core.optimized_logging import setup_optimized_logging
+from app.core.secret_redaction import format_credential_for_log
 
 logger = setup_optimized_logging()
 
@@ -156,7 +157,8 @@ class OptimizedGridManager:
                 raise Exception("Cliente de Binance sin credenciales válidas")
 
             logger.info(
-                f"✅ Cliente Binance Singleton inicializado correctamente - API Key: {client.api_key[:10]}..."
+                "✅ Cliente Binance Singleton inicializado correctamente - "
+                f"{format_credential_for_log(client.api_key, label='api_key')}"
             )
 
             # Obtener información de cuenta para uso posterior
@@ -191,7 +193,8 @@ class OptimizedGridManager:
                 return {}
 
             logger.info(
-                f"✅ Cliente de Binance verificado - API Key: {self.client.api_key[:10]}..."
+                "✅ Cliente de Binance verificado - "
+                f"{format_credential_for_log(self.client.api_key, label='api_key')}"
             )
 
             logger.info("🔄 Obteniendo información de cuenta de Binance...")
