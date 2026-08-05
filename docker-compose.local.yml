@@ -74,6 +74,9 @@ x-app-env: &app-env
   # al sidecar) y el gate A1 no cierra contra el hash del desk.
   GRID_CONFIG_FILE: grid_config_paper_l0.json
   PAPER_TELEMETRY_DIR: /app/paper_telemetry
+  # B19 / ADR-008: ops ledger en volume nombrado (kill floor). Ver
+  # Docs/ops/ops-ledger-persistence.md
+  OPS_LEDGER_PATH: /var/lib/gridbot/ops/ops_ledger.json
 
 x-app-volumes: &app-volumes
   - ./app:/app/app
@@ -85,6 +88,8 @@ x-app-volumes: &app-volumes
   - ./logs:/app/logs
   - ./cache:/app/cache
   - ./data:/app/data
+  # Persistente ante recreate (contrato B19; no solo bind ./data).
+  - ops_ledger_data:/var/lib/gridbot/ops
   - ./monitoring_data:/app/monitoring_data
   - ./reports:/app/reports
   - ./secrets:/app/secrets:ro
@@ -480,6 +485,8 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  # B19: JSON ops ledger (OPS_LEDGER_PATH). Sobrevive `compose down` sin `-v`.
+  ops_ledger_data:
 
 networks:
   gridbot_network:

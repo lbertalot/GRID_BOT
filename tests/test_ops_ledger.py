@@ -21,9 +21,11 @@ from fastapi.testclient import TestClient
 from app.core.ops_ledger import (
     DEFAULT_OPS_ACCRUAL_START,
     DEFAULT_OPS_EXCLUDED_CATEGORIES,
+    DEFAULT_OPS_LEDGER_PATH,
     DEFAULT_OPS_MONTHLY_CAP_USD,
     DEFAULT_OPS_RESERVE_USD,
     OPS_CATEGORIES,
+    PERSISTENT_OPS_LEDGER_PATH,
     CategoryExcludedError,
     InvalidAmountError,
     InvalidCategoryError,
@@ -33,6 +35,7 @@ from app.core.ops_ledger import (
     OpsLedgerError,
     compute_tradable_capital,
     get_ops_ledger,
+    get_ops_ledger_path,
 )
 from app.main import app
 
@@ -128,6 +131,105 @@ def test_entry_is_persisted_across_instances(ledger, ledger_path):
     assert entries[0].category == "data"
     assert entries[0].amount_usd == Decimal("9.99")
     assert isinstance(entries[0].amount_usd, Decimal)
+
+
+
+def test_ops_ledger_survives_restart_same_path(tmp_path):
+    """B19: gasto → “restart” (nuevo store/proceso lógico) → saldo intacto.
+
+    Simula recreate de contenedor sobre volume nombrado: mismo path en disco,
+    nuevo JsonOpsLedgerStore / OpsLedger sin estado en memoria.
+    """
+    persist_dir = tmp_path / "var" / "lib" / "gridbot" / "ops"
+    ledger_path = persist_dir / "ops_ledger.json"
+
+    writer = OpsLedger(
+        store=JsonOpsLedgerStore(ledger_path),
+        reserve_usd=Decimal("100"),
+        monthly_cap_usd=Decimal("10"),
+        accrual_start=date(2026, 8, 5),
+    )
+    writer.add_entry(
+        date="2026-08-04",
+        category="vps",
+        amount_usd=Decimal("12.50"),
+        note="Hetzner CX22 — survival probe",
+    )
+    committed_before = writer.committed_usd(NOW)
+    burn_before = writer.burn_total()
+    remaining_before = writer.summary(NOW)["ops_reserve_remaining"]
+    del writer  # suelta referencias; el archivo en disco es la SoT
+
+    assert ledger_path.is_file()
+
+    after_restart = OpsLedger(
+        store=JsonOpsLedgerStore(ledger_path),
+        reserve_usd=Decimal("100"),
+        monthly_cap_usd=Decimal("10"),
+        accrual_start=date(2026, 8, 5),
+    )
+    assert after_restart.burn_total() == burn_before == Decimal("12.50")
+    assert after_restart.committed_usd(NOW) == committed_before
+    assert after_restart.summary(NOW)["ops_reserve_remaining"] == remaining_before
+    assert after_restart.tradable_capital(Decimal("1000"), NOW) == (
+        Decimal("1000") - committed_before
+    )
+    entries = after_restart.list_entries()
+    assert len(entries) == 1
+    assert entries[0].note == "Hetzner CX22 — survival probe"
+
+
+def test_ops_ledger_survives_subprocess_reopen(tmp_path):
+    """B19: el JSON sobrevive un proceso hijo que solo lee el path (reopen)."""
+    import json
+    import subprocess
+    import textwrap
+
+    ledger_path = tmp_path / "ops" / "ops_ledger.json"
+    writer = OpsLedger(
+        store=JsonOpsLedgerStore(ledger_path),
+        reserve_usd=Decimal("100"),
+        monthly_cap_usd=Decimal("10"),
+    )
+    writer.add_entry(
+        date="2026-08-04", category="data", amount_usd=Decimal("7.25"), note="probe"
+    )
+    expected_committed = str(writer.committed_usd(NOW))
+    del writer
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from datetime import date
+        from decimal import Decimal
+        sys.path.insert(0, {repo_root!r})
+        from app.core.ops_ledger import JsonOpsLedgerStore, OpsLedger
+        ledger = OpsLedger(
+            store=JsonOpsLedgerStore({str(ledger_path)!r}),
+            reserve_usd=Decimal("100"),
+            monthly_cap_usd=Decimal("10"),
+        )
+        print(ledger.burn_total())
+        print(ledger.committed_usd(date(2026, 8, 5)))
+        print(len(ledger.list_entries()))
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    burn_s, committed_s, count_s = result.stdout.strip().splitlines()
+    assert burn_s == "7.25"
+    assert committed_s == expected_committed
+    assert count_s == "1"
+    # Archivo versionado intacto en disco (schema ADR-008).
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["entries"][0]["amount_usd"] == "7.25"
 
 
 def test_add_entry_accepts_date_objects(ledger):
@@ -529,6 +631,18 @@ def test_string_amounts_are_accepted_as_decimal(ledger):
 
 
 # ─── Config por env ─────────────────────────────────────────────────────────
+
+
+def test_persistent_ops_ledger_path_constant():
+    """Compose monta ops_ledger_data en este path (B19); no cambiar sin sync YAML."""
+    assert PERSISTENT_OPS_LEDGER_PATH == "/var/lib/gridbot/ops/ops_ledger.json"
+    assert DEFAULT_OPS_LEDGER_PATH == "data/ops_ledger.json"
+
+
+def test_get_ops_ledger_path_prefers_env(monkeypatch, tmp_path):
+    target = tmp_path / "custom" / "ledger.json"
+    monkeypatch.setenv("OPS_LEDGER_PATH", str(target))
+    assert get_ops_ledger_path() == target
 
 
 def test_env_defaults(monkeypatch, tmp_path):
