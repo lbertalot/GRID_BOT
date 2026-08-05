@@ -1,12 +1,16 @@
 # GridBot Makefile — Comandos para desarrollo, testing y deployment
 # Uso: make [target]
 
-.PHONY: help validate validate-strict up down logs check-health cleanup \
+.PHONY: help validate validate-strict config-check paper-flags up down logs \
+        check-health smoke-paper smoke-paper-asgi cleanup \
         test test-unit test-integration db-reset db-seed format lint \
         build push docs
 
 PROJECT := grid_bot
 COMPOSE_FILE := docker-compose.local.yml
+# API_PORT permite apuntar el smoke a un stack levantado en puerto alternativo
+# (ver overrides de docker-compose.local.yml).
+API_PORT ?= 8000
 PYTHON := python3
 DOCKER := docker
 DOCKER_COMPOSE := docker compose
@@ -23,6 +27,13 @@ validate: ## Valida pre-startup (archivos, env, credenciales)
 	@$(PYTHON) scripts/validate_startup.py
 	@exit $$?
 
+config-check: ## Valida e imprime el compose local resuelto (sin levantar nada)
+	@$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) -p $(PROJECT) config
+
+paper-flags: ## Muestra las flags de trading efectivas del compose local
+	@$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) -p $(PROJECT) config \
+		| grep -E "PAPER_TRADING|FORCE_REAL_MODE|TRADING_ENABLED|EMERGENCY_STOP|BINANCE_TESTNET"
+
 validate-strict: validate ## Validación + quita volúmenes antes de startup
 	@echo "🗑️  Limpiando volúmenes anteriores..."
 	@$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) -p $(PROJECT) down -v
@@ -38,6 +49,7 @@ up: ## Levanta stack completo (usa validate primero)
 	@echo "⏳ Esperando a que servicios estén listos..."
 	@sleep 10
 	@$(MAKE) check-health
+	@$(MAKE) smoke-paper
 
 down: ## Detiene todos los servicios
 	@echo "⬇️  Parando GridBot..."
@@ -67,6 +79,14 @@ logs-redis: ## Logs de Redis
 check-health: ## Post-startup health checks (API, DB, Redis, Celery, Binance)
 	@echo "🏥 Ejecutando health checks post-startup..."
 	@$(PYTHON) scripts/health_check_startup.py
+	@exit $$?
+
+smoke-paper: ## Smoke paper contra API levantada (falla si effective_mode != paper)
+	@$(PYTHON) scripts/smoke_paper_mode.py --base-url http://localhost:$(API_PORT)
+	@exit $$?
+
+smoke-paper-asgi: ## Smoke paper en proceso, sin docker ni servidor
+	@$(PYTHON) scripts/smoke_paper_mode.py --asgi
 	@exit $$?
 
 check-health-continuous: ## Health checks en loop (cada 30s)
