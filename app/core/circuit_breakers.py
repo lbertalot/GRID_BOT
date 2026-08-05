@@ -1,14 +1,20 @@
 """
 Circuit Breakers - Módulo de Circuit Breakers Simplificado
 GridBot v2.5 - Componente de Integridad Integrado
+
+B1: ``get_shared_breakers()`` unifica instancias in-process.
+B5: store opcional (Redis) comparte trips/open state entre API y Celery.
 """
 
 import logging
 import time
-from typing import Dict, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.core.breaker_state_store import BreakerStateStore, BreakerTripRecord
 
 
 def _normalize_reason(reason: Optional[str]) -> str:
@@ -21,8 +27,9 @@ def _normalize_reason(reason: Optional[str]) -> str:
 class CircuitBreakers:
     """Clase simplificada de circuit breakers para componentes de integridad"""
 
-    def __init__(self):
+    def __init__(self, store: Optional["BreakerStateStore"] = None):
         self.logger = logger
+        self._store = store
         self.breakers = {
             "balance_discrepancy": {
                 "active": False,
@@ -50,6 +57,61 @@ class CircuitBreakers:
         except Exception:
             self._cooldown_seconds = 300  # 5 minutos
 
+        if self._store is not None:
+            self._hydrate_from_store()
+
+    def _record_for(self, breaker_type: str) -> "BreakerTripRecord":
+        from app.core.breaker_state_store import BreakerTripRecord
+
+        state = self.breakers[breaker_type]
+        return BreakerTripRecord(
+            active=bool(state["active"]),
+            activated_at=state.get("activated_at"),
+            reason=state.get("reason"),
+            last_activation_ts=float(self._last_activation_ts.get(breaker_type, 0.0)),
+            last_activation_reason=str(
+                self._last_activation_reason.get(breaker_type, "")
+            ),
+            activation_count=int(self._activation_count.get(breaker_type, 0)),
+        )
+
+    def _apply_record(self, breaker_type: str, record: "BreakerTripRecord") -> None:
+        if breaker_type not in self.breakers:
+            return
+        self.breakers[breaker_type]["active"] = bool(record.active)
+        self.breakers[breaker_type]["activated_at"] = record.activated_at
+        self.breakers[breaker_type]["reason"] = record.reason
+        self._last_activation_ts[breaker_type] = float(record.last_activation_ts or 0.0)
+        self._last_activation_reason[breaker_type] = str(
+            record.last_activation_reason or ""
+        )
+        self._activation_count[breaker_type] = int(record.activation_count or 0)
+
+    def _persist_breaker(self, breaker_type: str) -> None:
+        if self._store is None or breaker_type not in self.breakers:
+            return
+        try:
+            self._store.save_breaker(breaker_type, self._record_for(breaker_type))
+        except Exception as exc:  # noqa: BLE001 — never break trading path
+            self.logger.warning(
+                "No se pudo persistir breaker '%s' en store: %s", breaker_type, exc
+            )
+
+    def _hydrate_from_store(self) -> None:
+        if self._store is None:
+            return
+        try:
+            remote = self._store.load_all()
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning("No se pudo hidratar breakers desde store: %s", exc)
+            return
+        for name, record in remote.items():
+            self._apply_record(name, record)
+
+    def _refresh_from_store(self) -> None:
+        """Relee el store antes de consultas de estado (cross-process)."""
+        self._hydrate_from_store()
+
     async def activate_breaker(
         self,
         breaker_type: str,
@@ -74,6 +136,9 @@ class CircuitBreakers:
                     f"⚠️ Tipo de circuit breaker desconocido: {breaker_type}"
                 )
                 return False
+
+            # Cross-process: alinear cooldown/estado antes de decidir
+            self._refresh_from_store()
 
             # Edge-trigger: solo loggear/cambiar estado si pasa de inactivo a activo
             if not self.breakers[breaker_type]["active"]:
@@ -122,6 +187,7 @@ class CircuitBreakers:
                     )
                 except Exception:
                     pass
+                self._persist_breaker(breaker_type)
             return True
 
         except Exception as e:
@@ -139,6 +205,8 @@ class CircuitBreakers:
                 )
                 return False
 
+            self._refresh_from_store()
+
             self.breakers[breaker_type]["active"] = False
             self.breakers[breaker_type]["activated_at"] = None
             self.breakers[breaker_type]["reason"] = None
@@ -150,6 +218,7 @@ class CircuitBreakers:
                 breaker_state.labels(type=breaker_type).set(0)
             except Exception:
                 pass
+            self._persist_breaker(breaker_type)
             return True
 
         except Exception as e:
@@ -175,6 +244,7 @@ class CircuitBreakers:
             self.breakers["critical_mode"]["reason"] = (
                 "MODO CRÍTICO - TODOS LOS CIRCUIT BREAKERS ACTIVADOS"
             )
+            self._persist_breaker("critical_mode")
 
             self.logger.critical(
                 "🚨🚨🚨 MODO CRÍTICO ACTIVADO - TODOS LOS CIRCUIT BREAKERS ACTIVADOS 🚨🚨🚨"
@@ -202,21 +272,25 @@ class CircuitBreakers:
 
     def is_breaker_active(self, breaker_type: str) -> bool:
         """Verificar si un circuit breaker está activo"""
+        self._refresh_from_store()
         if breaker_type not in self.breakers:
             return False
         return self.breakers[breaker_type]["active"]
 
     def is_critical_mode_active(self) -> bool:
         """Verificar si el modo crítico está activo"""
+        self._refresh_from_store()
         return self.breakers["critical_mode"]["active"]
 
     def is_trading_halted(self) -> bool:
         """Verificar si el trading está detenido por circuit breakers"""
+        self._refresh_from_store()
         # Trading está detenido si hay cualquier circuit breaker activo
         return any(status["active"] for status in self.breakers.values())
 
     def get_breaker_status(self, breaker_type: str) -> Dict[str, Any]:
         """Obtener estado de un circuit breaker específico"""
+        self._refresh_from_store()
         if breaker_type not in self.breakers:
             return {"error": f"Tipo de circuit breaker desconocido: {breaker_type}"}
 
@@ -228,13 +302,15 @@ class CircuitBreakers:
 
     def get_last_activation_ts(self, breaker_type: str) -> float:
         """Timestamp unix de la última apertura (0.0 si nunca se abrió)."""
+        self._refresh_from_store()
         try:
             return float(self._last_activation_ts.get(breaker_type, 0.0))
         except Exception:
             return 0.0
 
     def get_activation_count(self, breaker_type: str) -> int:
-        """Cantidad de aperturas registradas para el breaker en este proceso."""
+        """Cantidad de aperturas registradas para el breaker (store-aware)."""
+        self._refresh_from_store()
         try:
             return int(self._activation_count.get(breaker_type, 0))
         except Exception:
@@ -242,8 +318,9 @@ class CircuitBreakers:
 
     def get_all_breakers_status(self) -> Dict[str, Any]:
         """Obtener estado de todos los circuit breakers"""
+        self._refresh_from_store()
         return {
-            "critical_mode": self.is_critical_mode_active(),
+            "critical_mode": self.breakers["critical_mode"]["active"],
             "active_breakers": [
                 name for name, status in self.breakers.items() if status["active"]
             ],
@@ -255,6 +332,7 @@ class CircuitBreakers:
 
     def get_breaker_summary(self) -> str:
         """Obtener resumen de circuit breakers en formato texto"""
+        self._refresh_from_store()
         active_count = sum(1 for status in self.breakers.values() if status["active"])
         total_count = len(self.breakers)
 
@@ -277,24 +355,36 @@ _shared_breakers: "CircuitBreakers | None" = None
 
 
 def get_shared_breakers() -> "CircuitBreakers":
-    """Única fuente de verdad in-process para breakers (API ↔ worker).
+    """Única fuente de verdad para breakers (API ↔ worker).
 
     B1: componentes (``AutoCircuitBreaker``, rutas ``/breakers``, tareas Celery,
     lifespan de FastAPI) deben usar esta instancia. Crear ``CircuitBreakers()``
     fresco deja el dashboard con ``any_open: false`` mientras hay trips reales
-    en otra instancia.
+    en otra instancia in-process.
 
-    Nota: el estado es por proceso; Redis cross-process queda fuera de este
-    slice (no hay patrón Redis de breakers hoy).
+    B5: el store (Redis por defecto si ``REDIS_URL`` responde; memoria si no)
+    comparte trips/open state entre procesos. Override: ``CB_SHARED_STORE``.
     """
     global _shared_breakers
     if _shared_breakers is None:
-        _shared_breakers = CircuitBreakers()
+        from app.core.breaker_state_store import build_breaker_state_store
+
+        _shared_breakers = CircuitBreakers(store=build_breaker_state_store())
     return _shared_breakers
 
 
 def reset_shared_breakers() -> "CircuitBreakers":
-    """Reemplaza el singleton (tests / reinicio controlado). Paper-safe."""
+    """Reemplaza el singleton (tests / reinicio controlado). Paper-safe.
+
+    Limpia el store activo para no filtrar trips entre tests.
+    """
     global _shared_breakers
-    _shared_breakers = CircuitBreakers()
+    from app.core.breaker_state_store import build_breaker_state_store
+
+    store = build_breaker_state_store()
+    try:
+        store.clear_all()
+    except Exception:
+        pass
+    _shared_breakers = CircuitBreakers(store=store)
     return _shared_breakers

@@ -14,6 +14,10 @@ _PROM_DIR = os.getenv("PROMETHEUS_MULTIPROC_DIR", "")
 if not _PROM_DIR or not os.path.isdir(_PROM_DIR):
     _PROM_TMP = tempfile.mkdtemp(prefix="prom_test_")
     os.environ["PROMETHEUS_MULTIPROC_DIR"] = _PROM_TMP
+
+# B5: tests no deben compartir trips vía Redis real ni depender de REDIS_URL.
+# Producción deja CB_SHARED_STORE=auto (Redis si ping OK).
+os.environ.setdefault("CB_SHARED_STORE", "memory")
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Asegurar que /app esté en PYTHONPATH antes de importar 'app'
