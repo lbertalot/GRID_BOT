@@ -593,6 +593,7 @@ class OptimizedGridManager:
                         action=action["action"],
                         quantity=quantity_to_use,
                         price=current_price,
+                        grid_level=action.get("level"),
                     )
 
                     if result:
@@ -727,6 +728,7 @@ class OptimizedGridManager:
                 action=action["action"],
                 quantity=quantity,
                 price=current_price,
+                grid_level=action.get("level"),
             )
 
             if result:
@@ -737,6 +739,53 @@ class OptimizedGridManager:
         except Exception as e:
             logger.error(f"Error ejecutando trading para {symbol}: {e}")
             return None
+
+    def _record_paper_fill(
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        price: float,
+        grid_level: Optional[int] = None,
+    ) -> bool:
+        """Asienta el fill paper en el ledger contable (S10).
+
+        Devuelve `True` si no había nada que asentar (modo real) o si el asiento
+        salió bien. `False` si el ledger rechazó la operación — típicamente cash
+        insuficiente o venta sin inventario: en paper eso significa que la orden no
+        debería haber existido, y contarla inflaría el equity.
+
+        La conversión `float → Decimal` vía `str()` ocurre acá, en el borde: adentro
+        del ledger todo es `Decimal` (regla 10-financial-integrity).
+        """
+        try:
+            from app.core.paper_equity_ledger import (
+                PaperLedgerError,
+                get_paper_ledger,
+                paper_equity_is_source_of_truth,
+                to_money,
+            )
+
+            if not paper_equity_is_source_of_truth():
+                return True
+
+            ledger = get_paper_ledger()
+            qty = to_money(str(quantity), field_name="quantity")
+            px = to_money(str(price), field_name="price")
+            try:
+                if action.upper() == "BUY":
+                    ledger.record_buy(symbol, qty, px, grid_level=grid_level)
+                else:
+                    ledger.record_sell(symbol, qty, px)
+            except PaperLedgerError as exc:
+                logger.warning(
+                    f"📄 Fill paper rechazado por el ledger ({symbol} {action}): {exc}"
+                )
+                return False
+            return True
+        except Exception as exc:
+            logger.error(f"❌ Error asentando fill paper en el ledger: {exc}")
+            return False
 
     async def _place_order(
         self, symbol: str, action: str, quantity: float
@@ -1037,7 +1086,12 @@ class OptimizedGridManager:
                     logger.error(f"❌ Error cerrando conexión BD: {close_error}")
 
     async def _execute_trade(
-        self, symbol: str, action: str, quantity: float, price: float
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        price: float,
+        grid_level: Optional[int] = None,
     ):
         """Execute a trade and return the result"""
         try:
@@ -1045,6 +1099,12 @@ class OptimizedGridManager:
             order = await self._place_order(symbol, action, quantity)
 
             if not order:
+                return None
+
+            # S10: en paper el ledger contable es la fuente de verdad del equity.
+            # Sin esto la orden simulada no deja rastro y la serie de equity queda
+            # plana (gap I-3/I-5). Si el ledger rechaza el fill, el trade no vale.
+            if not self._record_paper_fill(symbol, action, quantity, price, grid_level):
                 return None
 
             # Create trading result
