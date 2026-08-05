@@ -27,6 +27,7 @@ from app.core.capital_risk import (
     ACTION_REVIEW_OPS_BURN,
     BASIS_POOL,
     BASIS_TRADING,
+    OPS_ASSUMPTION_CEILING,
     CapitalRiskConfig,
     CapitalRiskInputError,
     CapitalRiskStatus,
@@ -73,7 +74,8 @@ def test_config_defaults_match_ceo_policy():
     assert cfg.kill_drawdown_pct == Decimal("0.25")
     assert cfg.daily_loss_limit_pct == Decimal("0.03")
     assert cfg.alert_drawdown_pct == Decimal("0.15")
-    assert cfg.ops_reserve_usd == Decimal("200")
+    # Amendment 01 (Decisión 3): techo de ops <= 100 con devengo mensual.
+    assert cfg.ops_reserve_usd == Decimal("100")
     assert isinstance(cfg.contributed_capital, Decimal)
 
 
@@ -497,31 +499,63 @@ def test_overspent_ops_is_flagged_and_clamped():
 # --------------------------------------------------------------------------- #
 
 
-def test_ops_defaults_to_env_reserve_and_is_flagged_as_assumed():
-    """Sin ledger (Track B no está en este branch) el status declara el supuesto."""
+def test_ops_defaults_to_ceiling_and_is_flagged_as_assumed():
+    """Sin ledger (Track B no está en este branch) el status declara el supuesto.
+
+    El fallback toma el **techo** de ops (Amendment 01: <= 100) como comprometido y
+    gastado, no el devengado real: es el mínimo `tradable_capital` posible.
+    """
     st = evaluate_capital_risk(equity=Decimal("800"))
-    assert st.ops_reserve_committed == Decimal("200.00")
-    assert st.ops_spent == Decimal("200.00")  # supuesto conservador: reserva gastada
+    assert st.ops_reserve_committed == Decimal("100.00")
+    assert st.ops_spent == Decimal("100.00")
     assert st.ops_assumed is True
+    assert st.ops_assumption == OPS_ASSUMPTION_CEILING
     assert st.ops_source == "env_default"
-    assert st.tradable_capital == Decimal("800.00")
+    assert st.tradable_capital == Decimal("900.00")
+    assert st.kill_floor_trading == Decimal("675.00")
+    assert any("techo" in reason.lower() for reason in st.reasons)
+
+
+def test_known_ops_has_no_assumption_and_no_reason():
+    st = evaluate_capital_risk(equity=Decimal("900"), ops=_ops("15", "15"))
+    assert st.ops_assumed is False
+    assert st.ops_assumption is None
+    assert st.reasons == []
+
+
+def test_monthly_accrual_raises_tradable_capital():
+    """Devengo mensual (~10-15) deja el kill floor mucho más cerca del aportado."""
+    st = evaluate_capital_risk(equity=Decimal("900"), ops=_ops("15", "15"))
+    assert st.tradable_capital == Decimal("985.00")
+    assert st.kill_floor_trading == Decimal("738.75")
 
 
 def test_resolve_ops_snapshot_from_env():
     snap = resolve_ops_snapshot(
-        env={"OPS_RESERVE_USD": "150", "OPS_SPENT_USD": "35.50"}, ledger=None
+        env={"OPS_RESERVE_USD": "100", "OPS_SPENT_USD": "12.50"}, ledger=None
     )
-    assert snap.reserve_committed == Decimal("150")
-    assert snap.spent == Decimal("35.50")
+    assert snap.reserve_committed == Decimal("100")
+    assert snap.spent == Decimal("12.50")
     assert snap.assumed is False
+    assert snap.assumption is None
     assert snap.source == "env"
 
 
-def test_resolve_ops_snapshot_assumes_reserve_spent_when_unknown():
-    snap = resolve_ops_snapshot(env={"OPS_RESERVE_USD": "150"}, ledger=None)
-    assert snap.reserve_committed == Decimal("150")
-    assert snap.spent == Decimal("150")
+def test_resolve_ops_snapshot_defaults_to_ops_ceiling():
+    snap = resolve_ops_snapshot(env={}, ledger=None)
+    assert snap.reserve_committed == Decimal("100")
+    assert snap.spent == Decimal("100")
     assert snap.assumed is True
+    assert snap.assumption == OPS_ASSUMPTION_CEILING
+    assert snap.source == "env_default"
+
+
+def test_resolve_ops_snapshot_assumes_reserve_spent_when_unknown():
+    snap = resolve_ops_snapshot(env={"OPS_RESERVE_USD": "60"}, ledger=None)
+    assert snap.reserve_committed == Decimal("60")
+    assert snap.spent == Decimal("60")
+    assert snap.assumed is True
+    assert snap.assumption == OPS_ASSUMPTION_CEILING
     assert snap.source == "env_default"
 
 
@@ -538,6 +572,7 @@ def test_resolve_ops_snapshot_uses_ledger_when_available():
     assert snap.reserve_committed == Decimal("60")
     assert snap.spent == Decimal("35.50")
     assert snap.assumed is False
+    assert snap.assumption is None
     assert snap.source == "ops_ledger"
 
 
@@ -546,9 +581,10 @@ def test_resolve_ops_snapshot_falls_back_when_ledger_breaks():
         def get_ops_snapshot(self):
             raise RuntimeError("ledger caído")
 
-    snap = resolve_ops_snapshot(env={"OPS_RESERVE_USD": "200"}, ledger=_BrokenLedger())
-    assert snap.reserve_committed == Decimal("200")
+    snap = resolve_ops_snapshot(env={}, ledger=_BrokenLedger())
+    assert snap.reserve_committed == Decimal("100")
     assert snap.assumed is True
+    assert snap.assumption == OPS_ASSUMPTION_CEILING
     assert snap.source == "env_default"
 
 
@@ -596,6 +632,7 @@ def test_status_is_json_serializable_and_has_no_secrets():
         "remaining": "0.00",
         "overspent": False,
         "assumed": False,
+        "assumption": None,
         "source": "test",
     }
     assert payload["thresholds"]["kill_drawdown_pct"] == "0.25"
@@ -819,6 +856,22 @@ def test_capital_status_endpoint_reports_ops_false_positive(monkeypatch):
     assert data["kill_driven_by_ops_burn"] is True
     assert data["bases"]["pool"]["kill_triggered"] is True
     assert data["daily_loss_pct"] is None
+
+
+def test_capital_status_endpoint_declares_ops_ceiling_assumption(monkeypatch):
+    """Mientras Track B no exponga el devengado, el payload declara el supuesto."""
+    monkeypatch.setenv("CAPITAL_RISK_EQUITY_USD", "900")
+    monkeypatch.delenv("OPS_RESERVE_USD", raising=False)
+    monkeypatch.delenv("OPS_SPENT_USD", raising=False)
+    monkeypatch.delenv("KILL_BASIS", raising=False)
+
+    _, client = _client()
+    data = client.get("/api/risk/capital-status").json()["data"]
+    assert data["tradable_capital"] == "900.00"
+    assert data["kill_floor"] == "675.00"
+    assert data["ops"]["assumed"] is True
+    assert data["ops"]["assumption"] == OPS_ASSUMPTION_CEILING
+    assert data["ops"]["reserve_committed"] == "100.00"
 
 
 def test_capital_status_endpoint_reports_kill(monkeypatch):
