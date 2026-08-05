@@ -386,6 +386,7 @@ from app.api.reconciliation_routes import router as reconciliation_router  # noq
 from app.api.breakers_routes import router as breakers_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
+from app.api.ceo_routes import router as ceo_router  # noqa: E402
 
 # /integrity/* requiere auth — estado interno de integridad financiera
 app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
@@ -395,6 +396,8 @@ app.include_router(reconciliation_router, dependencies=[Depends(_require_auth)])
 app.include_router(breakers_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
+# /api/ceo/* read-only — el router resuelve su propia auth (ver CEO_DASHBOARD_PUBLIC)
+app.include_router(ceo_router)
 
 
 # Endpoint directo para /api/positions (compatibilidad con auditoría)
