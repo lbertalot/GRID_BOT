@@ -50,6 +50,21 @@ breaker_state = Gauge(
     "breaker_state", "Estado de breaker (0 inactivo, 1 activo)", ["type"]
 )
 
+# Aperturas acumuladas por tipo de breaker (edge-trigger, no re-cuenta si ya está abierto)
+breaker_opens_total = Counter(
+    "breaker_opens_total", "Total de aperturas de circuit breaker por tipo", ["type"]
+)
+
+# Agregado para alerta única del operador: 1 si hay al menos un breaker abierto
+breaker_any_open = Gauge(
+    "breaker_any_open", "1 si al menos un circuit breaker está abierto, 0 si ninguno"
+)
+
+# Emergency stop efectivo (env EMERGENCY_STOP o modo crítico activo)
+emergency_stop_active = Gauge(
+    "emergency_stop_active", "1 si el emergency stop está activo, 0 si no"
+)
+
 # Scores de integridad por componente
 integrity_score = Gauge(
     "integrity_score", "Score de integridad (0-100) por componente", ["component"]
@@ -98,6 +113,18 @@ gridbot_orders_total = Counter(
     ["side", "asset", "strategy"],
 )
 
+gridbot_trade_executor_order_path_total = Counter(
+    "gridbot_trade_executor_order_path_total",
+    "TradeExecutor: órdenes por implementación (legacy singleton vs BrokerAdapter)",
+    ["path"],
+)
+
+gridbot_spot_market_submit_path_total = Counter(
+    "gridbot_spot_market_submit_path_total",
+    "MARKET spot: origen y capa (API trade vs grid manager × adapter vs cliente directo)",
+    ["source", "path"],
+)
+
 # Tasa de éxito de trades (0-1)
 trades_success_rate = Gauge(
     "trades_success_rate", "Tasa de éxito de trades (0-1)", ["strategy"]
@@ -127,6 +154,35 @@ trades_successful_total = Counter(
 
 trades_failed_total = Counter(
     "trades_failed_total", "Total de trades fallidos", ["asset", "strategy"]
+)
+
+gridbot_transaction_cost_audit_requests_total = Counter(
+    "gridbot_transaction_cost_audit_requests_total",
+    "Solicitudes al endpoint de auditoría after-cost (simulación / sizing)",
+    ["order_type"],
+)
+
+gridbot_backtest_run_persist_total = Counter(
+    "gridbot_backtest_run_persist_total",
+    "Intentos de persistir corridas de backtest (tablas backtest_runs / backtest_metrics)",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_run_persist_total = Counter(
+    "gridbot_monte_carlo_run_persist_total",
+    "Intentos de persistir estudios Monte Carlo drawdown (tabla monte_carlo_runs)",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_retention_prune_total = Counter(
+    "gridbot_monte_carlo_retention_prune_total",
+    "Ejecuciones de poda de retención monte_carlo_runs por símbolo",
+    ["outcome"],
+)
+
+gridbot_monte_carlo_retention_rows_deleted_total = Counter(
+    "gridbot_monte_carlo_retention_rows_deleted_total",
+    "Total de filas eliminadas por retención monte_carlo_runs (acumulado)",
 )
 
 # ============================================================================
@@ -238,6 +294,20 @@ ml_regime_fallback_total = Counter(
     "gridbot_ml_regime_fallback_total",
     "Veces que el ciclo usó fallback estático (RANGE) en lugar de ML",
     ["symbol", "reason"],
+)
+
+# TQS / Monte Carlo promotion gate (Fase C)
+ml_promotion_gate_blocks_total = Counter(
+    "gridbot_ml_promotion_gate_blocks_total",
+    "Veces que el gate TQS+MC bloqueó confiar en el régimen ML híbrido",
+    ["symbol", "reason"],
+)
+
+# Kelly fraccional escalado por sentimiento (Fase C residual, opt-in)
+gridbot_kelly_sentiment_scale_total = Counter(
+    "gridbot_kelly_sentiment_scale_total",
+    "Aplicaciones de escala Kelly por sentimiento en el ciclo de evaluación",
+    ["symbol", "band"],
 )
 
 # ============================================================================

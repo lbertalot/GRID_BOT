@@ -4,7 +4,14 @@ from typing import Literal, Optional, Dict, Any
 import os
 
 from app.core.auth import require_auth
+from app.schemas.transaction_cost_audit import (
+    TransactionCostAuditRequest,
+    TransactionCostAuditResponse,
+)
 from app.services.binance_service import BinanceService
+from app.services.transaction_cost_audit_service import (
+    run_transaction_cost_audit_for_api,
+)
 
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
@@ -58,3 +65,22 @@ def dry_run(
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error simulando orden: {e}")
+
+
+@router.post(
+    "/transaction-cost-audit",
+    response_model=TransactionCostAuditResponse,
+    summary="Auditoría after-cost (comisión + spread + slippage)",
+    description=(
+        "Calcula fricción total en quote (USDT) sobre un notional dado, alineado al "
+        "modelo `transaction_cost_model` y al backtest. Requiere auth; no ejecuta órdenes."
+    ),
+)
+def transaction_cost_audit(
+    body: TransactionCostAuditRequest = Body(...),
+    _api_key: str = Depends(require_auth),
+) -> TransactionCostAuditResponse:
+    try:
+        return run_transaction_cost_audit_for_api(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

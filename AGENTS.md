@@ -17,7 +17,7 @@ Este archivo acelera el onboarding de agentes y nuevos colaboradores. Resume có
 
 ### Estructura relevante
 - `app/api/`: routers/endpoints (FastAPI)
-- `app/services/`: lógica de negocio (validación, sizers, reconciliación, métricas, Binance, etc.)
+- `app/services/`: lógica de negocio (validación, sizers, reconciliación, métricas, Binance, etc.); multi-venue **Fase 0**: `app/services/broker_adapter/` (`BROKER_PRIMARY_VENUE`, `create_broker_adapter_from_env`)
 - `app/core/`: configuración, métricas, middleware, auth, circuit breakers, celery app
 - `app/models` y `app/schemas`: modelos de BD y Pydantic v2 para I/O
 - `docker/`: infra local (Prometheus, Grafana, Nginx, Postgres)
@@ -32,6 +32,7 @@ Este archivo acelera el onboarding de agentes y nuevos colaboradores. Resume có
 - Archivo `.env` (basado en `env.example` o `19092025.env`/`production.env` según tu flujo)
 
 Variables de entorno críticas: `BINANCE_API_KEY`, `BINANCE_SECRET_KEY`, `PAPER_TRADING`, `FORCE_REAL_MODE`, `TRADING_ENABLED`, `EMERGENCY_STOP`, `DATABASE_URL`, `REDIS_URL`.
+Opcional (Passive Income §8, contrato adapter): `BROKER_PRIMARY_VENUE` (`binance_spot` por defecto si omites; `byma`/`rofex` son stub hasta integración). Opt-in ejecución MARKET vía adapter: `USE_BROKER_ADAPTER=true` (requiere venue Binance spot).
 
 ---
 
@@ -61,8 +62,10 @@ docker compose -f docker-compose.local.yml up --build -d
 ```
 
 - API: `http://localhost:8000` · Flower: `5555` · Grafana: `3000` · Prometheus: `9090` · cAdvisor: `8081`
-- En `x-app-env` de compose local: **`PAPER_TRADING=true`** (simulación; no órdenes reales en Binance). Para real, cambiar explícitamente ese bloque y revisar `FORCE_REAL_MODE`.
+- En `x-app-env` de compose local: **`PAPER_TRADING=true`**, **`TRADING_ENABLED=false`** por defecto (arranque seguro; sin órdenes reales). Para encender el ciclo (aún en paper), definir `TRADING_ENABLED=true` en `.env` u override consciente. Para real, cambiar explícitamente ese bloque y revisar `FORCE_REAL_MODE` + `Docs/EGRESS_API_KEYS_RUNBOOK.md`.
+- **Checklist verificable (DoD Docker):** `Docs/DOCKER_LOCAL_DOD_CHECKLIST.md` (health, migrate, `pytest` contrato).
 - El stack local instala `requirements-ml.txt` en la imagen Docker; con `ML_ENABLED=true` en `.env`, `api` y `worker` usan `HybridMLEngine` (TensorFlow/Keras + River) y persisten el componente online en `ML_MODELS_DIR` (default `data/ml/hybrid`).
+- **Gate de promoción ML** (`ML_PROMOTION_GATE_*`): opcional en el ciclo; combina TQS mínimo, drawdown MC (bootstrap iid/block), reglas sobre backtest after-cost (JSON o última corrida en `backtest_runs`) y **veto NLP opcional** (`ML_PROMOTION_GATE_NLP_*`): score en Redis `gridbot:tqs_sentiment:{SYMBOL}` (sin tablas `sentiment_*`). Con `ML_PROMOTION_GATE_PERSIST_MC=true` se registra cada estudio MC en `monte_carlo_runs`. Ver `env.example` y `app/research/promotion_gate.py`.
 - Flower usa Basic Auth desde `FLOWER_BASIC_AUTH_*`; en desarrollo local se puede poner `FLOWER_DISABLE_AUTH=1` en `.env` para desactivar la autenticación.
 
 ### Uvicorn local (sin Docker)
@@ -310,6 +313,7 @@ pip-audit -r requirements.txt
 - Tipos/esquemas: `app/schemas/` y `app/models/`
 - Métricas/observabilidad: `app/core/metrics.py`, `app/core/middleware/`
 - Tareas asíncronas: `app/core/celery_app.py` y workers en `app/services/`/`workers/`
+- Abstracción venue (órdenes/balances): `app/services/broker_adapter/` — `TradeExecutor` puede usar `USE_BROKER_ADAPTER=true` para MARKET; rutas `/order` y grid clásico siguen con cliente directo hasta refactor.
 
 Consejo: evita lógica bloqueante en rutas; delega a Celery lo intensivo o de larga duración.
 

@@ -4,7 +4,7 @@ Following FastAPI best practices and .cursorrules
 """
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from decimal import Decimal, ROUND_DOWN, getcontext
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,9 +33,13 @@ from app.models.asset_limit import AssetLimit
 from app.services.strategy_manager import strategy_manager
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.commission_manager import commission_manager
+from app.services.broker_adapter import use_broker_adapter_for_trade_execution_from_env
+from app.services.broker_market_execution import place_spot_market_via_adapter
+from app.core.metrics import gridbot_spot_market_submit_path_total
 
 # Configurar logging optimizado
 from app.core.optimized_logging import setup_optimized_logging
+from app.core.secret_redaction import format_credential_for_log
 
 logger = setup_optimized_logging()
 
@@ -153,7 +157,8 @@ class OptimizedGridManager:
                 raise Exception("Cliente de Binance sin credenciales válidas")
 
             logger.info(
-                f"✅ Cliente Binance Singleton inicializado correctamente - API Key: {client.api_key[:10]}..."
+                "✅ Cliente Binance Singleton inicializado correctamente - "
+                f"{format_credential_for_log(client.api_key, label='api_key')}"
             )
 
             # Obtener información de cuenta para uso posterior
@@ -188,7 +193,8 @@ class OptimizedGridManager:
                 return {}
 
             logger.info(
-                f"✅ Cliente de Binance verificado - API Key: {self.client.api_key[:10]}..."
+                "✅ Cliente de Binance verificado - "
+                f"{format_credential_for_log(self.client.api_key, label='api_key')}"
             )
 
             logger.info("🔄 Obteniendo información de cuenta de Binance...")
@@ -590,6 +596,7 @@ class OptimizedGridManager:
                         action=action["action"],
                         quantity=quantity_to_use,
                         price=current_price,
+                        grid_level=action.get("level"),
                     )
 
                     if result:
@@ -724,6 +731,7 @@ class OptimizedGridManager:
                 action=action["action"],
                 quantity=quantity,
                 price=current_price,
+                grid_level=action.get("level"),
             )
 
             if result:
@@ -734,6 +742,53 @@ class OptimizedGridManager:
         except Exception as e:
             logger.error(f"Error ejecutando trading para {symbol}: {e}")
             return None
+
+    def _record_paper_fill(
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        price: float,
+        grid_level: Optional[int] = None,
+    ) -> bool:
+        """Asienta el fill paper en el ledger contable (S10).
+
+        Devuelve `True` si no había nada que asentar (modo real) o si el asiento
+        salió bien. `False` si el ledger rechazó la operación — típicamente cash
+        insuficiente o venta sin inventario: en paper eso significa que la orden no
+        debería haber existido, y contarla inflaría el equity.
+
+        La conversión `float → Decimal` vía `str()` ocurre acá, en el borde: adentro
+        del ledger todo es `Decimal` (regla 10-financial-integrity).
+        """
+        try:
+            from app.core.paper_equity_ledger import (
+                PaperLedgerError,
+                get_paper_ledger,
+                paper_equity_is_source_of_truth,
+                to_money,
+            )
+
+            if not paper_equity_is_source_of_truth():
+                return True
+
+            ledger = get_paper_ledger()
+            qty = to_money(str(quantity), field_name="quantity")
+            px = to_money(str(price), field_name="price")
+            try:
+                if action.upper() == "BUY":
+                    ledger.record_buy(symbol, qty, px, grid_level=grid_level)
+                else:
+                    ledger.record_sell(symbol, qty, px)
+            except PaperLedgerError as exc:
+                logger.warning(
+                    f"📄 Fill paper rechazado por el ledger ({symbol} {action}): {exc}"
+                )
+                return False
+            return True
+        except Exception as exc:
+            logger.error(f"❌ Error asentando fill paper en el ledger: {exc}")
+            return False
 
     async def _place_order(
         self, symbol: str, action: str, quantity: float
@@ -849,10 +904,10 @@ class OptimizedGridManager:
                     f"💰 Creando orden real en Binance: {action} {qty_str} {symbol}"
                 )
 
-                # Ejecutar llamada bloqueante en hilo para no bloquear el loop
+                action_u = action.upper()
+
                 def _create_order():
-                    # Fallback para BUY con quoteOrderQty (evita problemas de cantidad en BTC)
-                    if action.upper() == "BUY":
+                    if action_u == "BUY":
                         try:
                             price_now = (
                                 float(current_price)
@@ -874,7 +929,37 @@ class OptimizedGridManager:
                         symbol=symbol, side=action, type="MARKET", quantity=qty_str
                     )
 
-                order = await asyncio.to_thread(_create_order)
+                used_broker_adapter = False
+                order: Optional[Dict[str, Any]] = None
+                if (
+                    action_u == "SELL"
+                    and use_broker_adapter_for_trade_execution_from_env()
+                ):
+                    try:
+                        order = await place_spot_market_via_adapter(
+                            symbol=symbol,
+                            side=action_u,
+                            quantity_base=float(qty_str),
+                            client_order_id=None,
+                            recv_window_ms=10_000,
+                            binance_wrapper=self.async_binance,
+                        )
+                        used_broker_adapter = True
+                    except Exception as adapter_err:
+                        if "-1021" not in str(adapter_err):
+                            raise
+                        logger.warning(
+                            "BrokerAdapter -1021 en grid SELL; fallback cliente sync: %s",
+                            adapter_err,
+                        )
+
+                if order is None:
+                    order = await asyncio.to_thread(_create_order)
+
+                path = "broker_adapter" if used_broker_adapter else "binance_client"
+                gridbot_spot_market_submit_path_total.labels(
+                    source="grid_manager", path=path
+                ).inc()
 
                 # Agregar información de comisión al resultado
                 order["commission_info"] = {
@@ -1004,7 +1089,12 @@ class OptimizedGridManager:
                     logger.error(f"❌ Error cerrando conexión BD: {close_error}")
 
     async def _execute_trade(
-        self, symbol: str, action: str, quantity: float, price: float
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        price: float,
+        grid_level: Optional[int] = None,
     ):
         """Execute a trade and return the result"""
         try:
@@ -1012,6 +1102,12 @@ class OptimizedGridManager:
             order = await self._place_order(symbol, action, quantity)
 
             if not order:
+                return None
+
+            # S10: en paper el ledger contable es la fuente de verdad del equity.
+            # Sin esto la orden simulada no deja rastro y la serie de equity queda
+            # plana (gap I-3/I-5). Si el ledger rechaza el fill, el trade no vale.
+            if not self._record_paper_fill(symbol, action, quantity, price, grid_level):
                 return None
 
             # Create trading result
