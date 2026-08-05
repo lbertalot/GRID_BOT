@@ -808,3 +808,26 @@ pipeline_errors_total = Counter(
     "Total de errores por etapa y tipo",
     ["stage", "error_type"],
 )
+
+# ============================================================================
+# OPS RESERVE / CAP (ADR-008 / B20)
+# ============================================================================
+
+# 1 si burn MTD > OPS_MONTHLY_CAP_USD; 0 en caso contrario.
+ops_monthly_cap_exceeded = Gauge(
+    "ops_monthly_cap_exceeded",
+    "1 si el burn MTD de ops supera el cap mensual (ADR-008)",
+)
+
+# 1 si projected_annual_burn > OPS_RESERVE_USD; 0 en caso contrario.
+ops_reserve_exhausted_projection = Gauge(
+    "ops_reserve_exhausted_projection",
+    "1 si la proyección anual de burn supera la reserva de ops (ADR-008 #4)",
+)
+
+# Edge-trigger: solo se incrementa al pasar de False→True (una vez por transición).
+ops_cap_alerts_fired_total = Counter(
+    "ops_cap_alerts_fired_total",
+    "Transiciones a alerta de ops (cap excedido / reserva proyectada agotada)",
+    ["kind"],
+)

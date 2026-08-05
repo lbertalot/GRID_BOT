@@ -640,6 +640,14 @@ def get_ops_summary() -> Dict[str, Any]:
     """Facade para el adaptador CEO (`app.core.ceo_overview` / ADR-005)."""
     from datetime import datetime, timezone
 
-    payload = serialize_summary(get_ops_ledger().summary())
+    summary = get_ops_ledger().summary()
+    # B20: refresca gauges / Telegram cuando el CEO overview consulta ops.
+    try:
+        from app.core.ops_cap_alerts import emit_ops_cap_alerts
+
+        emit_ops_cap_alerts(summary)
+    except Exception:
+        pass
+    payload = serialize_summary(summary)
     payload.setdefault("as_of", datetime.now(timezone.utc).isoformat())
     return payload
