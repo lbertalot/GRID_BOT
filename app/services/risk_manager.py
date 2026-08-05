@@ -289,6 +289,9 @@ class RiskManager:
                 return False
 
             # Crear orden de venta de mercado
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="RiskManager.execute_stop_loss")
             order = binance_client.create_order(
                 symbol=f"{symbol}USDT",
                 side="SELL",
