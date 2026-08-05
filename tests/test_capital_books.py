@@ -19,9 +19,12 @@ import pytest
 
 from app.core.capital_books import (
     KNOWN_BOOK_IDS,
-    L0_OPS_RESERVE_CAP_USD,
-    OPS_LEDGER_GETTER,
+    L0_OPS_RESERVE_TOTAL_USD,
+    OPS_LEDGER_COMMITTED_METHOD,
+    OPS_LEDGER_FACTORY,
     OPS_LEDGER_MODULE,
+    OPS_LEDGER_TOTAL_ATTR,
+    OPS_LEDGER_TRADABLE_FN,
     CapitalBooksConfigError,
     get_books_snapshot,
     get_consolidated_equity,
@@ -36,7 +39,7 @@ SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private")
 def _raw_config(
     *,
     contributed="1000",
-    ops_reserve_cap="100",
+    ops_reserve_total="100",
     allocations=(("core_grid", "70"), ("sat_systematic", "20"), ("sat_signals", "10")),
     live_enabled=("core_grid",),
     manual_pnl=None,
@@ -51,7 +54,7 @@ def _raw_config(
     return {
         "version": 2,
         "contributed_capital_usd": contributed,
-        "ops_reserve_cap_usd": ops_reserve_cap,
+        "ops_reserve_total_usd": ops_reserve_total,
         "books": [
             {
                 "book_id": book_id,
@@ -79,20 +82,51 @@ def _clean_capital_env(monkeypatch):
 
 
 @pytest.fixture
-def fake_ops_ledger(monkeypatch):
-    """Simula el módulo del Track B sin acoplarnos a su implementación."""
+def no_ops_ledger(monkeypatch):
+    """Simula que el módulo del Track B todavía no existe.
 
-    def _install(value, raises=False):
+    Explícito a propósito: cuando #36 mergee, `app.core.ops_ledger` va a existir de
+    verdad y estos tests seguirían pasando por accidente (o fallando) según la rama.
+    """
+    monkeypatch.setitem(sys.modules, OPS_LEDGER_MODULE, None)
+
+
+@pytest.fixture
+def fake_ops_ledger(monkeypatch):
+    """Doble del módulo del Track B (PR #36) con su contrato público real.
+
+    `get_ops_ledger()` → objeto con `committed_usd()` y `reserve_total_usd`, más el
+    helper puro `compute_tradable_capital(contributed, committed)`.
+    """
+    calls = {"compute_tradable_capital": []}
+
+    def _install(committed, total="100", raises=False):
         module = types.ModuleType(OPS_LEDGER_MODULE)
 
-        def _getter():
-            if raises:
-                raise RuntimeError("ops ledger caído")
-            return value
+        class _Ledger:
+            @property
+            def reserve_total_usd(self):
+                return total
 
-        setattr(module, OPS_LEDGER_GETTER, _getter)
+            def committed_usd(self, now=None):
+                if raises:
+                    raise RuntimeError("ops ledger caído")
+                return committed
+
+        def _compute_tradable_capital(contributed_capital, ops_reserve_committed):
+            calls["compute_tradable_capital"].append(
+                (contributed_capital, ops_reserve_committed)
+            )
+            return Decimal(str(contributed_capital)) - Decimal(
+                str(ops_reserve_committed)
+            )
+
+        setattr(module, OPS_LEDGER_FACTORY, _Ledger)
+        setattr(module, OPS_LEDGER_TRADABLE_FN, _compute_tradable_capital)
+        assert hasattr(_Ledger(), OPS_LEDGER_COMMITTED_METHOD)
+        assert hasattr(_Ledger(), OPS_LEDGER_TOTAL_ATTR)
         monkeypatch.setitem(sys.modules, OPS_LEDGER_MODULE, module)
-        return module
+        return calls
 
     return _install
 
@@ -159,7 +193,7 @@ def test_negative_allocation_is_rejected():
 
 def test_caps_derived_from_tradable_floor_not_contributed():
     config = parse_capital_books_config(
-        _raw_config(contributed="1000", ops_reserve_cap="100")
+        _raw_config(contributed="1000", ops_reserve_total="100")
     )
     assert config.tradable_capital_floor_usd == Decimal("900.00")
     books = _books_by_id(get_books_snapshot(config=config))
@@ -170,23 +204,23 @@ def test_caps_derived_from_tradable_floor_not_contributed():
 
 def test_default_versioned_config_uses_the_amended_ops_ceiling():
     config = load_capital_books_config()
-    assert config.ops_reserve_cap_usd == Decimal("100.00")
+    assert config.ops_reserve_total_usd == Decimal("100.00")
     assert config.tradable_capital_floor_usd == Decimal("900.00")
 
 
-def test_ops_reserve_cap_above_l0_policy_is_rejected():
+def test_ops_reserve_total_above_l0_policy_is_rejected():
     # El techo viejo (150–250) ya no es válido: CEO Amendment 01 lo bajó a 100.
     with pytest.raises(CapitalBooksConfigError) as exc:
-        parse_capital_books_config(_raw_config(ops_reserve_cap="200"))
+        parse_capital_books_config(_raw_config(ops_reserve_total="200"))
     message = str(exc.value)
-    assert str(L0_OPS_RESERVE_CAP_USD) in message
+    assert str(L0_OPS_RESERVE_TOTAL_USD) in message
     assert "Amendment" in message
 
 
 def test_caps_never_exceed_the_tradable_floor():
     # Piso 900.05: fuerza redondeo y verifica que ROUND_DOWN nunca sobre-asigna.
     config = parse_capital_books_config(
-        _raw_config(contributed="1000.05", ops_reserve_cap="100")
+        _raw_config(contributed="1000.05", ops_reserve_total="100")
     )
     snapshot = get_books_snapshot(config=config)
     caps = {book["book_id"]: book["notional_cap_usd"] for book in snapshot["books"]}
@@ -259,12 +293,50 @@ def test_tradable_capital_follows_committed_ops(committed, tradable):
     assert totals["consolidated_equity"] == Decimal(tradable)
 
 
+def test_go_live_scenario_2026_09_15(fake_ops_ledger):
+    """Escenario del contrato de Track B: committed 15 ⇒ tradable 985, caps intactos."""
+    fake_ops_ledger(Decimal("15.00"), total=Decimal("100.00"))
+    snapshot = get_books_snapshot()
+    totals = snapshot["totals"]
+    assert totals["ops_reserve_total"] == Decimal("100.00")
+    assert totals["ops_reserve_committed"] == Decimal("15.00")
+    assert totals["tradable_capital"] == Decimal("985.00")
+    assert totals["tradable_capital_floor"] == Decimal("900.00")
+    assert totals["consolidated_equity"] == Decimal("985.00")
+    caps = {book["book_id"]: book["notional_cap_usd"] for book in snapshot["books"]}
+    assert caps == {
+        "core_grid": Decimal("630.00"),
+        "sat_systematic": Decimal("180.00"),
+        "sat_signals": Decimal("90.00"),
+    }
+
+
 def test_committed_ops_is_read_from_ops_ledger_when_available(fake_ops_ledger):
     fake_ops_ledger(Decimal("22.50"))
     snapshot = get_books_snapshot()
     assert snapshot["ops_reserve_committed_source"] == "ops_ledger"
+    assert snapshot["ops_reserve_total_source"] == "ops_ledger"
     assert snapshot["totals"]["ops_reserve_committed"] == Decimal("22.50")
     assert snapshot["totals"]["tradable_capital"] == Decimal("977.50")
+
+
+def test_tradable_capital_uses_track_b_helper(fake_ops_ledger):
+    """Un solo contrato para el tradable: no derivamos el número por nuestra cuenta."""
+    calls = fake_ops_ledger(Decimal("15.00"))
+    get_books_snapshot()
+    assert calls["compute_tradable_capital"] == [(Decimal("1000.00"), Decimal("15.00"))]
+
+
+def test_ops_ledger_total_drives_the_caps_over_the_local_config(fake_ops_ledger):
+    """Si ops sube su techo, los caps bajan: nunca dimensionamos contra plata de ops."""
+    fake_ops_ledger(Decimal("0.00"), total=Decimal("150.00"))
+    snapshot = get_books_snapshot()
+    assert snapshot["totals"]["ops_reserve_total"] == Decimal("150.00")
+    assert snapshot["totals"]["tradable_capital_floor"] == Decimal("850.00")
+    caps = {book["book_id"]: book["notional_cap_usd"] for book in snapshot["books"]}
+    assert caps["core_grid"] == Decimal("595.00")
+    assert caps["sat_systematic"] == Decimal("170.00")
+    assert caps["sat_signals"] == Decimal("85.00")
 
 
 def test_ops_ledger_wins_over_env(monkeypatch, fake_ops_ledger):
@@ -275,14 +347,15 @@ def test_ops_ledger_wins_over_env(monkeypatch, fake_ops_ledger):
     assert snapshot["totals"]["ops_reserve_committed"] == Decimal("25.00")
 
 
-def test_env_is_used_when_ops_ledger_is_absent(monkeypatch):
+def test_env_is_used_when_ops_ledger_is_absent(monkeypatch, no_ops_ledger):
     monkeypatch.setenv("OPS_RESERVE_COMMITTED_USD", "12.50")
     snapshot = get_books_snapshot()
     assert snapshot["ops_reserve_committed_source"] == "env"
+    assert snapshot["ops_reserve_total_source"] == "config"
     assert snapshot["totals"]["ops_reserve_committed"] == Decimal("12.50")
 
 
-def test_default_committed_is_zero_and_flagged_as_default():
+def test_default_committed_is_zero_and_flagged_as_default(no_ops_ledger):
     snapshot = get_books_snapshot()
     assert snapshot["ops_reserve_committed_source"] == "default"
     assert snapshot["totals"]["ops_reserve_committed"] == Decimal("0.00")
@@ -294,6 +367,9 @@ def test_broken_ops_ledger_degrades_honestly(fake_ops_ledger):
     # No mentimos con un número viejo ni tumbamos la lectura de books.
     assert snapshot["ops_reserve_committed_source"] == "unavailable"
     assert snapshot["totals"]["ops_reserve_committed"] == Decimal("0.00")
+    # El techo sigue siendo legible desde la config versionada.
+    assert snapshot["totals"]["ops_reserve_total"] == Decimal("100.00")
+    assert snapshot["totals"]["tradable_capital_floor"] == Decimal("900.00")
 
 
 def test_ops_ledger_returning_float_is_not_trusted(fake_ops_ledger):
@@ -319,7 +395,7 @@ def test_impossible_committed_ops_is_rejected(committed):
     assert "ops_reserve_committed" in str(exc.value)
 
 
-def test_invalid_committed_env_is_rejected(monkeypatch):
+def test_invalid_committed_env_is_rejected(monkeypatch, no_ops_ledger):
     monkeypatch.setenv("OPS_RESERVE_COMMITTED_USD", "veinte")
     with pytest.raises(CapitalBooksConfigError) as exc:
         get_books_snapshot()
@@ -495,7 +571,7 @@ def test_serialized_snapshot_uses_strings_for_money():
     payload = serialize_books_snapshot(get_books_snapshot(ops_reserve_committed="15"))
     assert payload["totals"]["tradable_capital"] == "985.00"
     assert payload["totals"]["tradable_capital_floor"] == "900.00"
-    assert payload["totals"]["ops_reserve_cap"] == "100.00"
+    assert payload["totals"]["ops_reserve_total"] == "100.00"
     assert payload["totals"]["ops_reserve_committed"] == "15.00"
     core = payload["books"][0]
     assert core["book_id"] == "core_grid"
@@ -537,6 +613,7 @@ def test_books_endpoint_contract(api_client):
         "paper_books",
         "pnl_note",
         "notional_cap_policy",
+        "ops_reserve_total_source",
         "ops_reserve_committed_source",
         "ops_reserve_over_cap",
         "capital_note",
@@ -562,7 +639,7 @@ def test_books_endpoint_contract(api_client):
 
     for key in (
         "contributed_capital",
-        "ops_reserve_cap",
+        "ops_reserve_total",
         "ops_reserve_committed",
         "tradable_capital",
         "tradable_capital_floor",
