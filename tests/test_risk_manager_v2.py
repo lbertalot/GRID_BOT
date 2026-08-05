@@ -2,6 +2,8 @@
 Tests unitarios para el RiskManager evolucionado V2.5.
 """
 
+from decimal import Decimal
+
 import pytest
 
 from app.core.risk_manager import (
@@ -26,11 +28,11 @@ class TestRiskManager:
         """Fixture para parámetros de posición de prueba."""
         return PositionSizeParams(
             symbol="BTCUSDT",
-            account_equity=10000.0,
-            atr=0.02,
-            winrate_estimate=0.6,
-            avg_win_loss_ratio=1.5,
-            price=50000.0,
+            account_equity=Decimal("10000"),
+            atr=Decimal("0.02"),
+            winrate_estimate=Decimal("0.6"),
+            avg_win_loss_ratio=Decimal("1.5"),
+            price=Decimal("50000"),
         )
 
     @pytest.fixture
@@ -38,17 +40,17 @@ class TestRiskManager:
         """Fixture para parámetros de trailing stop de prueba."""
         return TrailingStopParams(
             symbol="BTCUSDT",
-            entry_price=50000.0,
-            atr=1000.0,
-            multiplier_atr=2.0,
+            entry_price=Decimal("50000"),
+            atr=Decimal("1000"),
+            multiplier_atr=Decimal("2.0"),
             is_long=True,
         )
 
     def test_risk_manager_initialization(self, risk_manager):
         """Test de inicialización del RiskManager."""
-        assert risk_manager.fractional_kelly == 0.25
-        assert risk_manager.min_kelly_confidence == 0.6
-        assert risk_manager.default_multiplier_atr == 2.0
+        assert risk_manager.fractional_kelly == Decimal("0.25")
+        assert risk_manager.min_kelly_confidence == Decimal("0.6")
+        assert risk_manager.default_multiplier_atr == Decimal("2.0")
         assert risk_manager.emergency_stop is False
         assert risk_manager.breaker_state == BreakerState.NORMAL
         assert risk_manager.max_total_exposure_pct == 0.80
@@ -59,75 +61,61 @@ class TestRiskManager:
         self, risk_manager, mock_position_params
     ):
         """Test de cálculo de tamaño de posición usando Kelly fraccional."""
-        # Configurar parámetros para Kelly
-        mock_position_params.winrate_estimate = 0.7
-        mock_position_params.avg_win_loss_ratio = 2.0
+        mock_position_params.winrate_estimate = Decimal("0.7")
+        mock_position_params.avg_win_loss_ratio = Decimal("2.0")
 
         position_size = risk_manager.calculate_dynamic_position_size(
             mock_position_params
         )
 
-        # Verificar que se calculó un tamaño de posición
         assert position_size > 0
-        assert (
-            position_size <= mock_position_params.account_equity * 0.8
-        )  # Límite de equity
+        assert position_size <= mock_position_params.account_equity * Decimal("0.8")
 
     def test_calculate_dynamic_position_size_atr_fallback(
         self, risk_manager, mock_position_params
     ):
         """Test de cálculo de tamaño de posición usando fallback ATR."""
-        # Configurar parámetros para fallback ATR
-        mock_position_params.winrate_estimate = 0.4  # Bajo winrate
-        mock_position_params.avg_win_loss_ratio = 0.8  # Bajo ratio
+        mock_position_params.winrate_estimate = Decimal("0.4")
+        mock_position_params.avg_win_loss_ratio = Decimal("0.8")
 
         position_size = risk_manager.calculate_dynamic_position_size(
             mock_position_params
         )
 
-        # Verificar que se calculó un tamaño de posición
         assert position_size > 0
-        assert position_size <= mock_position_params.account_equity * 0.8
+        assert position_size <= mock_position_params.account_equity * Decimal("0.8")
 
     def test_calculate_kelly_position_size(self, risk_manager, mock_position_params):
         """Test de cálculo específico de Kelly."""
-        # Kelly formula: f = W - (1-W)/R
-        # W = 0.6, R = 1.5
-        # f = 0.6 - (1-0.6)/1.5 = 0.6 - 0.4/1.5 = 0.6 - 0.267 = 0.333
-        # Fractional Kelly = 0.333 * 0.25 = 0.08325
-        # Position size = 0.08325 * 10000 = 832.5
-
         kelly_size = risk_manager._calculate_kelly_position_size(mock_position_params)
 
-        expected_kelly_fraction = 0.6 - ((1 - 0.6) / 1.5)
-        expected_fractional_kelly = expected_kelly_fraction * 0.25
-        expected_size = expected_fractional_kelly * 10000
+        expected_kelly_fraction = Decimal("0.6") - (
+            (Decimal("1") - Decimal("0.6")) / Decimal("1.5")
+        )
+        expected_fractional_kelly = (
+            expected_kelly_fraction * risk_manager.fractional_kelly
+        )
+        expected_size = expected_fractional_kelly * Decimal("10000")
 
-        assert abs(kelly_size - expected_size) < 1.0  # Tolerancia de 1 USDT
+        assert abs(kelly_size - expected_size) < Decimal("1")
 
     def test_calculate_atr_position_size(self, risk_manager, mock_position_params):
         """Test de cálculo específico de ATR."""
         atr_size = risk_manager._calculate_atr_position_size(mock_position_params)
 
-        # Verificar que se calculó un tamaño basado en ATR
         assert atr_size > 0
-        assert atr_size <= mock_position_params.account_equity * 0.8
+        assert atr_size <= mock_position_params.account_equity * Decimal("0.8")
 
     def test_apply_position_limits(self, risk_manager, mock_position_params):
         """Test de aplicación de límites de posición."""
-        original_size = 5000.0  # 50% del equity
+        original_size = Decimal("5000")
 
         limited_size = risk_manager._apply_position_limits(
             original_size, mock_position_params
         )
 
-        # Verificar que se aplicaron los límites
-        assert (
-            limited_size <= mock_position_params.account_equity * 0.2
-        )  # Límite por símbolo
-        assert (
-            limited_size <= mock_position_params.account_equity * 0.8
-        )  # Límite por equity
+        assert limited_size <= mock_position_params.account_equity * Decimal("0.2")
+        assert limited_size <= mock_position_params.account_equity * Decimal("0.8")
 
     def test_get_adaptive_trailing_stop_long(self, risk_manager, mock_trailing_params):
         """Test de trailing stop para posición larga."""
@@ -266,14 +254,14 @@ class TestRiskManager:
 
     def test_update_metrics(self, risk_manager):
         """Test de actualización de métricas."""
-        daily_loss = 0.03  # 3%
-        total_exposure = 0.6  # 60%
+        daily_loss = Decimal("0.03")
+        total_exposure = Decimal("0.6")
 
         risk_manager.update_metrics(daily_loss, total_exposure)
 
         assert risk_manager.daily_loss == daily_loss
         assert risk_manager.total_exposure == total_exposure
-        assert risk_manager.max_loss_remaining == 0.02  # 5% - 3% = 2%
+        assert risk_manager.max_loss_remaining == Decimal("0.02")
 
     def test_trigger_emergency_stop(self, risk_manager):
         """Test de activación de stop de emergencia."""
@@ -302,9 +290,11 @@ class TestRiskManager:
             assert regime in risk_manager.regime_multipliers
 
         # Verificar valores específicos
-        assert risk_manager.regime_multipliers[MarketRegime.CRASH_IMMINENT] == 0.5
-        assert risk_manager.regime_multipliers[MarketRegime.BULL_TREND] == 1.0
-        assert risk_manager.regime_multipliers[MarketRegime.RANGE] == 1.0
+        assert risk_manager.regime_multipliers[MarketRegime.CRASH_IMMINENT] == Decimal(
+            "0.5"
+        )
+        assert risk_manager.regime_multipliers[MarketRegime.BULL_TREND] == Decimal("1.0")
+        assert risk_manager.regime_multipliers[MarketRegime.RANGE] == Decimal("1.0")
 
     def test_position_size_with_regime_filter(self, risk_manager, mock_position_params):
         """Test de tamaño de posición con filtro de régimen."""

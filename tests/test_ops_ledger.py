@@ -65,7 +65,7 @@ def ledger(ledger_path):
 
 def test_amended_defaults():
     assert DEFAULT_OPS_RESERVE_USD == Decimal("100")
-    assert DEFAULT_OPS_MONTHLY_CAP_USD == Decimal("15")
+    assert DEFAULT_OPS_MONTHLY_CAP_USD == Decimal("10")  # CEO Acta 02
     assert DEFAULT_OPS_ACCRUAL_START == date(2026, 8, 5)
     assert DEFAULT_OPS_EXCLUDED_CATEGORIES == ("llm",)
 
@@ -540,8 +540,8 @@ def test_env_defaults(monkeypatch, tmp_path):
 
     summary = get_ops_ledger().summary(NOW)
     assert summary["ops_reserve_total"] == Decimal("100.00")
-    assert summary["monthly_cap"] == Decimal("15.00")
-    assert summary["ops_monthly_accrual"] == Decimal("15.00")
+    assert summary["monthly_cap"] == Decimal("10.00")
+    assert summary["ops_monthly_accrual"] == Decimal("10.00")
     assert summary["ops_accrual_start"] == date(2026, 8, 5)
     assert summary["excluded_categories"] == ("llm",)
 
@@ -636,8 +636,8 @@ def test_get_summary_contract(api_client):
     assert set(body) == SUMMARY_KEYS
     # Dinero como string decimal de 2 posiciones: el dashboard no debe ver floats
     assert body["ops_reserve_total"] == "100.00"
-    assert body["monthly_cap"] == "15.00"
-    assert body["ops_monthly_accrual"] == "15.00"
+    assert body["monthly_cap"] == "10.00"
+    assert body["ops_monthly_accrual"] == "10.00"
     assert body["ops_burn_mtd"] == "0.00"
     assert body["ops_reserve_remaining"] == "100.00"
     assert body["projected_annual_burn"] == "0.00"

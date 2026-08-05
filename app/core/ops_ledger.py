@@ -47,7 +47,7 @@ OPS_CATEGORIES: tuple[str, ...] = ("vps", "data", "llm", "other")
 
 # Post CEO-01 (Decisión 3): ops al mínimo durante L0.
 DEFAULT_OPS_RESERVE_USD = Decimal("100")
-DEFAULT_OPS_MONTHLY_CAP_USD = Decimal("15")
+DEFAULT_OPS_MONTHLY_CAP_USD = Decimal("10")  # CEO Acta 02: cap 10; pico mes malo 12 (policy)
 # Fecha del All Hands que arrancó el programa: mes 0 del devengo.
 DEFAULT_OPS_ACCRUAL_START = date_type(2026, 8, 5)
 # LLM pago no consume presupuesto hasta que el Core demuestre PnL.
@@ -634,3 +634,12 @@ def _serialize_value(value: Any) -> Any:
 def serialize_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     """Serializa el summary para HTTP: dinero como string, nunca float."""
     return {key: _serialize_value(value) for key, value in summary.items()}
+
+
+def get_ops_summary() -> Dict[str, Any]:
+    """Facade para el adaptador CEO (`app.core.ceo_overview` / ADR-005)."""
+    from datetime import datetime, timezone
+
+    payload = serialize_summary(get_ops_ledger().summary())
+    payload.setdefault("as_of", datetime.now(timezone.utc).isoformat())
+    return payload

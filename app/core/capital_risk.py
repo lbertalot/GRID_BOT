@@ -920,6 +920,32 @@ def resolve_ops_snapshot(
     )
 
 
+def get_capital_status() -> Dict[str, Any]:
+    """Facade para el adaptador CEO (`app.core.ceo_overview` / ADR-005).
+
+    Reusa el mismo path que `GET /api/risk/capital-status` y añade aliases que
+    el overview espera (`equity_reconciled`, `risk_state`, `as_of`).
+    """
+    config = CapitalRiskConfig.from_env()
+    equity_snapshot = resolve_equity_snapshot()
+    if equity_snapshot.equity is None:
+        raise CapitalRiskInputError(
+            "equity_unavailable: sin equity paper/env reconciliado"
+        )
+    status = evaluate_capital_risk(
+        equity=equity_snapshot.equity,
+        equity_prev_eod=equity_snapshot.equity_prev_eod,
+        config=config,
+        ops=resolve_ops_snapshot(),
+        equity_source=equity_snapshot.source,
+    )
+    payload = status.to_dict()
+    payload["equity_reconciled"] = payload["equity"]
+    payload["risk_state"] = payload["severity"]
+    payload["as_of"] = payload["evaluated_at"]
+    return payload
+
+
 __all__ = [
     "ACTION_ALERT_DRAWDOWN",
     "ACTION_DAILY_FLAT",
@@ -945,6 +971,7 @@ __all__ = [
     "daily_loss_pct",
     "dd_vs_contributed",
     "evaluate_capital_risk",
+    "get_capital_status",
     "kill_floor",
     "resolve_equity_snapshot",
     "resolve_ops_snapshot",

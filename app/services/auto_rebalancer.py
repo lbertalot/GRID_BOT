@@ -379,6 +379,9 @@ class AutoRebalancer:
             )
 
             # Ejecutar orden de compra con quoteOrderQty cumpliendo MIN_NOTIONAL
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="AutoRebalancer.buy")
             order = self.binance_client.create_order(
                 symbol=symbol, side="BUY", type="MARKET", quoteOrderQty=usdt_amount
             )

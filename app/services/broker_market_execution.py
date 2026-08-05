@@ -29,6 +29,9 @@ async def place_spot_market_via_adapter(
     side_u = side.upper()
     if side_u not in ("BUY", "SELL"):
         raise ValueError(f"Lado inválido para MARKET: {side!r}")
+    from app.core.order_execution_guard import assert_real_order_allowed
+
+    assert_real_order_allowed(context="place_spot_market_via_adapter")
     adapter = create_broker_adapter_from_env(binance_wrapper=binance_wrapper)
     req = BrokerMarketOrderRequest(
         symbol_code=symbol.upper(),

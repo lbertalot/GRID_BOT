@@ -647,3 +647,10 @@ def serialize_books_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
         "capital_note": snapshot["capital_note"],
         "pnl_note": snapshot["pnl_note"],
     }
+
+
+def get_books() -> Dict[str, Any]:
+    """Facade para el adaptador CEO (`app.core.ceo_overview` / ADR-005)."""
+    payload = serialize_books_snapshot(get_books_snapshot())
+    payload["as_of"] = payload.get("generated_at")
+    return payload

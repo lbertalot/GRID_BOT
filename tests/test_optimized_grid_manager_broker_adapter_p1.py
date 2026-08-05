@@ -10,6 +10,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _arm_real_order_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _allow(*, context: str = ""):
+        return {"effective_mode": "real_armed", "context": context}
+
+    import app.core.order_execution_guard as guard
+
+    monkeypatch.setattr(guard, "assert_real_order_allowed", _allow)
+
+
 def _reload_grid_manager():
     """
     ``tests/conftest.py`` sustituye globalmente ``_place_order`` por un fake

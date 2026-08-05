@@ -212,6 +212,9 @@ class AsyncBinanceWrapper:
 
         async def _call():
             def _do():
+                from app.core.order_execution_guard import assert_real_order_allowed
+
+                assert_real_order_allowed(context="AsyncBinanceWrapper.create_order")
                 params: dict[str, Any] = {
                     "symbol": symbol.upper(),
                     "side": side.upper(),

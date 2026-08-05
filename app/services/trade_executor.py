@@ -138,6 +138,10 @@ class TradeExecutor:
             Exception si la orden falla
         """
         try:
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(context="TradeExecutor.execute_trade")
+
             # ── GUARD DE SEGURIDAD: verificar Circuit Breakers antes de enviar ──
             # Si cualquier breaker está activo, rechazar la orden inmediatamente.
             # Esto es la última línea de defensa antes de Binance.

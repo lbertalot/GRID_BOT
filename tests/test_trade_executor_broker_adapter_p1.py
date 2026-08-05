@@ -12,6 +12,28 @@ from app.services.broker_adapter.types import BrokerMarketOrderRequest, BrokerOr
 from app.services.trade_executor import TradeExecutor
 
 
+@pytest.fixture(autouse=True)
+def _arm_real_order_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Estos tests ejercitan el path de orden real con mocks; el guard S-GATE
+    exige real_armed — lo bypasseamos aquí (no es un test del gate)."""
+
+    def _allow(*, context: str = ""):
+        return {"effective_mode": "real_armed", "context": context}
+
+    monkeypatch.setattr(
+        "app.core.order_execution_guard.assert_real_order_allowed", _allow
+    )
+    monkeypatch.setattr(
+        "app.services.trade_executor.assert_real_order_allowed",
+        _allow,
+        raising=False,
+    )
+    # Import path used inline inside execute_trade
+    import app.core.order_execution_guard as guard
+
+    monkeypatch.setattr(guard, "assert_real_order_allowed", _allow)
+
+
 def _filled() -> Dict[str, Any]:
     return {
         "orderId": 99,
