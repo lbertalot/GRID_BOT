@@ -21,6 +21,12 @@ ENV/
 # Directorio de secretos (claves Ed25519 Binance, etc.)
 secrets/
 
+# Gates live firmados (ADR-007): artefacto de operación, no de código.
+# Solo la plantilla no firmada se versiona.
+Docs/gates/LIVE_GATE_*.md
+Docs/gates/LIVE_GATE_*.json
+!Docs/gates/LIVE_GATE_TEMPLATE.md
+
 # Docker
 *.log
 docker-compose.override.yml
