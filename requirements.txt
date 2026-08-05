@@ -1,6 +1,8 @@
 # FastAPI y servidor web
-fastapi==0.128.8
-starlette==1.3.1
+# fastapi>=0.135 declara starlette>=0.46 sin tope <1.0; 0.128.x choca con starlette 1.x
+# (Dependabot PR #45). starlette>=1.3.1 parchea CVE-2026-54283 / GHSA-82w8-qh3p-5jfq.
+fastapi==0.141.1
+starlette==1.4.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.31
 
@@ -50,11 +52,14 @@ tenacity==8.2.3
 #               opentelemetry-instrumentation-sqlalchemy \
 #               opentelemetry-instrumentation-requests \
 #               opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-sdk==1.24.0
-opentelemetry-instrumentation-fastapi==0.45b0
-opentelemetry-instrumentation-sqlalchemy==0.45b0
-opentelemetry-instrumentation-requests==0.45b0
-opentelemetry-exporter-otlp-proto-grpc==1.24.0
+# 1.44 / 0.65b0: compatible con fastapi 0.141 + starlette 1.x (_IncludedRouter)
+# y permite protobuf>=5 (cierra PYSEC-2026-1805 vs otel-proto 1.24 que pinneaba <5).
+opentelemetry-sdk==1.44.0
+opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-instrumentation-sqlalchemy==0.65b0
+opentelemetry-instrumentation-requests==0.65b0
+opentelemetry-exporter-otlp-proto-grpc==1.44.0
+protobuf==5.29.6
 
 # Validación de datos
 pydantic==2.11.9

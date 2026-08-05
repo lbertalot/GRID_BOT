@@ -1,5 +1,7 @@
 import os
 import sys
+from decimal import Decimal
+
 import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -17,8 +19,8 @@ def test_ml_prediction_to_regime_prediction_label_zero():
     rp = ml_prediction_to_regime_prediction(MLRegimePrediction(label=0, proba=0.3))
     assert rp.long_regime == MarketRegime.RANGE
     assert rp.short_regime == MarketRegime.RANGE
-    assert rp.long_conf == 0.3
-    assert rp.short_conf == 0.3
+    assert rp.long_conf == Decimal("0.3")
+    assert rp.short_conf == Decimal("0.3")
 
 
 def test_ml_prediction_to_regime_prediction_label_one():
@@ -26,15 +28,15 @@ def test_ml_prediction_to_regime_prediction_label_one():
     rp = ml_prediction_to_regime_prediction(MLRegimePrediction(label=1, proba=0.85))
     assert rp.long_regime == MarketRegime.BULL_TREND
     assert rp.short_regime == MarketRegime.BULL_TREND
-    assert rp.long_conf == 0.85
-    assert rp.short_conf == 0.85
+    assert rp.long_conf == Decimal("0.85")
+    assert rp.short_conf == Decimal("0.85")
 
 
 def test_ml_prediction_to_regime_prediction_clamps_confidence():
     """proba fuera de [0,1] se trunca."""
     rp = ml_prediction_to_regime_prediction(MLRegimePrediction(label=0, proba=1.5))
-    assert rp.long_conf == 1.0
-    assert rp.short_conf == 1.0
+    assert rp.long_conf == Decimal("1.0")
+    assert rp.short_conf == Decimal("1.0")
 
 
 @pytest.mark.asyncio
