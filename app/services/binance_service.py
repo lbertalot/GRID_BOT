@@ -440,6 +440,11 @@ class BinanceService:
             )
             return self._simulate_order(symbol, side, order_type, quantity, price)
 
+        # S-GATE: order_market_*/limit_* no pasan por singleton.create_order
+        from app.core.order_execution_guard import assert_real_order_allowed
+
+        assert_real_order_allowed(context="BinanceService.execute_trading_order")
+
         try:
             start_time = time.time()
 

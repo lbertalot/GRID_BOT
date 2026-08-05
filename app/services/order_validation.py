@@ -248,6 +248,13 @@ class OrderValidator:
     ) -> Dict[str, Any]:
         """Coloca una orden de mercado con validación previa completa"""
         try:
+            # S-GATE: order_market_* bypasea BinanceClientSingleton.create_order
+            from app.core.order_execution_guard import assert_real_order_allowed
+
+            assert_real_order_allowed(
+                context="OrderValidator.place_market_order_with_validation"
+            )
+
             # Validar parámetros
             validation = self.validate_order_parameters(
                 symbol, quantity, side, "MARKET"

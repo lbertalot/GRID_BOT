@@ -11,6 +11,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.api import trade as trade_module
 
+# Path feliz con mocks de exchange: armar S-GATE sin desactivar el guard en prod.
+pytestmark = pytest.mark.usefixtures("allow_real_orders_unit")
+
 
 def _filled() -> Dict[str, Any]:
     return {

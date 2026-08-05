@@ -271,7 +271,7 @@ def test_validate_excepcion_devuelve_invalid(validator):
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_place_market_order_buy_exitoso(validator):
+def test_place_market_order_buy_exitoso(validator, allow_real_orders_unit):
     v, client = validator
     client.order_market_buy.return_value = {"orderId": 1, "status": "FILLED"}
     res = v.place_market_order_with_validation("BTCUSDT", "BUY", 0.001)
@@ -280,7 +280,7 @@ def test_place_market_order_buy_exitoso(validator):
     client.order_market_buy.assert_called_once()
 
 
-def test_place_market_order_sell_exitoso(validator):
+def test_place_market_order_sell_exitoso(validator, allow_real_orders_unit):
     v, client = validator
     client.order_market_sell.return_value = {"orderId": 2, "status": "FILLED"}
     res = v.place_market_order_with_validation("BTCUSDT", "SELL", 0.001)
@@ -288,13 +288,15 @@ def test_place_market_order_sell_exitoso(validator):
     client.order_market_sell.assert_called_once()
 
 
-def test_place_market_order_lado_invalido(validator):
+def test_place_market_order_lado_invalido(validator, allow_real_orders_unit):
     v, _ = validator
     with pytest.raises(ValueError, match="Lado de orden inválido"):
         v.place_market_order_with_validation("BTCUSDT", "HOLD", 0.001)
 
 
-def test_place_market_order_validacion_falla_no_envia_orden(validator):
+def test_place_market_order_validacion_falla_no_envia_orden(
+    validator, allow_real_orders_unit
+):
     """Si la validación falla, NO se debe llamar a Binance."""
     v, client = validator
     with pytest.raises(ValueError, match="Parámetros de orden inválidos"):
@@ -302,12 +304,28 @@ def test_place_market_order_validacion_falla_no_envia_orden(validator):
     client.order_market_buy.assert_not_called()
 
 
-def test_place_market_order_binance_error_se_formatea(validator):
+def test_place_market_order_binance_error_se_formatea(validator, allow_real_orders_unit):
     v, client = validator
     err = _FakeBinanceError(code=-1111, message="LOT_SIZE precision")
     client.order_market_buy.side_effect = err
     with pytest.raises(ValueError, match="Precisión"):
         v.place_market_order_with_validation("BTCUSDT", "BUY", 0.001)
+
+
+def test_place_market_order_bloqueado_sin_real_armed(validator, monkeypatch):
+    """S-GATE post-47: order_market_* no puede saltarse assert_real_order_allowed."""
+    from app.core.order_execution_guard import RealOrderBlocked
+
+    monkeypatch.setenv("PAPER_TRADING", "true")
+    monkeypatch.setenv("FORCE_REAL_MODE", "false")
+    monkeypatch.setenv("TRADING_ENABLED", "false")
+    monkeypatch.setenv("EMERGENCY_STOP", "false")
+
+    v, client = validator
+    with pytest.raises(RealOrderBlocked):
+        v.place_market_order_with_validation("BTCUSDT", "BUY", 0.001)
+    client.order_market_buy.assert_not_called()
+    client.order_market_sell.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────────
