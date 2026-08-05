@@ -166,7 +166,7 @@ Razones / owner gaps: ________
 Firmas: Desk Lead ________  Market Maker ________
 ```
 
-**Estado de referencia (S-TICK 2026-08-05):** camino prep **GO condicional**; **`L0_DAY0_WINDOW_GO` = NO-GO** hasta cerrar freeze `--write`, hash runtime, tick válido y cierre diario. Este AC no cambia ese hecho: solo fija qué debe cumplir producto cuando se pida el GO.
+**Estado de referencia (S-TICK 2026-08-05T20:50Z / C3):** freeze A1 **GO**; primer tick MtM **GO** (sample `PaperEquitySeries` + ledger con `config_hash` freeze, `deployed_capital=200`, fees/slippage presentes). **`L0_DAY0_WINDOW_GO` = NO-GO** — faltan cierre diario 00:00 UTC (`E_0` / `daily_close_at`) y firma dual Desk Lead + MM (B5/B10). Sin claim de edge ni `PROMOTE_LIVE`. Este AC no cambia ese hecho: fija qué debe cumplir producto cuando se pida el GO.
 
 ---
 
@@ -201,3 +201,4 @@ Firmas: Desk Lead ________  Market Maker ________
 | Fecha | Cambio | Autor |
 |-------|--------|-------|
 | 2026-08-05 | C4 — AC producto día 0: UX paper, CEO cards honestas, checklist L0_DAY0_WINDOW_GO, non-goals sizing/PROMOTE_LIVE/edge | trading-product-expert |
+| 2026-08-05T20:50Z | C3 — estado ref.: tick MtM GO; `L0_DAY0_WINDOW_GO` sigue NO-GO (cierre diario + firmas) | trading-backend-tdd |
