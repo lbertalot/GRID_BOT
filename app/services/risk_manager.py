@@ -17,6 +17,7 @@ binance_client = _client_singleton.client if _client_singleton.is_ready() else N
 from app.services.telegram_alert import send_telegram_alert
 from app.db.session import SessionLocal
 from app.services.risk_metrics_engine import risk_metrics_engine
+from app.core.capital_risk import daily_loss_limit_fraction
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class RiskManager:
 
     def __init__(self):
         # Configuración de límites de riesgo
-        self.max_daily_loss_percentage = 0.05  # 5%
+        self.max_daily_loss_percentage = float(daily_loss_limit_fraction())  # SoT ADR-003 / B3
         self.max_position_size_percentage = 0.20  # 20%
         self.max_total_exposure_percentage = 0.80  # 80%
         self.stop_loss_percentage = 0.10  # 10%

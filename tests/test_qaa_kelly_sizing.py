@@ -435,16 +435,16 @@ class TestRiskStatus:
             assert key in status, f"Clave '{key}' faltante en risk_status"
 
     def test_max_loss_remaining_correct(self):
-        """max_loss_remaining debe ser 5% - daily_loss."""
+        """max_loss_remaining debe ser SoT (3%) - daily_loss."""
         rm = RiskManager()
-        rm.update_metrics(daily_loss=0.03, total_exposure=0.5)
-        expected = max(Decimal("0"), Decimal("0.05") - Decimal("0.03")).quantize(
+        rm.update_metrics(daily_loss=0.01, total_exposure=0.5)
+        expected = max(Decimal("0"), Decimal("0.03") - Decimal("0.01")).quantize(
             Decimal("0.01")
         )
         assert rm.max_loss_remaining == expected
 
     def test_max_loss_remaining_zero_when_exceeded(self):
-        """max_loss_remaining debe ser 0 cuando daily_loss >= 5%."""
+        """max_loss_remaining debe ser 0 cuando daily_loss >= SoT 3%."""
         rm = RiskManager()
         rm.update_metrics(daily_loss=0.07, total_exposure=0.5)
         assert rm.max_loss_remaining == Decimal("0")

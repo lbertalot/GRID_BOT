@@ -29,7 +29,7 @@
 **Regla**: El sizing con Kelly fraccional DEBE estar limitado por:
 - `cap_symbol_pct` (default 20% por símbolo)
 - `cap_equity_pct` (default 80% del equity)
-- `cap_daily_loss_pct` (default 5% pérdida diaria)
+- `cap_daily_loss_pct` (default 3% pérdida diaria — SoT ADR-003 / B3)
 - Multiplicador de régimen de mercado (0.5 a 1.0)
 **Verificado en**: `app/core/risk_manager.py` → `_apply_position_limits()`.
 

@@ -254,7 +254,7 @@ class TestRiskManagerBreaker:
         assert state == BreakerState.STOPPED
 
     def test_daily_loss_triggers_danger(self, risk_manager):
-        """Pérdida diaria > 5% debe activar DANGER."""
+        """Pérdida diaria > SoT 3% debe activar DANGER."""
         risk_manager.update_metrics(daily_loss=0.06, total_exposure=0.5)
         state = risk_manager.check_circuit_breaker()
         assert state == BreakerState.DANGER

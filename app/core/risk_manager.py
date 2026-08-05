@@ -13,6 +13,11 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from prometheus_client import Gauge, Counter
 
+from app.core.capital_risk import (
+    DEFAULT_DAILY_LOSS_LIMIT_PCT,
+    daily_loss_limit_fraction,
+)
+
 
 # Métricas Prometheus
 KELLY_FRACTION_USED = Gauge(
@@ -76,7 +81,7 @@ class PositionSizeParams:
     risk_per_trade_pct: Decimal = Decimal("0.02")  # 2% por trade
     cap_symbol_pct: Decimal = Decimal("0.20")  # Máximo 20% por símbolo
     cap_equity_pct: Decimal = Decimal("0.80")  # Máximo 80% del equity
-    cap_daily_loss_pct: Decimal = Decimal("0.05")  # Máximo 5% pérdida diaria
+    cap_daily_loss_pct: Decimal = Decimal(DEFAULT_DAILY_LOSS_LIMIT_PCT)  # SoT ADR-003 / B3
 
 
 @dataclass
@@ -397,8 +402,9 @@ class RiskManager:
             CIRCUIT_BREAKER_TRIGGERED.labels(reason="emergency_stop").inc()
             return self.breaker_state
 
-        # Verificar pérdida diaria
-        if self.daily_loss > Decimal("0.05"):  # 5%
+        # Verificar pérdida diaria (SoT: capital_risk.daily_loss_limit_fraction)
+        daily_limit = daily_loss_limit_fraction()
+        if self.daily_loss > daily_limit:
             self.breaker_state = BreakerState.DANGER
             CIRCUIT_BREAKER_TRIGGERED.labels(reason="daily_loss_limit").inc()
             return self.breaker_state
@@ -457,8 +463,8 @@ class RiskManager:
         self.daily_loss = daily_loss
         self.total_exposure = total_exposure
         
-        # Evitar errores de flotante
-        limit = Decimal("0.05")
+        # Evitar errores de flotante — límite = SoT ADR-003 / B3
+        limit = daily_loss_limit_fraction()
         self.max_loss_remaining = max(Decimal("0.0"), limit - daily_loss)
 
         # Actualizar métricas Prometheus (convertir a float)
