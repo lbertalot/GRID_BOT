@@ -41,6 +41,9 @@ DEFAULT_CONTRIBUTED_CAPITAL_USD = "1000"
 DEFAULT_KILL_DRAWDOWN_PCT = "0.25"
 DEFAULT_DAILY_LOSS_LIMIT_PCT = "0.03"
 DEFAULT_ALERT_DRAWDOWN_PCT = "0.15"
+# Magnitud positiva del límite diario (ADR-003 / desk −3%). Otros módulos
+# (breakers, RiskManager, unified_config) DEBEN derivar de `daily_loss_limit_fraction`
+# — no hardcodear 0.05 (blocker B3).
 # Amendment 01 (Decisión 3): techo de ops <= USD 100 con devengo mensual (~10-15/mes).
 DEFAULT_OPS_RESERVE_USD = "100"
 # Marca del supuesto usado cuando no hay ops ledger: se toma el techo como
@@ -146,6 +149,23 @@ def _env_value(source: Mapping[str, str], name: str, default: str) -> str:
     return str(raw).strip()
 
 
+
+def daily_loss_limit_fraction(
+    source: Optional[Mapping[str, str]] = None,
+) -> Decimal:
+    """SoT del daily loss: magnitud positiva (default 0.03 = −3%).
+
+    Lee `DAILY_LOSS_LIMIT_PCT` o cae a `DEFAULT_DAILY_LOSS_LIMIT_PCT`.
+    Path de enforcement: `evaluate_capital_risk` → `ACTION_DAILY_FLAT`.
+    """
+    env: Mapping[str, str] = os.environ if source is None else source
+    raw = _env_value(env, "DAILY_LOSS_LIMIT_PCT", DEFAULT_DAILY_LOSS_LIMIT_PCT)
+    return _require_fraction(
+        _to_decimal(raw, "DAILY_LOSS_LIMIT_PCT"),
+        "DAILY_LOSS_LIMIT_PCT",
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Config
 # --------------------------------------------------------------------------- #
@@ -205,15 +225,7 @@ class CapitalRiskConfig:
                 ),
                 "KILL_DRAWDOWN_PCT",
             ),
-            daily_loss_limit_pct=_require_fraction(
-                _to_decimal(
-                    _env_value(
-                        source, "DAILY_LOSS_LIMIT_PCT", DEFAULT_DAILY_LOSS_LIMIT_PCT
-                    ),
-                    "DAILY_LOSS_LIMIT_PCT",
-                ),
-                "DAILY_LOSS_LIMIT_PCT",
-            ),
+            daily_loss_limit_pct=daily_loss_limit_fraction(source),
             alert_drawdown_pct=_require_fraction(
                 _to_decimal(
                     _env_value(

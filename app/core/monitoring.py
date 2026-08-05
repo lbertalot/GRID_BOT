@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Dict
 from dataclasses import dataclass, asdict
 
+from app.core.capital_risk import daily_loss_limit_fraction
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +46,7 @@ class MonitoringSystem:
             "last_update": datetime.now().isoformat(),
         }
         self.thresholds = {
-            "max_daily_loss": 0.05,  # 5% máximo pérdida diaria
+            "max_daily_loss": float(daily_loss_limit_fraction()),  # SoT ADR-003 / B3
             "max_hourly_loss": 0.03,  # 3% máximo pérdida por hora
             "max_consecutive_losses": 3,  # Máximo 3 pérdidas consecutivas
             "min_balance": 50.0,  # Balance mínimo en USDT
