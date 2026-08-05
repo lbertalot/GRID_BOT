@@ -29,7 +29,7 @@ Parámetros MM (sin reset de ventana — **no se tocan**): spacing **100 bps**, 
 | B2 freeze A1 | PASS | hash `630abf63…` · `PAPER_FROZEN` |
 | B3 params 200 / 100 bps | PASS | intactos |
 | B4 ≥1 tick válido (T1–T10) | PASS parcial | tick MtM OK; sin fills aún (fees/slip=0 coherentes) |
-| **B5 cierre diario 00:00 UTC ±30 min / `E_0`** | **FAIL** | `daily_close_at=null` en sample C3 |
+| **B5 cierre diario 00:00 UTC ±30 min / `E_0`** | **FAIL** (path Opción B listo) | samples aún `daily_close_at=null`; script §8 — ventana 23:30–00:30Z |
 | B10 acta Desk Lead + MM | FAIL | sin firma dual día 0 |
 | B11 sin claim edge / PROMOTE_LIVE | PASS | este log no emite edge ni live |
 
@@ -228,7 +228,7 @@ Alineado a [`DAY0_ACCEPTANCE.md`](product/DAY0_ACCEPTANCE.md) §3 (B1–B11).
 | **B4** (freeze --write) | Media | **Cerrado (C2)** | `PAPER_FROZEN` |
 | **B5** (tick E2E) | Media | **Cerrado (C3)** | sample serie + ledger con hash freeze |
 | **B6** (IC simulacro) | Baja | Abierto | desk A5 ~2026-08-20; no bloquea C3 |
-| **D0-CLOSE** | Alta (día 0) | **Abierto** | falta ancla `daily_close_at` / `E_0` (±30 min 00:00 UTC) |
+| **D0-CLOSE** | Alta (día 0) | **Abierto** (path Opción B listo) | esperar 23:30–00:30Z + `capture_paper_e0_daily_close.py --write` o Celery (§8) |
 | **D0-SIGNOFF** | Alta (día 0) | **Abierto** | firma dual Desk Lead + MM |
 
 Breakers: **no** blocker (`any_open=false` post-tick).
