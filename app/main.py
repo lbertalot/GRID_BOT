@@ -409,6 +409,7 @@ from app.api.breakers_routes import router as breakers_router  # noqa: E402
 from app.api.breakers_routes import api_router as breakers_api_router  # noqa: E402
 from app.api.portfolio_routes import router as portfolio_router  # noqa: E402
 from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
+from app.api.ops_routes import router as ops_router  # noqa: E402
 
 # /integrity/* requiere auth — estado interno de integridad financiera
 app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
@@ -420,6 +421,9 @@ app.include_router(breakers_router)
 app.include_router(breakers_api_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
+# /api/ops/* — GET público para el dashboard del CEO (ops burn / reserva),
+# el POST del ledger exige auth en la propia ruta (ADR-008)
+app.include_router(ops_router)
 
 
 # Endpoint directo para /api/positions (compatibilidad con auditoría)
