@@ -85,10 +85,10 @@ class BreakersSource(Protocol):
 
 
 class PnlSource(Protocol):
-    """Ledger de PnL (ADR-004) — `app.core.pnl_ledger`."""
+    """Facade PnL MTD (B4) — `app.core.pnl_ledger` sobre PaperEquitySeries."""
 
     def get_pnl_summary(self) -> Dict[str, Any]:
-        """pnl_mtd (Decimal), daily_pnl_pct (Decimal), as_of."""
+        """pnl_mtd (Decimal), daily_pnl_pct (Decimal|None), as_of."""
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ OPS_LEDGER = AdapterSpec("app.core.ops_ledger", "get_ops_summary", "B/ADR-008")
 LIVE_GATE = AdapterSpec("app.core.live_gate", "get_live_gate_status", "D/ADR-007")
 BOOKS = AdapterSpec("app.core.capital_books", "get_books", "E/ADR-004")
 BREAKERS = AdapterSpec("app.core.breakers_status", "get_breakers_status", "F")
-PNL = AdapterSpec("app.core.pnl_ledger", "get_pnl_summary", "ADR-004")
+PNL = AdapterSpec("app.core.pnl_ledger", "get_pnl_summary", "B4/MtM-paper")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,12 +140,16 @@ def _call_adapter(spec: AdapterSpec) -> Tuple[Optional[Dict[str, Any]], Optional
         data = func()
     except Exception as exc:
         # Solo el tipo de excepción: el mensaje puede arrastrar datos sensibles.
+        # Excepción: adapters que marcan `ceo_reason_safe` (p.ej. PnlUnavailableError).
         logger.warning("[ceo-overview] %s.%s falló: %s", spec.module, spec.func, exc)
         if _is_authorization_error(exc):
             return None, (
                 f"sin autorización para leer {spec.module}"
                 " (revisar credencial del adaptador)"
             )
+        if getattr(exc, "ceo_reason_safe", False):
+            reason = str(exc).strip()
+            return None, reason or f"fuente con error ({type(exc).__name__})"
         return None, f"fuente con error ({type(exc).__name__})"
 
     if not isinstance(data, dict):
