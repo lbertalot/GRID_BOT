@@ -1283,6 +1283,9 @@ def compute_paper_portfolio_value(
             inventory_value=breakdown["inventory_value"],
             deployed_capital=ledger.deployed_capital,
         )
+        # Persist ledger even without fills so fees/slippage/cost_model are on disk
+        # for the first tick / Celery snapshot path (C3 E2E PaperEquityLedger).
+        ledger._autosave()
 
     return {
         "total_value_usdt": float(breakdown["equity"]),
