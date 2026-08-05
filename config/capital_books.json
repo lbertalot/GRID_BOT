@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "as_of": "2026-08-05",
+  "source": "RFC-003 / ADR-004 — All Hands CEO 2026-08-05",
+  "contributed_capital_usd": "1000",
+  "ops_reserve_usd": "200",
+  "books": [
+    {
+      "book_id": "core_grid",
+      "engine": "grid_bot",
+      "allocation_pct": "70",
+      "live_enabled": true,
+      "pnl_source": "internal",
+      "manual_pnl": {}
+    },
+    {
+      "book_id": "sat_systematic",
+      "engine": "freqtrade",
+      "allocation_pct": "20",
+      "live_enabled": false,
+      "pnl_source": "manual",
+      "manual_pnl": {
+        "realized_pnl": "0",
+        "unrealized_pnl": "0",
+        "as_of": "2026-08-05",
+        "note": "Paper/dry-run en L0. Se actualiza a mano en este archivo con el corte del tear sheet."
+      }
+    },
+    {
+      "book_id": "sat_signals",
+      "engine": "trading_agents",
+      "allocation_pct": "10",
+      "live_enabled": false,
+      "pnl_source": "manual",
+      "manual_pnl": {
+        "realized_pnl": "0",
+        "unrealized_pnl": "0",
+        "as_of": "2026-08-05",
+        "note": "Paper en L0. Se actualiza a mano en este archivo con el corte del tear sheet."
+      }
+    }
+  ]
+}
