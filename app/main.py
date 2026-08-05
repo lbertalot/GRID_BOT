@@ -37,6 +37,7 @@ from app.api import (
     commission_routes,
 )
 from app.api import system_routes
+from app.api import gate_routes
 from app.api import config_routes
 from app.api import prometheus as prometheus_routes
 from app.core.circuit_breakers import CircuitBreakers
@@ -394,6 +395,10 @@ from app.core.auth import require_auth as _require_auth  # noqa: E402
 
 app.include_router(config_routes.router, dependencies=[Depends(_require_auth)])
 app.include_router(system_routes.router)
+# /api/gates/live-status requiere auth — el detalle del gate (identidad de los
+# firmantes, controles pendientes, fecha de go-live) es reconocimiento útil para
+# un atacante. El badge público de modo ya sale por /health/trading-mode.
+app.include_router(gate_routes.router, dependencies=[Depends(_require_auth)])
 # /api/v1/binance requiere auth — sincronización de cuenta Binance
 app.include_router(binance_sync_routes.router, dependencies=[Depends(_require_auth)])
 
