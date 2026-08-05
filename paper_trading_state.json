@@ -494,12 +494,20 @@
       "timestamp": "2025-09-02T22:16:10.523230"
     }
   ],
-  "positions": {
-    "BNBUSDT": {
-      "quantity": 0.1,
-      "avg_price": 852.6377383300462,
-      "unrealized_pnl": 0.0
+  "positions": {},
+  "trade_counter": 53,
+  "_quarantined_positions": {
+    "quarantined_at": "2026-08-05T21:29:37.902983+00:00",
+    "reason": "pre-L0 legacy floats; SoT = PaperEquityLedger MtM; no importar a inventario paper (evitar contaminar E_0)",
+    "source_of_truth": "app.core.paper_equity_ledger",
+    "positions": {
+      "BNBUSDT": {
+        "quantity": 0.1,
+        "avg_price": 852.6377383300462,
+        "unrealized_pnl": 0.0
+      }
     }
   },
-  "trade_counter": 53
+  "source_of_truth": "app.core.paper_equity_ledger",
+  "legacy_positions_reconciled": true
 }
