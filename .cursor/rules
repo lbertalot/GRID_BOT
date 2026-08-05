@@ -1,5 +1,5 @@
 # GridBot v2.5 — Reglas Ejecutables para Cursor IDE
-# Última sincronización: 2026-02-17
+# Última sincronización: 2026-05-06
 # Estas reglas son verificables automáticamente por el IDE.
 
 ---
@@ -109,6 +109,25 @@
 ### E04: Ediciones focalizadas
 - Preferir ediciones pequeñas y focalizadas.
 - No reformatear código no relacionado.
+
+---
+
+## CURSOR IDE — DIF INLINE Y TAMAÑO DE SESIÓN (AGENTE)
+
+Cuando aparece **"Inline diffs have been suppressed for recent changes because there are too many to display"**, es un **límite de la UI de Cursor**, no un error del código del repo.
+
+### AX01 — Lotes más pequeños (obligatorio para el agente en cambios grandes)
+- Dividir trabajo en **varios pasos**: menos archivos o un **módulo / feature** por iteración cuando el alcance sea amplio.
+- Evitar en un solo mensaje respuesta masiva que toque código + docs extensos + migraciones + muchos tests a la vez salvo petición explícita del usuario.
+- Combinar siempre con **E04**: nunca inflar diffs con reformateos o churn no pedido.
+
+### AX02 — Cómo sigue revisándose el cambio (comunicar al usuario si aplica)
+- Los diffs siguen disponibles en **Source Control / Control de código fuente**, archivo por archivo, aunque el chat oculte el inline diff.
+- Tras cambios muy voluminosos, puede convenir que el usuario **commitee en trozos pequeños** o use **stash/rama** solo para aislar revisiones — sin incluir `.env` ni secretos.
+
+### AX03 — No “arreglar” esto desde el codebase
+- No intentar crear archivos mágicos en el repo para desactivar el aviso.
+- Mantener Cursor actualizado puede mejorar comportamientos relacionados con diffs según versión.
 
 ---
 

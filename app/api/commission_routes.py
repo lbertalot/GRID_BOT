@@ -2,13 +2,20 @@
 Endpoints para gestión de comisiones y validaciones de rentabilidad
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
 from app.services.commission_manager import commission_manager
 from app.services.binance_service import BinanceService
 from app.core.auth import require_auth
+from app.schemas.transaction_cost_audit import (
+    TransactionCostAuditRequest,
+    TransactionCostAuditResponse,
+)
+from app.services.transaction_cost_audit_service import (
+    run_transaction_cost_audit_for_api,
+)
 
 router = APIRouter(prefix="/api/v1/commissions", tags=["Commissions"])
 
@@ -187,3 +194,22 @@ async def get_commission_status(api_key: str = Depends(require_auth)) -> Dict[st
         raise HTTPException(
             status_code=500, detail=f"Error obteniendo estado: {str(e)}"
         )
+
+
+@router.post(
+    "/transaction-cost-audit",
+    response_model=TransactionCostAuditResponse,
+    summary="Auditoría after-cost (comisión + spread + slippage)",
+    description=(
+        "Mismo contrato y motor que POST /api/simulations/transaction-cost-audit; "
+        "expuesto bajo el prefijo de comisiones para clientes que integran por ese módulo."
+    ),
+)
+async def post_transaction_cost_audit(
+    body: TransactionCostAuditRequest = Body(...),
+    api_key: str = Depends(require_auth),
+) -> TransactionCostAuditResponse:
+    try:
+        return run_transaction_cost_audit_for_api(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

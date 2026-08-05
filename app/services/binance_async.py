@@ -187,7 +187,13 @@ class AsyncBinanceWrapper:
         return kl
 
     async def create_market_order(
-        self, symbol: str, side: str, quantity: float
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        *,
+        new_client_order_id: str | None = None,
+        recv_window: int | None = None,
     ) -> dict:
         """Crea una orden de mercado aplicando validación de cantidad/precio.
         - Ajusta cantidad a stepSize
@@ -206,12 +212,17 @@ class AsyncBinanceWrapper:
 
         async def _call():
             def _do():
-                return self.client.create_order(
-                    symbol=symbol.upper(),
-                    side=side.upper(),
-                    type="MARKET",
-                    quantity=adjusted_qty,
-                )
+                params: dict[str, Any] = {
+                    "symbol": symbol.upper(),
+                    "side": side.upper(),
+                    "type": "MARKET",
+                    "quantity": adjusted_qty,
+                }
+                if new_client_order_id:
+                    params["newClientOrderId"] = new_client_order_id
+                if recv_window is not None:
+                    params["recvWindow"] = int(recv_window)
+                return self.client.create_order(**params)
 
             return await asyncio.to_thread(_do)
 
