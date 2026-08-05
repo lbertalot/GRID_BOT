@@ -41,7 +41,11 @@ DEFAULT_CONTRIBUTED_CAPITAL_USD = "1000"
 DEFAULT_KILL_DRAWDOWN_PCT = "0.25"
 DEFAULT_DAILY_LOSS_LIMIT_PCT = "0.03"
 DEFAULT_ALERT_DRAWDOWN_PCT = "0.15"
-DEFAULT_OPS_RESERVE_USD = "200"
+# Amendment 01 (Decisión 3): techo de ops <= USD 100 con devengo mensual (~10-15/mes).
+DEFAULT_OPS_RESERVE_USD = "100"
+# Marca del supuesto usado cuando no hay ops ledger: se toma el techo como
+# comprometido y gastado, no el devengado real.
+OPS_ASSUMPTION_CEILING = "ops_reserve_total_ceiling"
 
 BASIS_POOL = "pool"
 BASIS_TRADING = "trading"
@@ -242,14 +246,16 @@ class EquitySnapshot:
 class OpsSnapshot:
     """Gasto de ops. Lo produce Track B (`app/core/ops_ledger.py`).
 
-    `assumed=True` significa que no hubo ledger y el engine usó el supuesto
-    conservador de env; el status lo expone para que el dashboard no mienta.
+    `reserve_committed` es el **devengado** (no el techo). `assumed=True` significa
+    que no hubo ledger y el engine cayó al supuesto de env; `assumption` dice cuál
+    fue, para que el dashboard no presente un supuesto como dato.
     """
 
     reserve_committed: Decimal
     spent: Decimal
     source: str
     assumed: bool
+    assumption: Optional[str] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -292,6 +298,7 @@ class CapitalRiskStatus:
     ops_remaining: Decimal
     ops_overspent: bool
     ops_assumed: bool
+    ops_assumption: Optional[str]
     ops_source: str
     severity: str
     actions: List[str]
@@ -362,6 +369,7 @@ class CapitalRiskStatus:
                 "remaining": str(self.ops_remaining),
                 "overspent": self.ops_overspent,
                 "assumed": self.ops_assumed,
+                "assumption": self.ops_assumption,
                 "source": self.ops_source,
             },
             "severity": self.severity,
@@ -436,9 +444,9 @@ def evaluate_capital_risk(
 ) -> CapitalRiskStatus:
     """Evalúa la política completa en ambas bases. Pura salvo `datetime.now`.
 
-    `equity` es el equity **de trading**. Si no se pasa `ops`, se asume la reserva
-    de env como comprometida y ya gastada (supuesto conservador para `dd_pool`),
-    y el status lo marca con `ops_assumed=True`.
+    `equity` es el equity **de trading**. Si no se pasa `ops`, se asume el **techo**
+    de ops de env (`OPS_RESERVE_USD`) como comprometido y ya gastado, y el status lo
+    marca con `ops_assumed=True` + `ops_assumption`.
     """
     cfg = config or CapitalRiskConfig.from_env()
     contributed = _require_positive(
@@ -452,6 +460,7 @@ def evaluate_capital_risk(
         spent=cfg.ops_reserve_usd,
         source="env_default",
         assumed=True,
+        assumption=OPS_ASSUMPTION_CEILING,
     )
     committed = _require_non_negative(
         _to_decimal(ops_snapshot.reserve_committed, "ops_reserve_committed"),
@@ -533,6 +542,18 @@ def evaluate_capital_risk(
             f"(ops gastado {spent} de {committed}; dd_trading {dd_trading}). "
             "Revisar devengo de ops antes de liquidar."
         )
+    ops_assumption = ops_snapshot.assumption or (
+        OPS_ASSUMPTION_CEILING if ops_snapshot.assumed else None
+    )
+    if ops_assumption == OPS_ASSUMPTION_CEILING:
+        # Sin ops ledger tomamos el techo, no el devengado: tradable_capital queda en
+        # su mínimo y el kill floor de trading en su valor más bajo. Es un supuesto,
+        # no un dato: el devengado real (Track B) sube tradable y sube el floor.
+        reasons.append(
+            f"ops asumido = techo de reserva ({committed}), no devengado real: "
+            f"tradable_capital {tradable} es el mínimo posible y kill floor de "
+            f"trading {floor_trading} el más bajo. Dato real: ops ledger (Track B)."
+        )
 
     if kill_triggered:
         severity = SEVERITY_KILL
@@ -575,6 +596,7 @@ def evaluate_capital_risk(
         ops_remaining=ops_remaining,
         ops_overspent=ops_overspent,
         ops_assumed=ops_snapshot.assumed,
+        ops_assumption=ops_assumption,
         ops_source=ops_snapshot.source,
         severity=severity,
         actions=actions,
@@ -762,10 +784,14 @@ def resolve_ops_snapshot(
 
     Contrato esperado del ops ledger (Track B, `app/core/ops_ledger.py`): un objeto
     con `get_ops_snapshot()` que devuelva un mapping con
-    `ops_reserve_committed_usd` y `ops_spent_usd` (str/Decimal, USD) y
-    opcionalmente `as_of`. Si el ledger no está o falla, se usa `OPS_RESERVE_USD`
-    (default 200) y se marca `assumed=True`: sin dato real asumimos la reserva ya
-    gastada, que es el supuesto conservador para `dd_pool`.
+    `ops_reserve_committed_usd` (el **devengado**, no el techo) y `ops_spent_usd`
+    (str/Decimal, USD) y opcionalmente `as_of`.
+
+    Si el ledger no está o falla, se usa `OPS_RESERVE_USD` (default 100 = techo del
+    Amendment 01) asumiendo la reserva íntegra comprometida y gastada, y se marca
+    `assumed=True` con `assumption=OPS_ASSUMPTION_CEILING`. Ese supuesto da el
+    `tradable_capital` mínimo (`dd_pool` en su lectura más dura), así que el número
+    no debe sobrevivir al go-live sin el devengado real.
     """
     source_env = os.environ if env is None else env
 
@@ -796,6 +822,7 @@ def resolve_ops_snapshot(
             spent=committed,
             source="env_default",
             assumed=True,
+            assumption=OPS_ASSUMPTION_CEILING,
         )
     return OpsSnapshot(
         reserve_committed=committed, spent=spent, source="env", assumed=False
@@ -819,6 +846,7 @@ __all__ = [
     "EquityProvider",
     "EquitySnapshot",
     "LoggingBreakerPort",
+    "OPS_ASSUMPTION_CEILING",
     "OpsProvider",
     "OpsSnapshot",
     "apply_capital_risk_actions",
