@@ -15,7 +15,7 @@ from app.services.binance_client_singleton import binance_client_singleton
 from app.core.database import Database
 from app.core.telegram_bot import TelegramBot
 from app.core.grafana_metrics import GrafanaMetrics
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class OperationTracker:
         self.db = Database()
         self.telegram_bot = TelegramBot()
         self.grafana_metrics = GrafanaMetrics()
-        self.circuit_breakers = CircuitBreakers()
+        self.circuit_breakers = get_shared_breakers()
 
         # Configuración de tracking
         self.track_slippage = True
