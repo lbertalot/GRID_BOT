@@ -10,7 +10,14 @@ import logging
 from typing import Dict, Optional, Tuple, List
 from datetime import datetime
 
+from app.core.capital_risk import daily_loss_limit_fraction
+
 logger = logging.getLogger(__name__)
+
+
+def _sot_max_daily_loss() -> float:
+    """Daily loss SoT (ADR-003 / B3): magnitud positiva, default 0.03."""
+    return float(daily_loss_limit_fraction())
 
 
 class UnifiedConfig:
@@ -74,7 +81,7 @@ class UnifiedConfig:
                 "emergency_stop_enabled": True,
             },
             "_safety_limits": {
-                "max_daily_loss": 0.05,
+                "max_daily_loss": _sot_max_daily_loss(),
                 "max_total_loss": 0.10,
                 "max_trade_loss": 0.02,
                 "max_consecutive_losses": 3,
@@ -149,12 +156,20 @@ class UnifiedConfig:
         logger.info("✅ Configuración del sistema actualizada")
 
     def get_safety_limits(self) -> Dict:
-        """Obtiene límites de seguridad"""
-        return self.config.get("_safety_limits", {})
+        """Obtiene límites de seguridad.
+
+        `max_daily_loss` siempre se sobrescribe con el SoT de capital_risk
+        (ADR-003 / B3) para que un JSON stale con 0.05 no mande en runtime.
+        """
+        limits = dict(self.config.get("_safety_limits", {}))
+        limits["max_daily_loss"] = _sot_max_daily_loss()
+        return limits
 
     def update_safety_limits(self, limits: Dict):
-        """Actualiza límites de seguridad"""
-        self.config["_safety_limits"] = limits
+        """Actualiza límites de seguridad (coerciona daily loss al SoT)."""
+        merged = dict(limits)
+        merged["max_daily_loss"] = _sot_max_daily_loss()
+        self.config["_safety_limits"] = merged
         self.save_config()
         logger.info("✅ Límites de seguridad actualizados")
 

@@ -39,7 +39,7 @@ ON CONFLICT DO NOTHING;
 
 -- Insertar configuración del sistema
 INSERT INTO system_config (key, value, description) VALUES
-('max_daily_loss', '5.0', 'Pérdida máxima diaria en porcentaje'),
+('max_daily_loss', '3.0', 'Pérdida máxima diaria en porcentaje (SoT ADR-003 / B3 = 3%)'),
 ('stop_loss', '10.0', 'Stop loss en porcentaje'),
 ('max_position_size', '20.0', 'Tamaño máximo de posición en porcentaje'),
 ('trading_enabled', 'true', 'Habilitar/deshabilitar trading'),
