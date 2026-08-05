@@ -24,6 +24,9 @@ import pytest
 from app.services.trade_executor import TradeExecutor
 
 
+pytestmark = pytest.mark.usefixtures("allow_real_orders_unit")
+
+
 # ─────────────────────────────────────────────────────────────────
 # Helpers / Fixtures
 # ─────────────────────────────────────────────────────────────────
