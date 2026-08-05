@@ -57,3 +57,5 @@ reports/**
 !/grid_config_minimal.json
 !/grid_config_optimized.json
 !/grid_config_safe.json
+!/grid_config_paper_l0.json
+!/grid_config_paper_l0.hash
