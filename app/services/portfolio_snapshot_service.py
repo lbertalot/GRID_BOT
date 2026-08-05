@@ -20,6 +20,10 @@ from celery import shared_task
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.paper_equity_ledger import (
+    compute_paper_portfolio_value,
+    paper_equity_is_source_of_truth,
+)
 from app.db.session import SessionLocal
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.binance_client_singleton import get_binance_client_singleton
@@ -89,7 +93,15 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
         total_value_usdt, usdt_free, btc_value_usdt,
         other_assets_usdt, btc_price, primary_symbol
     O None si Binance no está disponible.
+
+    En modo paper la fuente de verdad es `PaperEquityLedger` (S10): la cuenta de
+    Binance no refleja el estado del bot simulado, y leer balances del exchange —o
+    peor, los balances fijos del simulador— producía una serie de equity ficticia
+    (gap I-3). El inventario paper se marca contra ticker real igual que en live.
     """
+    if paper_equity_is_source_of_truth():
+        return compute_paper_portfolio_value()
+
     singleton = get_binance_client_singleton()
     if not singleton.is_ready():
         logger.warning(

@@ -19,10 +19,11 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-# River para ML online
+# River para ML online (HoeffdingTree vive en river.tree desde ~0.21)
 from river import metrics
 from river import linear_model
 from river import ensemble
+from river import tree as river_tree
 
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge
@@ -84,7 +85,10 @@ class RiverModelConfig(BaseModel):
     grace_period: int = Field(
         default=100, description="Grace period para drift detection"
     )
-    split_confidence: float = Field(default=0.1, description="Confianza para split")
+    split_confidence: float = Field(
+        default=0.1,
+        description="Umbral de split (river≥0.21: parámetro `tau` del HoeffdingTree)",
+    )
     leaf_prediction: str = Field(default="mc", description="Predicción de hoja")
 
 
@@ -453,9 +457,9 @@ class HybridMLEngine:
     def _create_river_model(self) -> Any:
         """Crea modelo River para predicción online."""
         if self.river_config.model_type == "HoeffdingTree":
-            return ensemble.HoeffdingTreeClassifier(
+            return river_tree.HoeffdingTreeClassifier(
                 grace_period=self.river_config.grace_period,
-                split_confidence=self.river_config.split_confidence,
+                tau=float(self.river_config.split_confidence),
                 leaf_prediction=self.river_config.leaf_prediction,
             )
         elif self.river_config.model_type == "AdaptiveRandomForest":

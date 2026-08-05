@@ -1,13 +1,14 @@
-﻿"""
+"""
 Tareas de trading mejoradas con logging detallado y validaciones robustas
 """
 
 import asyncio
 import logging
 import time
+import zlib
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional, Tuple
 from celery import shared_task
 from app.core.celery_app import celery_app
 import os
@@ -28,10 +29,30 @@ from app.core.metrics import (
     cycle_order_executed,
     ml_regime_used_in_cycle_total,
     ml_regime_fallback_total,
+    ml_promotion_gate_blocks_total,
+    gridbot_monte_carlo_run_persist_total,
+    gridbot_monte_carlo_retention_prune_total,
+    gridbot_monte_carlo_retention_rows_deleted_total,
+    gridbot_kelly_sentiment_scale_total,
 )
 from app.services.market_data_collector import MarketDataCollector
 from app.services.strategy_selector import StrategySelector, AccountState
 from app.core.risk_manager import RiskManager
+from app.research.klines_utils import (
+    closes_from_binance_klines,
+    simple_returns_from_closes,
+)
+from app.research.monte_carlo_paths import (
+    MonteCarloDrawdownStudy,
+    monte_carlo_max_drawdown_study,
+)
+from app.research.monte_carlo_shocks import MonteCarloShockConfig
+from app.research.promotion_gate import (
+    AfterCostBacktestSnapshot,
+    PromotionGateConfig,
+    evaluate_promotion_gate,
+)
+from app.research.tqs_minimal import build_tqs_snapshot
 from app.services.cache import get_async_cache
 from app.core.metrics import (
     dust_assets_count,
@@ -89,6 +110,299 @@ def _create_hybrid_ml_engine():
     from app.services.hybrid_ml_engine import HybridMLEngine
 
     return HybridMLEngine(models_dir=os.getenv("ML_MODELS_DIR", "data/ml/hybrid"))
+
+
+_MIN_CLOSES_FOR_TQS_PROMOTION_GATE = 25
+
+
+def _env_float_optional(key: str) -> Optional[float]:
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return None
+    return float(raw)
+
+
+def _env_float_default(key: str, default: float) -> float:
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int_optional_positive(key: str) -> Optional[int]:
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return None
+    value = int(raw)
+    if value < 1:
+        return None
+    return value
+
+
+def _resolve_promotion_gate_after_cost_snapshot(
+    symbol: str,
+) -> tuple[Optional[AfterCostBacktestSnapshot], Optional[str], Optional[int]]:
+    """
+    JSON explícito (tests) tiene prioridad; si no, carga desde BD si está habilitado.
+
+    Returns:
+        ``(snapshot, error_message, backtest_run_id)``. ``backtest_run_id`` sólo aplica
+        a la ruta de BD; con JSON u optimización desactivada es ``None``.
+    """
+    raw_json = os.getenv("ML_PROMOTION_GATE_BACKTEST_SNAPSHOT_JSON", "").strip()
+    if raw_json:
+        try:
+            from app.services.backtest_gate_loader import (
+                after_cost_snapshot_from_json_string,
+            )
+
+            return after_cost_snapshot_from_json_string(raw_json), None, None
+        except Exception as exc:
+            return None, str(exc), None
+
+    use_db = (
+        os.getenv("ML_PROMOTION_GATE_USE_PERSISTED_BACKTEST", "false").lower() == "true"
+    )
+    if not use_db:
+        return None, None, None
+
+    from app.db.session import SessionLocal
+    from app.services.backtest_gate_loader import (
+        load_latest_after_cost_snapshot_and_run_id,
+    )
+
+    db = SessionLocal()
+    try:
+        snap, run_id = load_latest_after_cost_snapshot_and_run_id(db, symbol)
+        return snap, None, run_id
+    except Exception as exc:
+        return None, str(exc), None
+    finally:
+        db.close()
+
+
+def _maybe_persist_promotion_gate_monte_carlo(
+    symbol: str,
+    mc_study: MonteCarloDrawdownStudy | None,
+    historical_returns_length: int,
+    backtest_run_id: Optional[int],
+) -> None:
+    if mc_study is None:
+        return
+    if os.getenv("ML_PROMOTION_GATE_PERSIST_MC", "false").lower() != "true":
+        return
+    from app.db.session import SessionLocal
+    from app.services.monte_carlo_persistence import (
+        persist_monte_carlo_drawdown_study,
+    )
+    from app.services.monte_carlo_retention import (
+        prune_monte_carlo_runs_for_symbol_keep_last,
+        prune_monte_carlo_runs_for_symbol_max_age_days,
+    )
+
+    attach = (
+        os.getenv("ML_PROMOTION_GATE_MC_ATTACH_BACKTEST_RUN_ID", "true").lower()
+        == "true"
+    )
+    link_id = int(backtest_run_id) if attach and backtest_run_id is not None else None
+    keep_last = _env_int_optional_positive("ML_PROMOTION_GATE_MC_RETENTION_KEEP_LAST")
+    max_age_days = _env_int_optional_positive(
+        "ML_PROMOTION_GATE_MC_RETENTION_MAX_AGE_DAYS"
+    )
+
+    db = SessionLocal()
+    try:
+        persist_monte_carlo_drawdown_study(
+            db,
+            symbol=symbol,
+            study=mc_study,
+            historical_returns_length=historical_returns_length,
+            backtest_run_id=link_id,
+        )
+        if max_age_days is not None or keep_last is not None:
+            try:
+                deleted_total = 0
+                if max_age_days is not None:
+                    deleted_total += prune_monte_carlo_runs_for_symbol_max_age_days(
+                        db,
+                        symbol=symbol,
+                        max_age_days=max_age_days,
+                    )
+                if keep_last is not None:
+                    deleted_total += prune_monte_carlo_runs_for_symbol_keep_last(
+                        db, symbol=symbol, keep_last=keep_last
+                    )
+                gridbot_monte_carlo_retention_prune_total.labels(
+                    outcome="success"
+                ).inc()
+                if deleted_total:
+                    gridbot_monte_carlo_retention_rows_deleted_total.inc(deleted_total)
+            except Exception as prune_exc:
+                gridbot_monte_carlo_retention_prune_total.labels(
+                    outcome="failure"
+                ).inc()
+                logger.warning(
+                    "[Cycle] Monte Carlo retention prune failed",
+                    extra={"symbol": symbol, "error": str(prune_exc)},
+                )
+        db.commit()
+        gridbot_monte_carlo_run_persist_total.labels(outcome="success").inc()
+    except Exception as exc:
+        db.rollback()
+        gridbot_monte_carlo_run_persist_total.labels(outcome="failure").inc()
+        logger.warning(
+            "[Cycle] ML promotion gate Monte Carlo persist failed",
+            extra={"symbol": symbol, "error": str(exc)},
+        )
+    finally:
+        db.close()
+
+
+async def _promotion_gate_allows_ml(
+    symbol: str, klines: list[Any]
+) -> Tuple[bool, Tuple[str, ...]]:
+    """
+    Gate opcional TQS + Monte Carlo antes de confiar en HybridMLEngine.
+
+    Desactivado por defecto (`ML_PROMOTION_GATE_ENABLED!=true`). Con datos
+    insuficientes se degrada en permitir ML (fail-open operativo).
+    """
+    if os.getenv("ML_PROMOTION_GATE_ENABLED", "false").lower() != "true":
+        return True, ()
+
+    closes = closes_from_binance_klines(klines)
+    if len(closes) < _MIN_CLOSES_FOR_TQS_PROMOTION_GATE:
+        logger.debug(
+            "[Cycle] ML promotion gate skipped (insufficient closes)",
+            extra={"symbol": symbol, "n_closes": len(closes)},
+        )
+        return True, ()
+
+    try:
+        block_flat = os.getenv("ML_PROMOTION_GATE_BLOCK_FLAT", "true").lower() == "true"
+        min_abs = _env_float_optional("ML_PROMOTION_GATE_MIN_ABS_COMBINED")
+        max_p95 = _env_float_optional("ML_PROMOTION_GATE_MAX_P95_DD")
+        require_mc = (
+            os.getenv("ML_PROMOTION_GATE_REQUIRE_MC", "false").lower() == "true"
+        )
+        require_bt = (
+            os.getenv("ML_PROMOTION_GATE_REQUIRE_BACKTEST", "false").lower() == "true"
+        )
+        min_sharpe_bt = _env_float_optional("ML_PROMOTION_GATE_MIN_SHARPE_AFTER_COST")
+        max_dd_mag_bt = _env_float_optional(
+            "ML_PROMOTION_GATE_MAX_BACKTEST_DD_MAGNITUDE"
+        )
+        min_total_ret_bt = _env_float_optional(
+            "ML_PROMOTION_GATE_MIN_TOTAL_RETURN_AFTER_COST"
+        )
+        mc_dd_ratio = _env_float_optional(
+            "ML_PROMOTION_GATE_MC_P95_VS_BACKTEST_DD_RATIO"
+        )
+
+        nlp_gate_on = (
+            os.getenv("ML_PROMOTION_GATE_NLP_ENABLED", "false").lower() == "true"
+        )
+        nlp_min = (
+            _env_float_optional("ML_PROMOTION_GATE_NLP_MIN_SCORE")
+            if nlp_gate_on
+            else None
+        )
+        nlp_block_missing = (
+            (
+                os.getenv("ML_PROMOTION_GATE_NLP_BLOCK_IF_MISSING", "false").lower()
+                == "true"
+            )
+            if nlp_gate_on
+            else False
+        )
+        sentiment_score: Optional[float] = None
+        if nlp_gate_on and (nlp_min is not None or nlp_block_missing):
+            from app.services.promotion_gate_sentiment import (
+                resolve_promotion_gate_sentiment_score,
+            )
+
+            sentiment_score = await resolve_promotion_gate_sentiment_score(symbol)
+
+        after_cost, ac_err, gate_backtest_run_id = (
+            _resolve_promotion_gate_after_cost_snapshot(symbol)
+        )
+        if ac_err:
+            logger.warning(
+                "[Cycle] ML promotion gate after-cost snapshot parse/load issue",
+                extra={"symbol": symbol, "error": ac_err},
+            )
+
+        mc_paths = int(os.getenv("ML_PROMOTION_GATE_MC_PATHS", "256"))
+        mc_horizon = int(os.getenv("ML_PROMOTION_GATE_MC_HORIZON", "20"))
+        if mc_paths < 1 or mc_horizon < 1:
+            raise ValueError("MC paths/horizon must be >= 1")
+
+        config = PromotionGateConfig(
+            block_if_direction_flat=block_flat,
+            min_abs_combined=min_abs,
+            max_p95_drawdown=max_p95,
+            require_monte_carlo=require_mc,
+            require_after_cost_backtest=require_bt,
+            min_sharpe_after_cost=min_sharpe_bt,
+            max_backtest_drawdown_magnitude=max_dd_mag_bt,
+            min_total_return_after_cost=min_total_ret_bt,
+            mc_p95_to_backtest_dd_max_ratio=mc_dd_ratio,
+            min_sentiment_score=nlp_min,
+            block_if_sentiment_missing=nlp_block_missing,
+        )
+        tqs = build_tqs_snapshot(closes)
+        rets = simple_returns_from_closes(closes)
+        mc_study = None
+        if len(rets) >= mc_horizon:
+            seed_raw = f"{symbol}:{datetime.utcnow().strftime('%Y%m%d%H')}"
+            seed = zlib.crc32(seed_raw.encode("utf-8")) & 0x7FFFFFFF
+            shock_1 = _env_float_optional("ML_PROMOTION_GATE_MC_SHOCK_SINGLE_MULT")
+            shock_3 = _env_float_optional("ML_PROMOTION_GATE_MC_SHOCK_RUN3_MULT")
+            mc_shocks: Optional[MonteCarloShockConfig] = None
+            if shock_1 is not None or shock_3 is not None:
+                mc_shocks = MonteCarloShockConfig(
+                    single_day_gross_multiplier=shock_1,
+                    three_day_run_gross_multiplier=shock_3,
+                )
+            mc_boot = os.getenv("ML_PROMOTION_GATE_MC_BOOTSTRAP", "iid").strip().lower()
+            mc_mode = "block" if mc_boot == "block" else "iid"
+            mc_block_size: Optional[int] = None
+            if mc_mode == "block":
+                raw_bs = os.getenv("ML_PROMOTION_GATE_MC_BLOCK_SIZE", "5").strip()
+                mc_block_size = int(raw_bs) if raw_bs else 5
+                mc_block_size = max(1, min(mc_block_size, len(rets)))
+            mc_study = monte_carlo_max_drawdown_study(
+                rets,
+                n_paths=mc_paths,
+                horizon=mc_horizon,
+                seed=seed,
+                shocks=mc_shocks,
+                bootstrap_mode=mc_mode,
+                block_size=mc_block_size,
+            )
+        _maybe_persist_promotion_gate_monte_carlo(
+            symbol,
+            mc_study,
+            historical_returns_length=len(rets),
+            backtest_run_id=gate_backtest_run_id,
+        )
+        result = evaluate_promotion_gate(
+            tqs,
+            mc_study,
+            config,
+            after_cost=after_cost,
+            sentiment_score=sentiment_score,
+        )
+        return result.allowed, result.block_reasons
+    except Exception as exc:
+        logger.warning(
+            "[Cycle] ML promotion gate error, allowing ML",
+            extra={"symbol": symbol, "error": str(exc)},
+        )
+        return True, ()
 
 
 async def _get_cached_balances() -> Optional[Dict[str, float]]:
@@ -264,34 +578,79 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 selector = StrategySelector(risk)
                 from app.core.risk_manager import RegimePrediction, MarketRegime
 
+                kelly_sentiment_on = (
+                    os.getenv("KELLY_SENTIMENT_SCALE_ENABLED", "false").lower()
+                    == "true"
+                )
+                base_fractional_kelly = float(risk.fractional_kelly)
+                k_mult_neg = _env_float_default(
+                    "KELLY_SENTIMENT_MULT_AT_MINUS_ONE", 0.65
+                )
+                k_mult_pos = _env_float_default(
+                    "KELLY_SENTIMENT_MULT_AT_PLUS_ONE", 1.10
+                )
+                k_mult_miss = _env_float_default("KELLY_SENTIMENT_MULT_IF_MISSING", 1.0)
+                if kelly_sentiment_on:
+                    from app.services.promotion_gate_sentiment import (
+                        kelly_multiplier_from_sentiment_score,
+                        resolve_promotion_gate_sentiment_score,
+                    )
+
                 for sym in symbols:
                     try:
+                        if kelly_sentiment_on:
+                            sent_scr = await resolve_promotion_gate_sentiment_score(sym)
+                            try:
+                                kmult = kelly_multiplier_from_sentiment_score(
+                                    sent_scr,
+                                    mult_at_minus_one=k_mult_neg,
+                                    mult_at_plus_one=k_mult_pos,
+                                    mult_if_missing=k_mult_miss,
+                                )
+                            except ValueError as k_exc:
+                                logger.warning(
+                                    "[Cycle] Kelly sentiment scale misconfigured, using 1.0",
+                                    extra={"symbol": sym, "error": str(k_exc)},
+                                )
+                                kmult = 1.0
+                            risk.fractional_kelly = max(
+                                0.01, min(1.0, base_fractional_kelly * kmult)
+                            )
+                            if sent_scr is None:
+                                band = "no_score"
+                            elif kmult < 0.999:
+                                band = "scaled_down"
+                            elif kmult > 1.001:
+                                band = "scaled_up"
+                            else:
+                                band = "unchanged"
+                            gridbot_kelly_sentiment_scale_total.labels(
+                                symbol=sym, band=band
+                            ).inc()
+                        else:
+                            risk.fractional_kelly = base_fractional_kelly
+
                         price = await mdc.get_price(sym)
                         kl = await mdc.get_klines(sym, interval="1m", limit=60)
                         # Predicción de régimen: ML si ML_ENABLED y disponible, si no fallback RANGE
                         rp: RegimePrediction
                         if ml_enabled:
-                            try:
-                                if hybrid_ml is None:
-                                    raise RuntimeError(
-                                        "Hybrid ML engine not initialized"
-                                    )
-                                rp = await hybrid_ml.predict_regime_from_klines(
-                                    sym, kl, train_online=True
+                            gate_ok, gate_reasons = await _promotion_gate_allows_ml(
+                                sym, kl
+                            )
+                            if not gate_ok:
+                                reason_label = (
+                                    gate_reasons[0] if gate_reasons else "unknown"
                                 )
-                                ml_regime_used_in_cycle_total.labels(symbol=sym).inc()
-                                logger.debug(
-                                    "[Cycle] Hybrid ML regime used",
+                                ml_promotion_gate_blocks_total.labels(
+                                    symbol=sym, reason=reason_label
+                                ).inc()
+                                logger.info(
+                                    "[Cycle] ML promotion gate blocked hybrid regime",
                                     extra={
                                         "symbol": sym,
-                                        "regime": rp.long_regime.value,
-                                        "short_regime": rp.short_regime.value,
+                                        "reasons": list(gate_reasons),
                                     },
-                                )
-                            except Exception as ml_err:
-                                logger.warning(
-                                    f"[Cycle] ML prediction failed for {sym}, using fallback: {ml_err}",
-                                    extra={"symbol": sym},
                                 )
                                 rp = RegimePrediction(
                                     long_regime=MarketRegime.RANGE,
@@ -300,8 +659,42 @@ def trading_cycle_tick() -> Dict[str, Any]:
                                     short_conf=0.6,
                                 )
                                 ml_regime_fallback_total.labels(
-                                    symbol=sym, reason="error"
+                                    symbol=sym, reason="promotion_gate"
                                 ).inc()
+                            else:
+                                try:
+                                    if hybrid_ml is None:
+                                        raise RuntimeError(
+                                            "Hybrid ML engine not initialized"
+                                        )
+                                    rp = await hybrid_ml.predict_regime_from_klines(
+                                        sym, kl, train_online=True
+                                    )
+                                    ml_regime_used_in_cycle_total.labels(
+                                        symbol=sym
+                                    ).inc()
+                                    logger.debug(
+                                        "[Cycle] Hybrid ML regime used",
+                                        extra={
+                                            "symbol": sym,
+                                            "regime": rp.long_regime.value,
+                                            "short_regime": rp.short_regime.value,
+                                        },
+                                    )
+                                except Exception as ml_err:
+                                    logger.warning(
+                                        f"[Cycle] ML prediction failed for {sym}, using fallback: {ml_err}",
+                                        extra={"symbol": sym},
+                                    )
+                                    rp = RegimePrediction(
+                                        long_regime=MarketRegime.RANGE,
+                                        short_regime=MarketRegime.RANGE,
+                                        long_conf=0.6,
+                                        short_conf=0.6,
+                                    )
+                                    ml_regime_fallback_total.labels(
+                                        symbol=sym, reason="error"
+                                    ).inc()
                         else:
                             rp = RegimePrediction(
                                 long_regime=MarketRegime.RANGE,
@@ -353,7 +746,9 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         continue
                 state["decision"] = decisions
                 await _set_cycle_state(state)
-                logger.info("[Cycle] [EMOJI] Decisión parcial registrada (fase evaluación)")
+                logger.info(
+                    "[Cycle] [EMOJI] Decisión parcial registrada (fase evaluación)"
+                )
                 # Si estamos cerca de 4 minutos, marcar decision_ready
                 if 210 <= elapsed < 240 and decisions:
                     for sym, d in decisions.items():
@@ -460,7 +855,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
             client_singleton = get_binance_client_singleton()
             check = client_singleton.validate_credentials_and_connectivity()
             if not check.get("net_ok", False):
-                logger.error("[EMOJI] Conectividad con Binance fallida - abortando ciclo")
+                logger.error(
+                    "[EMOJI] Conectividad con Binance fallida - abortando ciclo"
+                )
                 notify_consecutive_api_failures.delay("binance", 1)
                 try:
                     asyncio.run(
@@ -586,7 +983,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
                         rebalance_result = loop.run_until_complete(
                             auto_rebalancer_v2.check_and_rebalance()
                         )
-                        logger.info(f"[EMOJI] Resultado del rebalanceo: {rebalance_result}")
+                        logger.info(
+                            f"[EMOJI] Resultado del rebalanceo: {rebalance_result}"
+                        )
 
                         # Verificar si se generó liquidez suficiente
                         if rebalance_result.get("status") == "success":

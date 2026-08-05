@@ -1,0 +1,63 @@
+{
+  "_config_metadata": {
+    "version": "l0_paper_window_v1",
+    "status": "PAPER_FREEZE_CANDIDATE",
+    "policy": "Docs/squad/desk-policy-l0.md §2.4",
+    "created_at": "2026-08-05T15:00:00Z",
+    "paper_only": true,
+    "trading_mode": "PAPER",
+    "deployed_capital_usd": "200.00",
+    "spacing_bps": 100,
+    "range_pct": 5.0,
+    "levels": 10,
+    "notional_per_level_usd": "20.00",
+    "min_notional_floor_usd": "15.00",
+    "leverage": "1x_spot",
+    "ic_controls": {
+      "IC1_stop_rebuy_outside_range": true,
+      "IC2_flatten_core_at_deployed_dd_pct": "10.00"
+    },
+    "freeze_instructions": "Antes de arrancar la ventana: (1) fijar mid de ETHUSDT al precio spot del momento, (2) correr scripts/freeze_paper_l0_config.py --mid <precio>, (3) registrar config_hash en el ledger S10, (4) no editar este archivo durante la ventana.",
+    "rejects": "Cualquier spacing < 40 bps o notional/nivel < 15 USD se rechaza sin correr."
+  },
+  "system_config": {
+    "system_ready": true,
+    "phase": "PAPER_WINDOW",
+    "trading_mode": "PAPER",
+    "paper_trading": true,
+    "force_real_mode": false,
+    "safety_measures": {
+      "safe_mode": true,
+      "circuit_breakers_active": true,
+      "max_daily_loss": 0.03,
+      "max_total_loss": 0.25,
+      "kill_basis": "trading",
+      "real_time_monitoring": true
+    },
+    "multi_asset_ready": false
+  },
+  "ETHUSDT": {
+    "symbol": "ETHUSDT",
+    "is_active": true,
+    "mid_price_at_freeze": null,
+    "min_price": null,
+    "max_price": null,
+    "grids": 10,
+    "quantity": null,
+    "investment_amount": 200.0,
+    "notional_per_level_usd": 20.0,
+    "spacing_bps": 100,
+    "range_pct": 5.0,
+    "safe_mode": true,
+    "trading_mode": "PAPER",
+    "paper_only": true
+  },
+  "BTCUSDT": {
+    "symbol": "BTCUSDT",
+    "is_active": false,
+    "grids": 0,
+    "quantity": 0,
+    "investment_amount": 0,
+    "trading_mode": "PAPER"
+  }
+}
