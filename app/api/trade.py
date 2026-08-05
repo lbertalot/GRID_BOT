@@ -16,7 +16,10 @@ from fastapi import Query
 from app.services.telegram_alert import send_telegram_alert
 from app.core.auth import require_auth
 from app.schemas.validation import OrderRequest, GridParams
-from app.core.metrics import order_validation_rejects_total
+from app.core.metrics import (
+    order_validation_rejects_total,
+    gridbot_spot_market_submit_path_total,
+)
 from app.core.circuit_breakers import CircuitBreakers
 from fastapi import Request
 from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
@@ -24,6 +27,8 @@ from app.core.operation_tracker import OperationTracker, OperationStatus
 from app.models.alerts import Alert
 from app.services.balance_service import BalanceService
 from decimal import Decimal
+from app.services.broker_adapter import use_broker_adapter_for_trade_execution_from_env
+from app.services.broker_market_execution import place_spot_market_via_adapter
 
 router = APIRouter()
 _operation_tracker = OperationTracker()
@@ -275,8 +280,10 @@ async def place_order(
             current_price = None
 
         price_for_validation = (
-            float(current_price) if current_price is not None and order.type == "MARKET"
-            else float(Decimal(str(order.price))) if order.price is not None
+            float(current_price)
+            if current_price is not None and order.type == "MARKET"
+            else float(Decimal(str(order.price)))
+            if order.price is not None
             else None
         )
         # Validación directa en ruta (sin depender de __wrapped__).
@@ -300,8 +307,12 @@ async def place_order(
                 },
             )
         # Ajustar cantidad/precio recomendados — usar Decimal para precisión
-        rounded_qty = Decimal(str(validation.get("recommended_quantity", order.quantity)))
-        order.quantity = float(rounded_qty)  # OrderRequest espera float; Decimal ya redondeó
+        rounded_qty = Decimal(
+            str(validation.get("recommended_quantity", order.quantity))
+        )
+        order.quantity = float(
+            rounded_qty
+        )  # OrderRequest espera float; Decimal ya redondeó
         if order.type == "LIMIT" and validation.get("adjusted_price") is not None:
             order.price = float(Decimal(str(validation["adjusted_price"])))
     except HTTPException:
@@ -340,25 +351,46 @@ async def place_order(
         )
 
         if order.type == "MARKET":
-            if order.side == "BUY":
-                result = await asyncio.to_thread(
-                    client.order_market_buy,
-                    symbol=order.symbol.upper(),
-                    quantity=order.quantity,
-                    newClientOrderId=client_order_id,
-                )
-            elif order.side == "SELL":
-                result = await asyncio.to_thread(
-                    client.order_market_sell,
-                    symbol=order.symbol.upper(),
-                    quantity=order.quantity,
-                    newClientOrderId=client_order_id,
-                )
-            else:
+            if order.side not in ("BUY", "SELL"):
                 raise HTTPException(
                     status_code=400,
                     detail="Lado de orden inválido (debe ser BUY o SELL)",
                 )
+            market_path: str | None = None
+            if use_broker_adapter_for_trade_execution_from_env():
+                try:
+                    result = await place_spot_market_via_adapter(
+                        symbol=order.symbol.upper(),
+                        side=order.side,
+                        quantity_base=float(order.quantity),
+                        client_order_id=client_order_id,
+                        recv_window_ms=10_000,
+                        binance_wrapper=None,
+                    )
+                    market_path = "broker_adapter"
+                except Exception as adapter_err:
+                    if "-1021" not in str(adapter_err):
+                        raise
+                    market_path = None
+            if market_path is None:
+                if order.side == "BUY":
+                    result = await asyncio.to_thread(
+                        client.order_market_buy,
+                        symbol=order.symbol.upper(),
+                        quantity=order.quantity,
+                        newClientOrderId=client_order_id,
+                    )
+                else:
+                    result = await asyncio.to_thread(
+                        client.order_market_sell,
+                        symbol=order.symbol.upper(),
+                        quantity=order.quantity,
+                        newClientOrderId=client_order_id,
+                    )
+                market_path = "binance_client"
+            gridbot_spot_market_submit_path_total.labels(
+                source="http_trade", path=market_path
+            ).inc()
         elif order.type == "LIMIT":
             if not order.price:
                 raise HTTPException(

@@ -1,326 +1,489 @@
 #!/usr/bin/env python3
 """
-Sistema de Paper Trading para GridBot V2.5
-Permite probar el sistema sin riesgo real
+Sistema de Paper Trading para GridBot V2.5.
+
+Desde S10 (Track H) este sistema **dejó de llevar su propia contabilidad**: es un
+adaptador sobre `app.core.paper_equity_ledger`, la única fuente de verdad del cash,
+el inventario, los costos y la serie de equity mark-to-market del modo paper
+(gap I-4 de `Docs/engineering/tear-sheet-spec.md`: había tres simuladores paper
+incoherentes que producían equities distintos).
+
+Qué cambia, y por qué importa para el tear sheet del 31/08:
+
+- **Las comisiones se restan de verdad.** Antes el balance paper ignoraba fees y
+  slippage, así que un round-trip a precio plano daba PnL cero en lugar de −24 bps.
+  El PnL paper estaba inflado por construcción (gap I-5, I-6).
+- **El equity se marca a mercado.** `E_t = cash_t + Σ qty_a × mid_a`, con el precio
+  observado que se inyecta; sin precio no se marca (gate A6). Antes el balance era
+  un float que sólo se movía por notional (gap I-3, I-7).
+- **Los ciclos de grid se cuentan.** Compra y venta emparejadas FIFO con `cycle_id`
+  (gap I-8), insumo del volumen de evidencia del gate B4.
+- **La performance se mide sobre la serie diaria de equity, nunca sobre el PnL
+  realizado de ciclos.** En un grid todo ciclo cerrado es ganador por diseño y la
+  pérdida vive en el inventario: `total_pnl` de este resumen sale de equity MtM.
+
+La API pública mantiene `float` porque sus consumidores (API, monitoreo, tasks)
+son legacy; la conversión a `Decimal` ocurre en el borde y adentro todo es
+`Decimal` (regla `10-financial-integrity`). Paper-only: no envía órdenes.
 """
 
 import logging
 import json
 import os
-from datetime import datetime
-from typing import Dict, List
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+from app.core.paper_equity_ledger import (
+    MarkPriceUnavailable,
+    PaperEquityLedger,
+    PaperEquitySeries,
+    PaperLedgerError,
+    compute_paper_portfolio_value,
+    get_paper_equity_series,
+    get_paper_ledger,
+    to_money,
+)
 
 logger = logging.getLogger(__name__)
+
+LEGACY_STATE_FILE = "paper_trading_state.json"
+
+
+def _money_str(value: Decimal) -> str:
+    normalized = value.normalize()
+    return "0" if normalized == 0 else format(normalized, "f")
 
 
 class PaperTradingSystem:
     """
-    Sistema de paper trading para simular operaciones
+    Simulador paper sobre el ledger de equity mark-to-market.
+
+    No mantiene balances propios: cash, inventario y costos se leen del ledger.
     """
 
-    def __init__(self, initial_balance: float = 1000.0):
+    def __init__(
+        self,
+        initial_balance: float = 1000.0,
+        state_file: Optional[str] = None,
+        ledger: Optional[PaperEquityLedger] = None,
+        series: Optional[PaperEquitySeries] = None,
+    ):
         self.initial_balance = initial_balance
-        self.current_balance = initial_balance
-        self.positions = {}  # symbol -> {quantity, avg_price, unrealized_pnl}
-        self.trade_history = []
-        self.paper_trading_file = "paper_trading_state.json"
+        self.paper_trading_file = state_file or LEGACY_STATE_FILE
+        self.trade_history: List[Dict] = []
+        self._ledger = ledger if ledger is not None else get_paper_ledger()
+        self._series = series
         self.load_state()
 
-    def load_state(self):
-        """Carga el estado del paper trading"""
-        try:
-            if os.path.exists(self.paper_trading_file):
-                with open(self.paper_trading_file, "r") as f:
-                    data = json.load(f)
-                    self.current_balance = data.get(
-                        "current_balance", self.initial_balance
-                    )
-                    self.positions = data.get("positions", {})
-                    self.trade_history = data.get("trade_history", [])
-                logger.info(
-                    f"✅ Estado de paper trading cargado: ${self.current_balance:.2f}"
-                )
-        except Exception as e:
-            logger.error(f"Error cargando estado de paper trading: {e}")
+    # -- ledger y serie -----------------------------------------------------
 
-    def save_state(self):
-        """Guarda el estado del paper trading"""
+    @property
+    def ledger(self) -> PaperEquityLedger:
+        """Fuente de verdad del equity paper."""
+        return self._ledger
+
+    @property
+    def series(self) -> PaperEquitySeries:
+        """Serie de equity MtM. Única vía válida para retornos, MaxDD y Calmar."""
+        if self._series is None:
+            self._series = get_paper_equity_series()
+        return self._series
+
+    # -- estado legacy ------------------------------------------------------
+
+    def load_state(self) -> None:
+        """
+        Carga el historial legacy sólo para trazabilidad.
+
+        Los balances del archivo legacy **no** se usan: eran floats sin fees y sin
+        marcación. La contabilidad vigente vive en el ledger.
+        """
+        try:
+            if not os.path.exists(self.paper_trading_file):
+                return
+            with open(self.paper_trading_file, "r") as handle:
+                data = json.load(handle)
+            self.trade_history = list(data.get("trade_history", []) or [])
+            if data.get("positions"):
+                logger.warning(
+                    "[PaperTrading] El estado legacy tiene %s posiciones que no se "
+                    "importan al ledger MtM: reconciliar antes de abrir la ventana "
+                    "del tear sheet",
+                    len(data["positions"]),
+                )
+        except Exception as exc:
+            logger.error("Error cargando estado de paper trading: %s", exc)
+
+    def save_state(self) -> None:
+        """Persiste el archivo legacy; el ledger se persiste solo (JSON versionado)."""
         try:
             data = {
                 "current_balance": self.current_balance,
                 "positions": self.positions,
                 "trade_history": self.trade_history,
-                "last_updated": datetime.now().isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "source_of_truth": "app.core.paper_equity_ledger",
             }
-            with open(self.paper_trading_file, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error guardando estado de paper trading: {e}")
+            with open(self.paper_trading_file, "w") as handle:
+                json.dump(data, handle, indent=2)
+        except Exception as exc:
+            logger.error("Error guardando estado de paper trading: %s", exc)
+
+    @property
+    def current_balance(self) -> float:
+        """Cash disponible. **No** es el equity: el equity incluye inventario."""
+        return float(self._ledger.cash)
+
+    @property
+    def positions(self) -> Dict[str, Dict[str, float]]:
+        positions: Dict[str, Dict[str, float]] = {}
+        for symbol in self._ledger.symbols():
+            open_cycles = self._ledger.open_cycles(symbol)
+            quantity = self._ledger.position(symbol)
+            cost_basis = sum((c.cost_basis_open for c in open_cycles), Decimal("0"))
+            positions[symbol] = {
+                "quantity": float(quantity),
+                "avg_price": float(cost_basis / quantity) if quantity > 0 else 0.0,
+                "unrealized_pnl": 0.0,
+            }
+        return positions
 
     def get_balance(self) -> float:
-        """Obtiene el balance actual"""
         return self.current_balance
 
     def get_positions(self) -> Dict:
-        """Obtiene las posiciones actuales"""
-        return self.positions.copy()
+        return self.positions
 
     def get_trade_history(self) -> List[Dict]:
-        """Obtiene el historial de trades"""
-        return self.trade_history.copy()
+        return list(self.trade_history)
 
-    def place_buy_order(self, symbol: str, quantity: float, price: float) -> Dict:
-        """
-        Coloca una orden de compra
+    # -- órdenes ------------------------------------------------------------
 
-        Args:
-            symbol: Símbolo del trading pair
-            quantity: Cantidad a comprar
-            price: Precio de compra
-
-        Returns:
-            Dict: Resultado de la orden
-        """
+    def place_buy_order(
+        self,
+        symbol: str,
+        quantity: float,
+        price: float,
+        order_type: str = "LIMIT",
+        grid_level: Optional[int] = None,
+    ) -> Dict:
+        """Compra paper: descuenta notional **y costos** del cash y abre un ciclo."""
         try:
-            # Calcular costo total
-            total_cost = quantity * price
-
-            # Verificar balance suficiente
-            if total_cost > self.current_balance:
-                return {
-                    "success": False,
-                    "error": f"Balance insuficiente: ${total_cost:.2f} > ${self.current_balance:.2f}",
-                    "order_id": None,
-                }
-
-            # Ejecutar orden
-            self.current_balance -= total_cost
-
-            # Actualizar posiciones
-            if symbol in self.positions:
-                # Posición existente
-                pos = self.positions[symbol]
-                total_quantity = pos["quantity"] + quantity
-                total_value = (pos["quantity"] * pos["avg_price"]) + total_cost
-                pos["avg_price"] = total_value / total_quantity
-                pos["quantity"] = total_quantity
-            else:
-                # Nueva posición
-                self.positions[symbol] = {
-                    "quantity": quantity,
-                    "avg_price": price,
-                    "unrealized_pnl": 0.0,
-                }
-
-            # Registrar trade
-            trade = {
-                "timestamp": datetime.now().isoformat(),
-                "symbol": symbol,
-                "side": "BUY",
-                "quantity": quantity,
-                "price": price,
-                "total_cost": total_cost,
-                "balance_after": self.current_balance,
-            }
-            self.trade_history.append(trade)
-
-            self.save_state()
-
-            logger.info(
-                f"📈 Paper trading BUY: {symbol} {quantity} @ ${price:.2f} = ${total_cost:.2f}"
+            fill = self._ledger.record_buy(
+                symbol,
+                to_money(str(quantity), field_name="quantity"),
+                to_money(str(price), field_name="price"),
+                order_type=order_type,
+                grid_level=grid_level,
             )
+        except (PaperLedgerError, ValueError) as exc:
+            logger.warning("Orden de compra paper rechazada: %s", exc)
+            return {"success": False, "error": str(exc), "order_id": None}
 
-            return {
-                "success": True,
-                "order_id": f"paper_buy_{len(self.trade_history)}",
-                "executed_quantity": quantity,
-                "executed_price": price,
-                "total_cost": total_cost,
-                "balance_after": self.current_balance,
-            }
+        self._append_trade(fill)
+        self.save_state()
+        logger.info(
+            "📈 Paper BUY %s %s @ %s = %s USDT (fee %s + slippage %s)",
+            fill.symbol,
+            _money_str(fill.quantity),
+            _money_str(fill.price),
+            _money_str(fill.notional_usdt),
+            _money_str(fill.commission_usdt),
+            _money_str(fill.slippage_usdt),
+        )
+        return {
+            "success": True,
+            "order_id": fill.fill_id,
+            "executed_quantity": float(fill.quantity),
+            "executed_price": float(fill.price),
+            "total_cost": float(
+                fill.notional_usdt + fill.commission_usdt + fill.slippage_usdt
+            ),
+            "commission_usdt": _money_str(fill.commission_usdt),
+            "commission_asset": fill.commission_asset,
+            "slippage_usdt": _money_str(fill.slippage_usdt),
+            "cycle_id": fill.cycle_id,
+            "balance_after": self.current_balance,
+        }
 
-        except Exception as e:
-            logger.error(f"Error en orden de compra paper trading: {e}")
-            return {"success": False, "error": str(e), "order_id": None}
-
-    def place_sell_order(self, symbol: str, quantity: float, price: float) -> Dict:
-        """
-        Coloca una orden de venta
-
-        Args:
-            symbol: Símbolo del trading pair
-            quantity: Cantidad a vender
-            price: Precio de venta
-
-        Returns:
-            Dict: Resultado de la orden
-        """
+    def place_sell_order(
+        self,
+        symbol: str,
+        quantity: float,
+        price: float,
+        order_type: str = "LIMIT",
+    ) -> Dict:
+        """Venta paper: acredita el notional neto de costos y cierra ciclos FIFO."""
         try:
-            # Verificar posición existente
-            if symbol not in self.positions:
-                return {
-                    "success": False,
-                    "error": f"No hay posición en {symbol}",
-                    "order_id": None,
-                }
-
-            position = self.positions[symbol]
-            if position["quantity"] < quantity:
-                return {
-                    "success": False,
-                    "error": f'Cantidad insuficiente: {quantity} > {position["quantity"]}',
-                    "order_id": None,
-                }
-
-            # Calcular ganancia/pérdida
-            total_revenue = quantity * price
-            total_cost = quantity * position["avg_price"]
-            realized_pnl = total_revenue - total_cost
-
-            # Ejecutar orden
-            self.current_balance += total_revenue
-
-            # Actualizar posición
-            position["quantity"] -= quantity
-            if position["quantity"] <= 0:
-                # Posición cerrada
-                del self.positions[symbol]
-            else:
-                # Actualizar precio promedio
-                remaining_cost = position["quantity"] * position["avg_price"]
-                position["avg_price"] = remaining_cost / position["quantity"]
-
-            # Registrar trade
-            trade = {
-                "timestamp": datetime.now().isoformat(),
-                "symbol": symbol,
-                "side": "SELL",
-                "quantity": quantity,
-                "price": price,
-                "total_revenue": total_revenue,
-                "realized_pnl": realized_pnl,
-                "balance_after": self.current_balance,
-            }
-            self.trade_history.append(trade)
-
-            self.save_state()
-
-            logger.info(
-                f"📉 Paper trading SELL: {symbol} {quantity} @ ${price:.2f} = ${total_revenue:.2f} (PnL: ${realized_pnl:.2f})"
+            fill = self._ledger.record_sell(
+                symbol,
+                to_money(str(quantity), field_name="quantity"),
+                to_money(str(price), field_name="price"),
+                order_type=order_type,
             )
+        except (PaperLedgerError, ValueError) as exc:
+            logger.warning("Orden de venta paper rechazada: %s", exc)
+            return {"success": False, "error": str(exc), "order_id": None}
 
-            return {
-                "success": True,
-                "order_id": f"paper_sell_{len(self.trade_history)}",
-                "executed_quantity": quantity,
-                "executed_price": price,
-                "total_revenue": total_revenue,
-                "realized_pnl": realized_pnl,
+        matched = [
+            cycle
+            for cycle in self._ledger.cycles
+            if cycle.cycle_id in fill.cycle_ids
+        ]
+        realized_gross = sum((c.gross_pnl_usdt for c in matched), Decimal("0"))
+        realized_net = sum((c.net_pnl_usdt for c in matched), Decimal("0"))
+
+        self._append_trade(
+            fill, realized_gross=realized_gross, realized_net=realized_net
+        )
+        self.save_state()
+        logger.info(
+            "📉 Paper SELL %s %s @ %s (PnL neto de ciclos %s USDT, costos %s)",
+            fill.symbol,
+            _money_str(fill.quantity),
+            _money_str(fill.price),
+            _money_str(realized_net),
+            _money_str(fill.commission_usdt + fill.slippage_usdt),
+        )
+        return {
+            "success": True,
+            "order_id": fill.fill_id,
+            "executed_quantity": float(fill.quantity),
+            "executed_price": float(fill.price),
+            "total_revenue": float(
+                fill.notional_usdt - fill.commission_usdt - fill.slippage_usdt
+            ),
+            "realized_pnl": float(realized_net),
+            "realized_pnl_gross": float(realized_gross),
+            "commission_usdt": _money_str(fill.commission_usdt),
+            "slippage_usdt": _money_str(fill.slippage_usdt),
+            "closed_cycle_ids": list(fill.cycle_ids),
+            "closed_cycles": self._ledger.closed_cycle_count,
+            "balance_after": self.current_balance,
+        }
+
+    def _append_trade(
+        self,
+        fill,
+        realized_gross: Decimal = Decimal("0"),
+        realized_net: Decimal = Decimal("0"),
+    ) -> None:
+        self.trade_history.append(
+            {
+                "timestamp": fill.executed_at.isoformat(),
+                "symbol": fill.symbol,
+                "side": fill.side,
+                "quantity": float(fill.quantity),
+                "price": float(fill.price),
+                "notional_usdt": _money_str(fill.notional_usdt),
+                "commission_usdt": _money_str(fill.commission_usdt),
+                "commission_asset": fill.commission_asset,
+                "slippage_usdt": _money_str(fill.slippage_usdt),
+                "cycle_id": fill.cycle_id,
+                "cycle_ids": list(fill.cycle_ids),
+                "realized_pnl_gross": _money_str(realized_gross),
+                "realized_pnl": _money_str(realized_net),
                 "balance_after": self.current_balance,
             }
+        )
 
-        except Exception as e:
-            logger.error(f"Error en orden de venta paper trading: {e}")
-            return {"success": False, "error": str(e), "order_id": None}
+    # -- marcación a mercado ------------------------------------------------
 
-    def update_positions_pnl(self, current_prices: Dict[str, float]):
+    def _marks(
+        self, current_prices: Optional[Mapping[str, Any]] = None
+    ) -> Dict[str, Decimal]:
+        """Precios de marcación para los símbolos con inventario."""
+        provided = (
+            {
+                str(symbol).upper(): to_money(str(price), field_name=f"mark[{symbol}]")
+                for symbol, price in current_prices.items()
+            }
+            if current_prices
+            else {}
+        )
+        return {
+            symbol: provided[symbol]
+            for symbol in self._ledger.symbols()
+            if symbol in provided
+        }
+
+    def mark_to_market(
+        self,
+        current_prices: Optional[Mapping[str, Any]] = None,
+        at: Optional[datetime] = None,
+        record: bool = True,
+    ) -> Optional[Decimal]:
         """
-        Actualiza el PnL no realizado de las posiciones
+        Marca el equity paper y lo registra en la serie.
 
-        Args:
-            current_prices: Diccionario de precios actuales por símbolo
+        Con `current_prices` usa esos precios (tests, simulaciones); sin ellos va al
+        ticker real vía `compute_paper_portfolio_value` (gate A6). Retorna `None` si
+        falta algún precio: un hueco declarado es mejor que un equity inventado.
         """
-        total_unrealized_pnl = 0.0
+        if current_prices is None:
+            payload = compute_paper_portfolio_value(
+                ledger=self._ledger, series=self._series, at=at, record=record
+            )
+            return to_money(str(payload["total_value_usdt"])) if payload else None
 
-        for symbol, position in self.positions.items():
-            if symbol in current_prices:
-                current_price = current_prices[symbol]
-                market_value = position["quantity"] * current_price
-                cost_basis = position["quantity"] * position["avg_price"]
-                unrealized_pnl = market_value - cost_basis
+        marks = self._marks(current_prices)
+        try:
+            breakdown = self._ledger.equity_breakdown(marks)
+        except MarkPriceUnavailable as exc:
+            logger.error("[PaperTrading] Marca omitida por falta de precio: %s", exc)
+            return None
+        if record:
+            self.series.record(
+                breakdown["equity"],
+                at=at,
+                cash=breakdown["cash"],
+                inventory_value=breakdown["inventory_value"],
+                deployed_capital=self._ledger.deployed_capital,
+            )
+        return breakdown["equity"]
 
-                position["unrealized_pnl"] = unrealized_pnl
-                total_unrealized_pnl += unrealized_pnl
+    def daily_closes(self) -> List[Tuple[datetime, Decimal]]:
+        """Cierres diarios de equity anclados a 00:00 UTC."""
+        return self.series.daily_closes()
 
-        return total_unrealized_pnl
+    def daily_returns(self) -> List[Decimal]:
+        """Retornos diarios sobre equity MtM: el insumo canónico del tear sheet."""
+        return self.series.daily_returns()
 
-    def get_portfolio_summary(self, current_prices: Dict[str, float] = None) -> Dict:
+    def update_positions_pnl(
+        self, current_prices: Optional[Mapping[str, Any]] = None
+    ) -> float:
+        """PnL no realizado del inventario abierto a los precios provistos."""
+        try:
+            return float(self._ledger.unrealized_pnl_usdt(self._marks(current_prices)))
+        except MarkPriceUnavailable as exc:
+            logger.warning("[PaperTrading] PnL no realizado incompleto: %s", exc)
+            return 0.0
+
+    def get_portfolio_summary(
+        self, current_prices: Optional[Mapping[str, Any]] = None
+    ) -> Dict:
         """
-        Obtiene un resumen del portafolio
+        Resumen paper. La cifra que manda es `equity_mtm_usdt`.
 
-        Args:
-            current_prices: Precios actuales para calcular PnL no realizado
-
-        Returns:
-            Dict: Resumen del portafolio
+        `total_pnl` se calcula sobre equity MtM, no sobre ciclos cerrados: medir un
+        grid por PnL realizado es una mentira mecánica (tear-sheet-spec §1.2-B1).
+        `equity_mtm_usdt` es `None` si falta algún precio de marcación.
         """
-        total_unrealized_pnl = 0.0
+        marks = self._marks(current_prices)
+        ledger = self._ledger
+        cost_ratio = ledger.cost_ratio()
+
+        summary: Dict[str, Any] = {
+            "initial_balance": float(ledger.initial_cash),
+            "current_balance": self.current_balance,
+            "deployed_capital_usdt": _money_str(ledger.deployed_capital),
+            "fees_paid_usdt": _money_str(ledger.fees_total_usdt),
+            "slippage_paid_usdt": _money_str(ledger.slippage_total_usdt),
+            "total_costs_usdt": _money_str(
+                ledger.fees_total_usdt + ledger.slippage_total_usdt
+            ),
+            "cost_round_trip_bps": _money_str(ledger.cost_model.round_trip_bps),
+            "cost_ratio": _money_str(cost_ratio) if cost_ratio is not None else None,
+            "total_realized_pnl_gross": float(ledger.realized_gross_pnl_usdt),
+            "total_realized_pnl_net": float(ledger.realized_net_pnl_usdt),
+            "closed_cycles": ledger.closed_cycle_count,
+            "open_cycles": ledger.open_cycle_count,
+            "total_trades": len(self.trade_history),
+            "equity_source": "mark_to_market",
+            "daily_closes": len(self.series.daily_closes()),
+        }
+
+        try:
+            breakdown = ledger.equity_breakdown(marks)
+        except MarkPriceUnavailable as exc:
+            logger.warning(
+                "[PaperTrading] Resumen sin equity MtM por falta de precio: %s", exc
+            )
+            summary.update(
+                {
+                    "equity_mtm_usdt": None,
+                    "pnl_mtm_usdt": None,
+                    "total_pnl": None,
+                    "total_pnl_pct": None,
+                    "total_unrealized_pnl": None,
+                    "positions": [],
+                    "open_positions": ledger.open_cycle_count,
+                    "mark_prices_missing": True,
+                }
+            )
+            return summary
+
+        equity = breakdown["equity"]
+        pnl_mtm = equity - ledger.initial_cash
         positions_summary = []
-
-        for symbol, position in self.positions.items():
-            current_price = (
-                current_prices.get(symbol, position["avg_price"])
-                if current_prices
-                else position["avg_price"]
+        for symbol, position in breakdown["positions"].items():
+            cost_basis = sum(
+                (c.cost_basis_open for c in ledger.open_cycles(symbol)), Decimal("0")
             )
-            market_value = position["quantity"] * current_price
-            cost_basis = position["quantity"] * position["avg_price"]
-            unrealized_pnl = market_value - cost_basis
-
+            unrealized = position["value"] - cost_basis
             positions_summary.append(
                 {
                     "symbol": symbol,
-                    "quantity": position["quantity"],
-                    "avg_price": position["avg_price"],
-                    "current_price": current_price,
-                    "market_value": market_value,
-                    "cost_basis": cost_basis,
-                    "unrealized_pnl": unrealized_pnl,
-                    "unrealized_pnl_pct": (unrealized_pnl / cost_basis * 100)
+                    "quantity": float(position["quantity"]),
+                    "avg_price": float(cost_basis / position["quantity"])
+                    if position["quantity"] > 0
+                    else 0.0,
+                    "current_price": float(position["mark"]),
+                    "market_value": float(position["value"]),
+                    "cost_basis": float(cost_basis),
+                    "unrealized_pnl": float(unrealized),
+                    "unrealized_pnl_pct": float(unrealized / cost_basis * 100)
                     if cost_basis > 0
-                    else 0,
+                    else 0.0,
                 }
             )
 
-            total_unrealized_pnl += unrealized_pnl
-
-        # Calcular PnL total realizado
-        total_realized_pnl = sum(
-            trade.get("realized_pnl", 0) for trade in self.trade_history
+        summary.update(
+            {
+                "equity_mtm_usdt": _money_str(equity),
+                "inventory_value_usdt": _money_str(breakdown["inventory_value"]),
+                "pnl_mtm_usdt": _money_str(pnl_mtm),
+                "total_pnl": float(pnl_mtm),
+                "total_pnl_pct": float(pnl_mtm / ledger.initial_cash * 100)
+                if ledger.initial_cash > 0
+                else 0.0,
+                "total_unrealized_pnl": float(ledger.unrealized_pnl_usdt(marks)),
+                "positions": positions_summary,
+                "open_positions": len(positions_summary),
+                "mark_prices_missing": False,
+            }
         )
+        return summary
 
-        return {
-            "initial_balance": self.initial_balance,
-            "current_balance": self.current_balance,
-            "total_unrealized_pnl": total_unrealized_pnl,
-            "total_realized_pnl": total_realized_pnl,
-            "total_pnl": total_unrealized_pnl + total_realized_pnl,
-            "total_pnl_pct": (
-                (total_unrealized_pnl + total_realized_pnl) / self.initial_balance * 100
-            ),
-            "positions": positions_summary,
-            "total_trades": len(self.trade_history),
-            "open_positions": len(self.positions),
-        }
-
-    def reset_paper_trading(self, new_balance: float = None):
+    def reset_paper_trading(self, new_balance: Optional[float] = None) -> None:
         """
-        Resetea el paper trading
+        Reinicia el ledger paper.
 
-        Args:
-            new_balance: Nuevo balance inicial (opcional)
+        **Reinicia también la ventana del tear sheet**: la serie de equity vuelve a
+        cero y el conteo de días limpios arranca de nuevo (gate A1/A2).
         """
         if new_balance:
             self.initial_balance = new_balance
 
-        self.current_balance = self.initial_balance
-        self.positions = {}
+        self._ledger = PaperEquityLedger(
+            initial_cash=to_money(str(self.initial_balance)),
+            deployed_capital=self._ledger.deployed_capital,
+            cost_model=self._ledger.cost_model,
+            storage_path=self._ledger.storage_path,
+        )
+        self._series = PaperEquitySeries(
+            config_hash=self.series.config_hash,
+            deployed_capital=self._ledger.deployed_capital,
+            storage_path=self.series.storage_path,
+        )
         self.trade_history = []
-
         self.save_state()
-
-        logger.info(
-            f"🔄 Paper trading reseteado con balance: ${self.initial_balance:.2f}"
+        logger.warning(
+            "🔄 Paper trading reseteado con balance %.2f — la ventana de equity del "
+            "tear sheet arranca de cero",
+            self.initial_balance,
         )
 
 
