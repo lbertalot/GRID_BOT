@@ -13,7 +13,13 @@
 #   - beat        Celery beat (tareas programadas)
 #   - flower      Monitor de Celery (puerto 5555)
 #   - prometheus  Métricas (puerto 9090)
+#   - alertmanager Receptor de alertas (puerto 9093)
 #   - grafana     Dashboards (puerto 3000, admin/gridbot123)
+#
+# Convivencia con otro stack GridBot ya corriendo (nombres/puertos tomados):
+#   GRIDBOT_PREFIX=gridbot_paper API_PORT=8010 DB_PORT=5442 REDIS_PORT=6389 \
+#   FLOWER_PORT=5565 PROMETHEUS_PORT=9190 ALERTMANAGER_PORT=9193 GRAFANA_PORT=3010 \
+#   docker compose -f docker-compose.local.yml -p gridbot_paper up -d
 
 x-app-env: &app-env
   DATABASE_URL: postgresql://griduser:gridpass@db:5432/gridbot
@@ -28,8 +34,10 @@ x-app-env: &app-env
   ACCESS_LOG: "false"
   DOCKER_ENV: "true"
   TZ: UTC
-  # Trading — defaults seguros (DoD Docker local): paper + ciclo de estrategia desactivado
-  # hasta decisión explícita del operador (ver Docs/DOCKER_LOCAL_DOD_CHECKLIST.md).
+  # Prometheus scrapea http://api:8000/metrics: sin "api" en TRUSTED_HOSTS el
+  # TrustedHostMiddleware responde 400 y el target queda down.
+  TRUSTED_HOSTS: localhost,127.0.0.1,testserver,api
+  # Trading — defaults seguros locales: PAPER (simulación; sin órdenes reales).
   # FORCE_REAL_MODE vacío o "false" para no anular PAPER_TRADING.
   PAPER_TRADING: "true"
   TRADING_ENABLED: "false"
@@ -80,7 +88,7 @@ services:
     build:
       context: ./docker/postgres
       dockerfile: Dockerfile
-    container_name: gridbot_db
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: griduser
@@ -91,7 +99,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U griduser -d gridbot"]
       interval: 10s
@@ -103,10 +111,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: gridbot_redis
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -124,7 +132,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gridbot_migrate
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_migrate
     restart: "no"
     depends_on:
       db:
@@ -150,10 +158,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gridbot_api
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -190,7 +198,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gridbot_worker
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_worker
     restart: unless-stopped
     depends_on:
       db:
@@ -224,7 +232,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gridbot_beat
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_beat
     restart: unless-stopped
     depends_on:
       db:
@@ -255,10 +263,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gridbot_flower
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_flower
     restart: unless-stopped
     ports:
-      - "5555:5555"
+      - "${FLOWER_PORT:-5555}:5555"
     depends_on:
       redis:
         condition: service_healthy
@@ -298,10 +306,10 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: gridbot_prometheus
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/rules:/etc/prometheus/rules:ro
@@ -319,12 +327,34 @@ services:
     networks:
       - gridbot_network
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: gridbot_grafana
+  # prometheus.yml apunta a alertmanager:9093; sin este servicio las reglas de
+  # breakers/reconciliación no llegan a ningún receptor en el stack local.
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_alertmanager
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gridbot_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -357,12 +387,12 @@ services:
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
-    container_name: gridbot_redis_exporter
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_redis_exporter
     restart: unless-stopped
     environment:
       REDIS_ADDR: redis://redis:6379
     ports:
-      - "9121:9121"
+      - "${REDIS_EXPORTER_PORT:-9121}:9121"
     depends_on:
       redis:
         condition: service_healthy
@@ -375,13 +405,13 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
-    container_name: gridbot_postgres_exporter
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_postgres_exporter
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://griduser:gridpass@db:5432/gridbot?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: ""
     ports:
-      - "9187:9187"
+      - "${POSTGRES_EXPORTER_PORT:-9187}:9187"
     depends_on:
       db:
         condition: service_healthy
@@ -398,11 +428,11 @@ services:
   # Tag v0.54.1 verificado en gcr.io (latest también sirve).
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.54.1
-    container_name: gridbot_cadvisor
+    container_name: ${GRIDBOT_PREFIX:-gridbot}_cadvisor
     restart: unless-stopped
     privileged: true
     ports:
-      - "8081:8080"
+      - "${CADVISOR_PORT:-8081}:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -430,6 +460,7 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  alertmanager_data:
 
 networks:
   gridbot_network:
