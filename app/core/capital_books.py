@@ -13,9 +13,9 @@ de comprometerse de golpe. Eso parte el número en dos, y confundirlos es un err
 
 - `tradable_capital` = `contributed − ops_reserve_committed`. Es el capital real de hoy
   y **la base del kill** (Decisión 1 de la enmienda). Sube a medida que queda claro que
-  no gastamos: al go-live 2026-09-15 se espera ~970–985, no 900.
-- `tradable_capital_floor` = `contributed − ops_reserve_cap` (1000 − 100 = 900). Es el
-  peor caso bajo la política de ops, y **la base de los notional caps**.
+  no gastamos: al go-live 2026-09-15 se espera 985.00 con un committed de 15.00.
+- `tradable_capital_floor` = `contributed − ops_reserve_total` (1000 − 100 = 900). Es
+  el peor caso bajo la política de ops, y **la base de los notional caps**.
 
 Los `notional_cap_usd` se fijan sobre el **piso** a propósito: si se derivaran del
 tradable real, el sizing de cada book se movería cada mes con el devengo de ops —
@@ -26,13 +26,20 @@ El `consolidated_equity` sí usa el committed real, porque el kill mide plata de
 
 ## Quién es dueño de qué
 
-`ops_reserve_committed` lo produce el **Track B** (`ops_ledger`), no este módulo. Se
-resuelve en este orden: parámetro explícito → `app.core.ops_ledger` → env
-`OPS_RESERVE_COMMITTED_USD` → `0.00`. El snapshot expone siempre
-`ops_reserve_committed_source` para que el dashboard no muestre un default como si
-fuera un dato del ledger. Si el ledger existe pero falla, la fuente es `unavailable`:
-degradamos con un default conservador (committed 0 ⇒ tradable más alto ⇒ kill floor más
-alto ⇒ dispara antes), nunca con un número viejo disfrazado de actual.
+La reserva de ops es del **Track B** (`ops_ledger`, ADR-008), no de este módulo. Se
+consume su contrato público: `get_ops_ledger()` → `.committed_usd()` (devengado ∪
+gasto real) y `.reserve_total_usd` (techo), más el helper puro
+`compute_tradable_capital(contributed, committed)`, que usamos en vez de restar por
+nuestra cuenta para que ledger, risk engine y books no deriven tres tradables
+distintos.
+
+Orden de resolución del committed: parámetro explícito → ops ledger → env
+`OPS_RESERVE_COMMITTED_USD` → `0.00`. El techo: ops ledger → config versionada. El
+snapshot expone `ops_reserve_total_source` y `ops_reserve_committed_source` para que
+el dashboard no muestre un default como si fuera un dato del ledger. Si el ledger
+existe pero falla, la fuente es `unavailable`: degradamos con un default conservador
+(committed 0 ⇒ tradable más alto ⇒ kill floor más alto ⇒ dispara antes), nunca con un
+número viejo disfrazado de actual.
 
 ## Alcance L0 (AC-S6.5)
 
@@ -75,11 +82,14 @@ L0_LIVE_ALLOWED_BOOK_IDS = frozenset({CORE_BOOK_ID})
 # Techo de la reserva de ops en L0 (CEO Amendment 01, Decisión 3). Antes era 150–250;
 # subirlo de nuevo baja el capital tradable y encarece el hurdle de la estrategia, así
 # que exige otra decisión del CEO, no una edición de JSON.
-L0_OPS_RESERVE_CAP_USD = Decimal("100")
+L0_OPS_RESERVE_TOTAL_USD = Decimal("100")
 
-# Contrato esperado del Track B para el devengado de ops.
+# Contrato público del Track B (ops ledger, PR #36 / ADR-008).
 OPS_LEDGER_MODULE = "app.core.ops_ledger"
-OPS_LEDGER_GETTER = "get_ops_reserve_committed_usd"
+OPS_LEDGER_FACTORY = "get_ops_ledger"
+OPS_LEDGER_COMMITTED_METHOD = "committed_usd"
+OPS_LEDGER_TOTAL_ATTR = "reserve_total_usd"
+OPS_LEDGER_TRADABLE_FN = "compute_tradable_capital"
 
 VALID_PNL_SOURCES = frozenset({"internal", "manual"})
 _PNL_FIELDS = ("realized_pnl", "unrealized_pnl")
@@ -129,7 +139,7 @@ class CapitalBooksConfig:
 
     version: int
     contributed_capital_usd: Decimal
-    ops_reserve_cap_usd: Decimal
+    ops_reserve_total_usd: Decimal
     tradable_capital_floor_usd: Decimal
     books: Tuple[BookAllocation, ...]
 
@@ -166,18 +176,18 @@ def _parse_pnl(raw: Mapping[str, Any], field_prefix: str) -> Tuple[Decimal, Deci
 
 
 def _resolve_tradable_floor(
-    contributed: Decimal, ops_reserve_cap: Decimal, override_raw: Optional[str]
+    contributed: Decimal, ops_reserve_total: Decimal, override_raw: Optional[str]
 ) -> Decimal:
     """Piso de capital tradable = aportado − techo de ops, salvo override explícito.
 
     El override sólo puede bajar el piso: nunca puede comerse la reserva de ops
     (AC-S5.1), porque la reserva no es capital dimensionable.
     """
-    derived = contributed - ops_reserve_cap
+    derived = contributed - ops_reserve_total
     if derived <= 0:
         raise CapitalBooksConfigError(
             f"piso de capital tradable no positivo: contributed={contributed} "
-            f"− ops_reserve_cap={ops_reserve_cap} = {derived}"
+            f"− ops_reserve_total={ops_reserve_total} = {derived}"
         )
     if override_raw is None:
         return _money(derived)
@@ -193,54 +203,91 @@ def _resolve_tradable_floor(
     if override > derived:
         raise CapitalBooksConfigError(
             f"TRADABLE_CAPITAL_USD={override} excede el piso tradable {derived} "
-            f"(contributed {contributed} − ops_reserve_cap {ops_reserve_cap}); "
+            f"(contributed {contributed} − ops_reserve_total {ops_reserve_total}); "
             "la reserva de ops no es capital tradable"
         )
     return _money(override)
 
 
-def _committed_from_ops_ledger() -> Tuple[Optional[Decimal], bool]:
-    """Lee el devengado del Track B. Devuelve `(valor, ledger_roto)`.
-
-    Contrato esperado: `app.core.ops_ledger.get_ops_reserve_committed_usd() -> Decimal`
-    con el ops devengado acumulado en USD (≥ 0, sin float). Si el módulo no existe
-    todavía, no es un error: seguimos con env/default.
-    """
+def _import_ops_ledger():
+    """Módulo del Track B, o `None` si todavía no está mergeado en esta branch."""
     try:
-        module = importlib.import_module(OPS_LEDGER_MODULE)
+        return importlib.import_module(OPS_LEDGER_MODULE)
     except ImportError:
-        return None, False
+        return None
 
-    getter = getattr(module, OPS_LEDGER_GETTER, None)
-    if getter is None:
+
+def _read_ops_ledger() -> Tuple[Optional[Decimal], Optional[Decimal], bool]:
+    """Lee `(committed, total, ledger_roto)` del ops ledger (ADR-008, PR #36).
+
+    Contrato consumido: `get_ops_ledger()` devuelve un ledger con
+    `committed_usd() -> Decimal` (devengado ∪ gasto real) y la property
+    `reserve_total_usd -> Decimal` (techo). Que el módulo no exista todavía no es un
+    error: seguimos con env/config.
+    """
+    module = _import_ops_ledger()
+    if module is None:
+        return None, None, False
+
+    factory = getattr(module, OPS_LEDGER_FACTORY, None)
+    if factory is None:
         logger.warning(
-            "%s existe pero no expone %s(); se usa env/default para el ops devengado",
+            "%s existe pero no expone %s(); se usa env/config para la reserva de ops",
             OPS_LEDGER_MODULE,
-            OPS_LEDGER_GETTER,
+            OPS_LEDGER_FACTORY,
         )
-        return None, True
+        return None, None, True
     try:
-        value = _to_decimal(getter(), f"{OPS_LEDGER_MODULE}.{OPS_LEDGER_GETTER}()")
+        ledger = factory()
+        committed = _to_decimal(
+            getattr(ledger, OPS_LEDGER_COMMITTED_METHOD)(),
+            f"{OPS_LEDGER_MODULE}.{OPS_LEDGER_COMMITTED_METHOD}()",
+        )
+        total = _to_decimal(
+            getattr(ledger, OPS_LEDGER_TOTAL_ATTR),
+            f"{OPS_LEDGER_MODULE}.{OPS_LEDGER_TOTAL_ATTR}",
+        )
+        if total < 0:
+            raise CapitalBooksConfigError(
+                f"{OPS_LEDGER_TOTAL_ATTR} negativo ({total})"
+            )
     except Exception as exc:
         # Un bug del Track B no puede romper la lectura de books ni inventar un
         # número: degradamos a `unavailable` y que el dashboard lo muestre.
-        logger.warning("ops ledger no disponible para el devengado de ops: %s", exc)
-        return None, True
-    return value, False
+        logger.warning("ops ledger no disponible para la reserva de ops: %s", exc)
+        return None, None, True
+    return committed, total, False
+
+
+def _tradable_capital(contributed: Decimal, committed: Decimal) -> Decimal:
+    """`aportado − ops devengado`, delegando en el Track B cuando está disponible.
+
+    El helper vive en `ops_ledger` justamente para que el ledger, el risk engine y
+    este módulo no puedan derivar tres tradables distintos (CEO-01, Decisión 1).
+    """
+    module = _import_ops_ledger()
+    compute = getattr(module, OPS_LEDGER_TRADABLE_FN, None) if module else None
+    if compute is None:
+        return _money(contributed - committed)
+    try:
+        return _money(_to_decimal(compute(contributed, committed), OPS_LEDGER_TRADABLE_FN))
+    except Exception as exc:
+        logger.warning("%s no utilizable, se deriva localmente: %s", OPS_LEDGER_TRADABLE_FN, exc)
+        return _money(contributed - committed)
 
 
 def _resolve_ops_reserve_committed(
-    contributed: Decimal, explicit: Optional[Any]
+    contributed: Decimal, explicit: Optional[Any], ledger_committed: Optional[Decimal],
+    ledger_broken: bool,
 ) -> Tuple[Decimal, str]:
     """Devengado de ops + su fuente. Orden: explícito → ops_ledger → env → default."""
     if explicit is not None:
         committed, source = _to_decimal(explicit, "ops_reserve_committed"), "explicit"
+    elif ledger_committed is not None:
+        committed, source = ledger_committed, "ops_ledger"
     else:
-        ledger_value, ledger_broken = _committed_from_ops_ledger()
         env_raw = os.getenv("OPS_RESERVE_COMMITTED_USD")
-        if ledger_value is not None:
-            committed, source = ledger_value, "ops_ledger"
-        elif env_raw is not None:
+        if env_raw is not None:
             try:
                 committed = _to_decimal(env_raw, "OPS_RESERVE_COMMITTED_USD")
             except CapitalBooksConfigError as exc:
@@ -296,26 +343,26 @@ def parse_capital_books_config(
     contributed = _to_decimal(
         raw.get("contributed_capital_usd", "0"), "contributed_capital_usd"
     )
-    ops_reserve_cap = _to_decimal(
-        raw.get("ops_reserve_cap_usd", "0"), "ops_reserve_cap_usd"
+    ops_reserve_total = _to_decimal(
+        raw.get("ops_reserve_total_usd", "0"), "ops_reserve_total_usd"
     )
     if contributed <= 0:
         raise CapitalBooksConfigError(
             f"contributed_capital_usd debe ser > 0 (recibido {contributed})"
         )
-    if ops_reserve_cap < 0:
+    if ops_reserve_total < 0:
         raise CapitalBooksConfigError(
-            f"ops_reserve_cap_usd no puede ser negativo (recibido {ops_reserve_cap})"
+            f"ops_reserve_total_usd no puede ser negativo (recibido {ops_reserve_total})"
         )
-    if ops_reserve_cap > L0_OPS_RESERVE_CAP_USD:
+    if ops_reserve_total > L0_OPS_RESERVE_TOTAL_USD:
         raise CapitalBooksConfigError(
-            f"ops_reserve_cap_usd={ops_reserve_cap} supera el techo de ops de L0 "
-            f"({L0_OPS_RESERVE_CAP_USD}) fijado en CEO Amendment 01; subirlo exige "
+            f"ops_reserve_total_usd={ops_reserve_total} supera el techo de ops de L0 "
+            f"({L0_OPS_RESERVE_TOTAL_USD}) fijado en CEO Amendment 01; subirlo exige "
             "una decisión del CEO, no una edición de config"
         )
 
     tradable_floor = _resolve_tradable_floor(
-        contributed, ops_reserve_cap, tradable_capital_override
+        contributed, ops_reserve_total, tradable_capital_override
     )
 
     _validate_book_ids(entry.get("book_id") for entry in raw_books)
@@ -371,7 +418,7 @@ def parse_capital_books_config(
     return CapitalBooksConfig(
         version=int(raw.get("version", 0)),
         contributed_capital_usd=_money(contributed),
-        ops_reserve_cap_usd=_money(ops_reserve_cap),
+        ops_reserve_total_usd=_money(ops_reserve_total),
         tradable_capital_floor_usd=tradable_floor,
         books=tuple(books),
     )
@@ -464,10 +511,39 @@ def get_books_snapshot(
             f"permitidos {list(KNOWN_BOOK_IDS)}"
         )
 
+    ledger_committed, ledger_total, ledger_broken = _read_ops_ledger()
     committed, committed_source = _resolve_ops_reserve_committed(
-        config.contributed_capital_usd, ops_reserve_committed
+        config.contributed_capital_usd,
+        ops_reserve_committed,
+        ledger_committed,
+        ledger_broken,
     )
-    tradable_capital = _money(config.contributed_capital_usd - committed)
+
+    # El techo lo fija ops (Track B) cuando está disponible; la config versionada es
+    # el fallback. Si ops sube su techo, el piso baja y los caps bajan con él: nunca
+    # dimensionamos books contra plata que ya está comprometida a infraestructura.
+    if ledger_total is not None:
+        ops_reserve_total, total_source = ledger_total, "ops_ledger"
+    else:
+        ops_reserve_total, total_source = config.ops_reserve_total_usd, "config"
+    if ops_reserve_total > L0_OPS_RESERVE_TOTAL_USD:
+        logger.warning(
+            "techo de ops %s por encima de la política L0 (%s): los notional caps "
+            "se recortan en consecuencia",
+            ops_reserve_total,
+            L0_OPS_RESERVE_TOTAL_USD,
+        )
+    tradable_floor = min(
+        config.tradable_capital_floor_usd,
+        _money(config.contributed_capital_usd - ops_reserve_total),
+    )
+    if tradable_floor <= 0:
+        raise CapitalBooksConfigError(
+            f"piso de capital tradable no positivo: aportado "
+            f"{config.contributed_capital_usd} − techo de ops {ops_reserve_total}"
+        )
+
+    tradable_capital = _tradable_capital(config.contributed_capital_usd, committed)
 
     books: list[Dict[str, Any]] = []
     allocated_cap = _ZERO
@@ -476,7 +552,7 @@ def get_books_snapshot(
     total_unrealized = _ZERO
 
     for book in config.books:
-        cap = _notional_cap(config.tradable_capital_floor_usd, book.allocation_pct)
+        cap = _notional_cap(tradable_floor, book.allocation_pct)
         realized, unrealized = _resolved_pnl(book, overrides)
         book_live_cap = cap if book.live_enabled else _ZERO
 
@@ -507,10 +583,10 @@ def get_books_snapshot(
         "books": books,
         "totals": {
             "contributed_capital": config.contributed_capital_usd,
-            "ops_reserve_cap": config.ops_reserve_cap_usd,
+            "ops_reserve_total": ops_reserve_total,
             "ops_reserve_committed": committed,
             "tradable_capital": tradable_capital,
-            "tradable_capital_floor": config.tradable_capital_floor_usd,
+            "tradable_capital_floor": tradable_floor,
             "allocated_notional_cap": allocated_cap,
             "live_notional_cap": live_cap,
             "realized_pnl": total_realized,
@@ -521,8 +597,9 @@ def get_books_snapshot(
         "live_books": [book["book_id"] for book in books if book["live_enabled"]],
         "paper_books": [book["book_id"] for book in books if not book["live_enabled"]],
         "notional_cap_policy": NOTIONAL_CAP_POLICY,
+        "ops_reserve_total_source": total_source,
         "ops_reserve_committed_source": committed_source,
-        "ops_reserve_over_cap": committed > config.ops_reserve_cap_usd,
+        "ops_reserve_over_cap": committed > ops_reserve_total,
         "capital_note": CAPITAL_NOTE,
         "pnl_note": PNL_NOTE,
     }
@@ -564,6 +641,7 @@ def serialize_books_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
         "live_books": list(snapshot["live_books"]),
         "paper_books": list(snapshot["paper_books"]),
         "notional_cap_policy": snapshot["notional_cap_policy"],
+        "ops_reserve_total_source": snapshot["ops_reserve_total_source"],
         "ops_reserve_committed_source": snapshot["ops_reserve_committed_source"],
         "ops_reserve_over_cap": snapshot["ops_reserve_over_cap"],
         "capital_note": snapshot["capital_note"],

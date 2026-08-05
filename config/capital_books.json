@@ -3,9 +3,9 @@
   "as_of": "2026-08-05",
   "source": "RFC-003 / ADR-004 + CEO Amendment 01 (2026-08-05, Decisiones 1 y 3)",
   "contributed_capital_usd": "1000",
-  "ops_reserve_cap_usd": "100",
-  "_note_ops_reserve": "Techo de ops en L0 (≤ 100). El devengado real (ops_reserve_committed) lo produce el Track B / ops_ledger, o el env OPS_RESERVE_COMMITTED_USD; no se declara acá para no duplicar un dato que envejece.",
-  "_note_notional_caps": "Los caps se derivan de contributed − ops_reserve_cap = 900 (piso), no del tradable real, para que el sizing no se mueva con el devengo mensual de ops.",
+  "ops_reserve_total_usd": "100",
+  "_note_ops_reserve": "Techo de ops en L0 (≤ 100), fallback de app.core.ops_ledger.reserve_total_usd. El devengado (ops_reserve_committed) lo produce el Track B vía get_ops_ledger().committed_usd(), o el env OPS_RESERVE_COMMITTED_USD; no se declara acá para no duplicar un dato que envejece.",
+  "_note_notional_caps": "Los caps se derivan de contributed − ops_reserve_total = 900 (piso), no del tradable real (~985 al go-live), para que el sizing no se mueva con el devengo mensual de ops.",
   "books": [
     {
       "book_id": "core_grid",
