@@ -18,6 +18,10 @@
 |---|---|---|---|---|
 | `/order` | POST | `app/api/trade.py` | `place_order()` | Sí |
 | `/api/trade/order` | POST | `app/api/trade.py` | `place_order()` | Sí |
+
+_Notas trading:_ `type=MARKET` puede ejecutarse vía `BrokerAdapter` si `USE_BROKER_ADAPTER=true` y `BROKER_PRIMARY_VENUE=binance_spot` (mismo criterio que `TradeExecutor`); fallback a `python-binance` ante desfase `-1021`. `LIMIT` sigue por cliente directo. Métrica: `gridbot_spot_market_submit_path_total` (`source=http_trade`).
+
+_Notas trading:_ `type=MARKET` puede ejecutarse vía `BrokerAdapter` si `USE_BROKER_ADAPTER=true` y `BROKER_PRIMARY_VENUE=binance_spot` (mismo criterio que `TradeExecutor`); fallback a `python-binance` ante desfase `-1021`. `LIMIT` sigue por cliente directo. Métrica: `gridbot_spot_market_submit_path_total` (`source=http_trade`).
 | `/api/trades` | GET | `app/api/trade.py` | `get_trades()` | Sí |
 | `/api/trade/trades` | GET | `app/api/trade.py` | `get_trades()` | Sí |
 | `/balances` | GET | `app/api/trade.py` | `get_balances()` | No |
@@ -43,6 +47,9 @@
 | Endpoint | Método | Archivo | Función | Auth |
 |---|---|---|---|---|
 | `/breakers/summary` | GET | `app/api/breakers_routes.py` | `breakers_summary()` | No |
+| `/breakers/status` | GET | `app/api/breakers_routes.py` | `breakers_status()` | No |
+| `/api/breakers/summary` | GET | `app/api/breakers_routes.py` | `breakers_summary_api()` | No |
+| `/api/breakers/status` | GET | `app/api/breakers_routes.py` | `breakers_status_api()` | No |
 | `/api/reconciliation/summary` | GET | `app/api/reconciliation_routes.py` | `reconciliation_summary()` | No |
 | `/integrity/status` | GET | `app/main.py` | `get_integrity_status()` | No |
 | `/integrity/validate-balances` | POST | `app/main.py` | `force_balance_validation()` | No |
@@ -76,6 +83,8 @@
 | `/strategy/rsi_macd` | POST | `app/api/strategies.py` | `run_rsi_macd()` | Sí |
 | `/strategy/backtest` | POST | `app/api/strategies.py` | `backtest_strategy()` | Sí |
 
+_Nota:_ el body de `POST /api/v2/strategies/backtest/run` puede incluir `persist_run_to_db: true` para guardar la corrida en `backtest_runs` / `backtest_metrics` (requiere migración `20260503_backtest_runs`).
+
 ### Endpoints de Riesgo
 
 | Endpoint | Método | Archivo | Función | Auth |
@@ -84,6 +93,18 @@
 | `/api/v2/risk/emergency-stop` | POST | `app/api/risk_routes.py` | `emergency_stop()` | Sí |
 | `/api/v2/risk/calculate-position-size` | POST | `app/api/risk_routes.py` | `calculate_position_size()` | No |
 | `/api/v2/risk/calculate-trailing-stop` | POST | `app/api/risk_routes.py` | `calculate_trailing_stop()` | No |
+
+### Endpoints de Comisiones (v1)
+
+| Endpoint | Método | Archivo | Función | Auth |
+|---|---|---|---|---|
+| `/api/v1/commissions/rates` | GET | `app/api/commission_routes.py` | `get_commission_rates()` | Sí |
+| `/api/v1/commissions/calculate` | POST | `app/api/commission_routes.py` | `calculate_commission()` | Sí |
+| `/api/v1/commissions/validate-profitability` | POST | `app/api/commission_routes.py` | `validate_grid_profitability()` | Sí |
+| `/api/v1/commissions/calculate-profit` | POST | `app/api/commission_routes.py` | `calculate_profit_with_commissions()` | Sí |
+| `/api/v1/commissions/update-rates` | GET | `app/api/commission_routes.py` | `update_commission_rates()` | Sí |
+| `/api/v1/commissions/status` | GET | `app/api/commission_routes.py` | `get_commission_status()` | Sí |
+| `/api/v1/commissions/transaction-cost-audit` | POST | `app/api/commission_routes.py` | `post_transaction_cost_audit()` | Sí |
 
 ### Endpoints de Configuración
 
@@ -102,6 +123,7 @@
 | Endpoint | Método | Archivo | Función | Auth |
 |---|---|---|---|---|
 | `/api/simulations/dry-run` | POST | `app/api/simulations.py` | `dry_run()` | Sí |
+| `/api/simulations/transaction-cost-audit` | POST | `app/api/simulations.py` | `transaction_cost_audit()` | Sí |
 
 ### Endpoints de Alertas
 

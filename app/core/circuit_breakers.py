@@ -33,6 +33,8 @@ class CircuitBreakers:
         self.logger.info("🔧 Módulo de circuit breakers inicializado")
         # Cooldown por breaker y estado
         self._last_activation_ts: Dict[str, float] = {}
+        # Aperturas acumuladas por breaker (solo observabilidad)
+        self._activation_count: Dict[str, int] = {}
         import os
 
         try:
@@ -70,9 +72,16 @@ class CircuitBreakers:
                 )
                 # Métrica de estado
                 try:
-                    from app.core.metrics import breaker_state
+                    from app.core.metrics import breaker_opens_total, breaker_state
 
                     breaker_state.labels(type=breaker_type).set(1)
+                    breaker_opens_total.labels(type=breaker_type).inc()
+                except Exception:
+                    pass
+                try:
+                    self._activation_count[breaker_type] = (
+                        self._activation_count.get(breaker_type, 0) + 1
+                    )
                 except Exception:
                     pass
             return True
@@ -170,6 +179,24 @@ class CircuitBreakers:
 
         return self.breakers[breaker_type].copy()
 
+    def get_cooldown_seconds(self) -> int:
+        """Ventana de cooldown configurada (segundos) que bloquea reactivaciones."""
+        return self._cooldown_seconds
+
+    def get_last_activation_ts(self, breaker_type: str) -> float:
+        """Timestamp unix de la última apertura (0.0 si nunca se abrió)."""
+        try:
+            return float(self._last_activation_ts.get(breaker_type, 0.0))
+        except Exception:
+            return 0.0
+
+    def get_activation_count(self, breaker_type: str) -> int:
+        """Cantidad de aperturas registradas para el breaker en este proceso."""
+        try:
+            return int(self._activation_count.get(breaker_type, 0))
+        except Exception:
+            return 0
+
     def get_all_breakers_status(self) -> Dict[str, Any]:
         """Obtener estado de todos los circuit breakers"""
         return {
@@ -201,3 +228,19 @@ class CircuitBreakers:
             summary += "\n"
 
         return summary
+
+
+_shared_breakers: "CircuitBreakers | None" = None
+
+
+def get_shared_breakers() -> "CircuitBreakers":
+    """Instancia compartida para lectura desde la capa API.
+
+    Los endpoints creaban un `CircuitBreakers()` nuevo por request, así que el
+    estado observado cambiaba entre llamadas. Compartir una sola instancia de
+    lectura no altera el comportamiento de ningún breaker.
+    """
+    global _shared_breakers
+    if _shared_breakers is None:
+        _shared_breakers = CircuitBreakers()
+    return _shared_breakers

@@ -187,6 +187,8 @@ services:
       - ENABLE_AUTO_REBALANCE=true
       - REBALANCE_ASSET_PRIORITY=SPK,HOME,SIGN,BNB,BTC
       - REPORTS_DIR=/app/reports
+      # Evita mkdir bajo /home/gridbot (usuario sin home escribible en imagen)
+      - MPLCONFIGDIR=/tmp/matplotlib
     volumes:
       - ./app:/app/app
       - ./grid_config_optimized.json:/app/grid_config_optimized.json
@@ -241,6 +243,7 @@ services:
       - EMERGENCY_STOP=${EMERGENCY_STOP}
       - MONITORING_DIR=/app/monitoring_data
       - REPORTS_DIR=/app/reports
+      - MPLCONFIGDIR=/tmp/matplotlib
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs

@@ -37,10 +37,10 @@ x-app-env: &app-env
   # Prometheus scrapea http://api:8000/metrics: sin "api" en TRUSTED_HOSTS el
   # TrustedHostMiddleware responde 400 y el target queda down.
   TRUSTED_HOSTS: localhost,127.0.0.1,testserver,api
-  # Trading — objetivo inmediato local: PAPER (simulación en app; sin órdenes reales).
+  # Trading — defaults seguros locales: PAPER (simulación; sin órdenes reales).
   # FORCE_REAL_MODE vacío o "false" para no anular PAPER_TRADING.
   PAPER_TRADING: "true"
-  TRADING_ENABLED: "true"
+  TRADING_ENABLED: "false"
   EMERGENCY_STOP: "false"
   FORCE_REAL_MODE: ""
   BINANCE_TESTNET: "false"

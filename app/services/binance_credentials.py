@@ -47,6 +47,8 @@ from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceRequestException
 from dotenv import load_dotenv
 
+from app.core.secret_redaction import format_credential_for_log
+
 # Cargar variables de entorno desde .env
 load_dotenv()
 
@@ -95,14 +97,17 @@ def get_binance_credentials() -> Tuple[Optional[str], Optional[str]]:
         )
         raise BinanceCredentialsError("Credenciales de Binance vacías")
 
-    # Log en modo DEBUG
+    # Credenciales presentes: solo labels redactados (+ fingerprint no reversible).
     debug_mode = os.getenv("DEBUG", "false").lower() == "true"
+    msg = (
+        f"✅ Credenciales Binance OK — "
+        f"{format_credential_for_log(api_key, label='api_key')}, "
+        f"{format_credential_for_log(secret_key, label='secret_key')}"
+    )
     if debug_mode:
-        logger.debug(f"🔍 API_KEY: {api_key[:6]}...")
-        logger.debug(f"🔍 SECRET_KEY: {secret_key[:6]}...")
+        logger.debug(msg)
     else:
-        logger.info(f"✅ API_KEY: {api_key[:10]}...")
-        logger.info(f"✅ SECRET_KEY: {secret_key[:10]}...")
+        logger.info(msg)
 
     return api_key, secret_key
 
@@ -131,7 +136,8 @@ def create_binance_client(
             raise BinanceCredentialsError("Credenciales vacías")
 
         logger.info(
-            f"🔧 Creando cliente Binance - API Key: {api_key[:10]}..., Testnet: {testnet}"
+            "🔧 Creando cliente Binance - "
+            f"{format_credential_for_log(api_key, label='api_key')}, Testnet: {testnet}"
         )
 
         # Crear cliente
@@ -144,7 +150,10 @@ def create_binance_client(
 
         # Verificar que el cliente tenga las credenciales asignadas
         if hasattr(client, "api_key") and client.api_key:
-            logger.info(f"✅ Cliente creado con API key: {client.api_key[:10]}...")
+            logger.info(
+                "✅ Cliente creado con "
+                f"{format_credential_for_log(client.api_key, label='api_key')}"
+            )
         else:
             logger.error("❌ Cliente creado pero sin API key asignada")
             # Intentar asignar manualmente
@@ -252,7 +261,10 @@ def get_binance_client_with_verification(
             logger.error("❌ Cliente creado pero sin API key")
             raise BinanceCredentialsError("Cliente sin API key")
 
-        logger.info(f"✅ Cliente creado con API key: {client.api_key[:10]}...")
+        logger.info(
+            "✅ Cliente creado con "
+            f"{format_credential_for_log(client.api_key, label='api_key')}"
+        )
 
         # 3. Verificar credenciales
         verification_info = verify_binance_credentials(client)
