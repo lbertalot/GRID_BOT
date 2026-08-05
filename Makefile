@@ -2,7 +2,7 @@
 # Uso: make [target]
 
 .PHONY: help validate validate-strict config-check paper-flags up down logs \
-        check-health smoke-paper smoke-paper-asgi cleanup \
+        check-health smoke-paper smoke-paper-asgi smoke-observability cleanup \
         test test-unit test-integration db-reset db-seed format lint \
         build push docs
 
@@ -87,6 +87,10 @@ smoke-paper: ## Smoke paper contra API levantada (falla si effective_mode != pap
 
 smoke-paper-asgi: ## Smoke paper en proceso, sin docker ni servidor
 	@$(PYTHON) scripts/smoke_paper_mode.py --asgi
+	@exit $$?
+
+smoke-observability: ## Smoke cadvisor/prometheus (docker API + up + series id!=/)
+	@bash scripts/smoke_observability.sh
 	@exit $$?
 
 check-health-continuous: ## Health checks en loop (cada 30s)

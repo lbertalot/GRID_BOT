@@ -101,11 +101,20 @@ curl -sf -o /dev/null -w '%{http_code}\n' http://localhost:3000/login
 curl -sf -o /dev/null -w '%{http_code}\n' http://localhost:9090/-/healthy
 curl -sf -o /dev/null -w '%{http_code}\n' -u admin:admin http://localhost:5555/
 
+# Observabilidad: cAdvisor no "healthy pero vacío" (ver Docs/ops/silent-failures-checklist.md)
+make smoke-observability
+# o copy-paste:
+curl -sf http://localhost:8081/api/v1.3/docker | jq 'length'   # > 0
+curl -sf 'http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22cadvisor%22%7D' \
+  | jq -e '.data.result[0].value[1] == "1"'
+curl -sf 'http://localhost:9090/api/v1/query?query=count(container_cpu_usage_seconds_total%7Bid!%3D%22%2F%22%7D)' \
+  | jq -e '(.data.result[0].value[1] | tonumber) >= 1'
+
 docker exec gridbot_api alembic current
 # → head (ej. 20260505_mc_backtest_fk)
 ```
 
-Esperado día-1: health OK, `effective_mode=paper`, capital/ops/books/breakers 200, CEO overview con cards capital/ops en `ok` o `stale` (no 500), Grafana/Prometheus/Flower up.
+Esperado día-1: health OK, `effective_mode=paper`, capital/ops/books/breakers 200, CEO overview con cards capital/ops en `ok` o `stale` (no 500), Grafana/Prometheus/Flower up, cadvisor con discovery Docker y series `container_*` por contenedor (`id!="/"`).
 
 ## 6. Known issues vs blockers pre-live
 
