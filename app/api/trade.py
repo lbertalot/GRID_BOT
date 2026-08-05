@@ -20,7 +20,7 @@ from app.core.metrics import (
     order_validation_rejects_total,
     gridbot_spot_market_submit_path_total,
 )
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from fastapi import Request
 from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
 from app.core.operation_tracker import OperationTracker, OperationStatus
@@ -236,11 +236,10 @@ async def place_order(
 ):
     # Bloqueo por breakers (si está en modo crítico/protegido, rechazar)
     try:
-        breakers = (
-            getattr(request.app.state, "breakers", CircuitBreakers())
-            if request
-            else CircuitBreakers()
-        )
+        if request is not None:
+            breakers = getattr(request.app.state, "breakers", None) or get_shared_breakers()
+        else:
+            breakers = get_shared_breakers()
         summary = breakers.get_all_breakers_status()
         if summary.get("critical_mode") or summary.get("total_active", 0) > 0:
             order_validation_rejects_total.labels(
@@ -369,10 +368,31 @@ async def place_order(
                     )
                     market_path = "broker_adapter"
                 except Exception as adapter_err:
+                    from app.core.order_execution_guard import RealOrderBlocked
+
+                    if isinstance(adapter_err, RealOrderBlocked):
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Orden real bloqueada: {adapter_err.reason}",
+                        ) from adapter_err
                     if "-1021" not in str(adapter_err):
                         raise
                     market_path = None
             if market_path is None:
+                from app.core.order_execution_guard import (
+                    RealOrderBlocked,
+                    assert_real_order_allowed,
+                )
+
+                try:
+                    assert_real_order_allowed(
+                        context="trade.place_order.binance_client"
+                    )
+                except RealOrderBlocked as blocked:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Orden real bloqueada: {blocked.reason}",
+                    ) from blocked
                 if order.side == "BUY":
                     result = await asyncio.to_thread(
                         client.order_market_buy,
@@ -396,6 +416,18 @@ async def place_order(
                 raise HTTPException(
                     status_code=400, detail="Precio requerido para órdenes LIMIT"
                 )
+            from app.core.order_execution_guard import (
+                RealOrderBlocked,
+                assert_real_order_allowed,
+            )
+
+            try:
+                assert_real_order_allowed(context="trade.place_order.limit")
+            except RealOrderBlocked as blocked:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Orden real bloqueada: {blocked.reason}",
+                ) from blocked
             if order.side == "BUY":
                 result = await asyncio.to_thread(
                     client.order_limit_buy,

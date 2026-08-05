@@ -20,7 +20,7 @@ from app.services.telegram_alert import send_telegram_alert
 from app.services.alert_tasks import notify_consecutive_api_failures
 from app.services.binance_async import AsyncBinanceWrapper
 from app.services.binance_client_singleton import get_binance_client_singleton
-from app.core.circuit_breakers import CircuitBreakers
+from app.core.circuit_breakers import get_shared_breakers
 from app.core.auto_circuit_breaker import auto_circuit_breaker
 from app.core.strategy_blacklist import strategy_blacklist
 from app.core.metrics import (
@@ -536,7 +536,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                     )
 
                     # Verificar estado después de auto-activación
-                    ck = CircuitBreakers()
+                    ck = get_shared_breakers()
                     breakers = (
                         ck.get_all_breakers_status()
                         if hasattr(ck, "get_all_breakers_status")
@@ -769,7 +769,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 if not ready_symbols:
                     # Fallback para compatibilidad de test: si hay decisiones y breakers inactivos, encolar
                     try:
-                        ck = CircuitBreakers()
+                        ck = get_shared_breakers()
                         breakers = (
                             ck.get_all_breakers_status()
                             if hasattr(ck, "get_all_breakers_status")
@@ -797,7 +797,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                     return
                 # Breakers
                 try:
-                    ck = CircuitBreakers()
+                    ck = get_shared_breakers()
                     breakers = (
                         ck.get_all_breakers_status()
                         if hasattr(ck, "get_all_breakers_status")
@@ -861,7 +861,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 notify_consecutive_api_failures.delay("binance", 1)
                 try:
                     asyncio.run(
-                        CircuitBreakers().activate_breaker(
+                        get_shared_breakers().activate_breaker(
                             "system_integrity", "binance_net_fail"
                         )
                     )
@@ -875,7 +875,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 notify_consecutive_api_failures.delay("binance_auth", 1)
                 try:
                     asyncio.run(
-                        CircuitBreakers().activate_breaker(
+                        get_shared_breakers().activate_breaker(
                             "system_integrity", "binance_auth_fail"
                         )
                     )
@@ -884,7 +884,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 return {"status": "error", "message": "Binance auth check failed"}
             # Auto-recovery: si pasó el check, intentar desactivar breaker de integridad de red
             try:
-                asyncio.run(CircuitBreakers().deactivate_breaker("system_integrity"))
+                asyncio.run(get_shared_breakers().deactivate_breaker("system_integrity"))
             except Exception:
                 pass
         except Exception as e:
@@ -1041,7 +1041,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     return {"status": "skipped", "message": "Auto-rebalancing failed"}
 
                 return {"status": "skipped", "message": "Insufficient USDT"}
-            ck = CircuitBreakers()
+            ck = get_shared_breakers()
             bs = (
                 ck.get_all_breakers_status()
                 if hasattr(ck, "get_all_breakers_status")
