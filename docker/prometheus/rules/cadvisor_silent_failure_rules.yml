@@ -1,0 +1,41 @@
+# Detección de cAdvisor "healthy pero inútil":
+# - target scrape down (up=0)
+# - scrape up pero sin series por contenedor (solo id="/" o vacío)
+#
+# Selector verificado en stack local (2026-08): series sanas usan
+# id="/docker/<hash>" + name="gridbot_*". Excluir id="/" descarta el
+# contenedor raíz de máquina que cAdvisor siempre publica.
+groups:
+  - name: cadvisor-silent-failures
+    rules:
+      - alert: CadvisorTargetDown
+        expr: up{job="cadvisor"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: cadvisor
+        annotations:
+          summary: "Target Prometheus cadvisor caído"
+          description: >-
+            up{job="cadvisor"}==0 durante >2m. No hay scrape de métricas de
+            contenedores; dashboards de CPU/RAM del stack quedan ciegos.
+
+      - alert: CadvisorNoContainerMetrics
+        expr: |
+          (up{job="cadvisor"} == 1)
+          and on()
+          (
+            (count(container_cpu_usage_seconds_total{id!="/"}) or vector(0)) < 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          component: cadvisor
+        annotations:
+          summary: "cAdvisor up pero sin métricas por contenedor"
+          description: >-
+            El job cadvisor responde (up=1) pero no hay series
+            container_cpu_usage_seconds_total con id!="/". Patrón típico:
+            healthz OK y/api/v1.3/docker={} (factory Docker/containerd
+            rota) o scrape que solo ve el root id="/". Revisar sockets
+            docker/containerd y Docs/ops/silent-failures-checklist.md.
