@@ -34,6 +34,13 @@ ALERTS_SOFT_ONLY = os.getenv("PIPELINE_HEALTH_ALERTS_SOFT", "true").lower() in (
     "yes",
 )
 
+# Tablas de trading: en paper idle (0 fills esperados) increase==0 es INFO, no degraded.
+_PAPER_IDLE_SOFT_TABLES = frozenset({"trades", "balances", "performance_metrics"})
+
+
+def _is_paper_trading() -> bool:
+    return os.getenv("PAPER_TRADING", "true").lower() in {"1", "true", "yes", "on"}
+
 
 def _prom_query(query: str, timeout_s: float = 10.0) -> Optional[float]:
     """Ejecuta instant query; devuelve el valor escalar o None si falla."""
@@ -177,13 +184,16 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
     Comprueba que haya escrituras db_writes_total en ~65m por tabla critica
     y que portfolio_snapshots tenga captura reciente (SQL).
 
-    MEJORA: Retorna estado degraded en lugar de lanzar RuntimeError
-    Monitorea via metricas Prometheus, no via task failure
+    E4: con PAPER_TRADING=true, trades/balances/performance_metrics con
+    increase==0 (paper idle / 0 fills) son soft/info — no degraded.
+    portfolio_snapshots sigue siendo hard requirement.
     """
     started = datetime.now(timezone.utc)
+    paper_aware = _is_paper_trading()
     tables_prom = ("trades", "balances", "performance_metrics", "alerts")
     checks: Dict[str, Any] = {}
     failures: List[str] = []
+    soft_failures: List[str] = []
     prom_responded = False
 
     for tbl in tables_prom:
@@ -196,6 +206,15 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
             checks[tbl]["severity"] = "warning"
             if not ok:
                 checks[tbl]["warning"] = "sin escrituras alerts en ventana (no bloquea)"
+        elif not ok and paper_aware and tbl in _PAPER_IDLE_SOFT_TABLES:
+            checks[tbl]["severity"] = "info"
+            checks[tbl]["ok"] = True  # no degrada desk paper idle
+            msg = (
+                f"{tbl}: increase(db_writes_total status=ok) en [{WINDOW}] == 0 "
+                f"(paper idle esperado)"
+            )
+            checks[tbl]["info"] = msg
+            soft_failures.append(msg)
         elif not ok and not (tbl == "alerts" and ALERTS_SOFT_ONLY):
             if parsed is None:
                 failures.append(
@@ -237,6 +256,15 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
                     checks[tbl]["sql_fallback"] = fb[tbl]
                     if fb[tbl].get("ok"):
                         checks[tbl]["ok"] = True
+                    elif paper_aware and tbl in _PAPER_IDLE_SOFT_TABLES:
+                        checks[tbl]["ok"] = True
+                        checks[tbl]["severity"] = "info"
+                        msg = (
+                            f"{tbl}: fallback SQL — sin actividad reciente "
+                            f"(paper idle esperado)"
+                        )
+                        checks[tbl]["info"] = msg
+                        soft_failures.append(msg)
                     else:
                         checks[tbl]["ok"] = False
                         failures.append(
@@ -252,28 +280,36 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
         "checked_at_utc": started.isoformat(),
         "prometheus_url": PROMETHEUS_URL,
         "window": WINDOW,
+        "paper_aware": paper_aware,
         "checks": checks,
         "failures": hard_failures,
+        "soft_failures": soft_failures,
         "ok": len(hard_failures) == 0,
     }
 
     path = _write_reports(payload)
 
     try:
-        from app.core.metrics import pipeline_health_table_ok
+        from app.core.metrics import pipeline_health_degraded, pipeline_health_table_ok
 
         for name, c in checks.items():
             if name.startswith("_"):
                 continue
             if isinstance(c, dict) and "ok" in c:
                 pipeline_health_table_ok.labels(table=name).set(1 if c["ok"] else 0)
+        pipeline_health_degraded.set(0 if payload["ok"] else 1)
     except Exception as exc:
         logger.debug(
-            "[PipelineHealth] No se pudo actualizar pipeline_health_table_ok: %s", exc
+            "[PipelineHealth] No se pudo actualizar pipeline_health gauges: %s", exc
         )
 
-    # MEJORA: Usar WARNING en lugar de RuntimeError
-    # La salud del pipeline se monitorea via metricas, no via task failure
+    try:
+        from app.core.obs_gauges import publish_obs_gauges
+
+        publish_obs_gauges(pipeline_degraded=not payload["ok"])
+    except Exception as exc:
+        logger.debug("[PipelineHealth] obs_gauges: %s", exc)
+
     if hard_failures:
         msg = "; ".join(hard_failures)
         logger.warning(
@@ -286,16 +322,27 @@ def check_pipeline_db_writes(self) -> Dict[str, Any]:
             "report": str(path),
             "checked_at": payload["checked_at_utc"],
             "failures": hard_failures,
+            "soft_failures": soft_failures,
+            "paper_aware": paper_aware,
             "ok": False,
         }
 
-    logger.info(
-        "[PipelineHealth] Healthcheck OK",
-        extra={"report": str(path), "checked_at": payload["checked_at_utc"]},
-    )
+    if soft_failures:
+        logger.info(
+            "[PipelineHealth] Healthcheck OK (paper idle soft): %s",
+            "; ".join(soft_failures),
+            extra={"soft_failures": soft_failures, "report_path": str(path)},
+        )
+    else:
+        logger.info(
+            "[PipelineHealth] Healthcheck OK",
+            extra={"report": str(path), "checked_at": payload["checked_at_utc"]},
+        )
     return {
         "status": "ok",
         "report": str(path),
         "checked_at": payload["checked_at_utc"],
+        "soft_failures": soft_failures,
+        "paper_aware": paper_aware,
         "ok": True,
     }
