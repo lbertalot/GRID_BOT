@@ -1,0 +1,103 @@
+groups:
+  # S-OBS-P0 / E1 bosquejo — gauges E3 + hydrate API (hotfix E3).
+  # Paper-first: no alertar idle de pipeline en mode=paper (ver pipeline_ingestion_rules).
+  - name: gridbot.paper.obs_p0
+    interval: 30s
+    rules:
+      - alert: TradingModeNotPaper
+        expr: |
+          (
+            max(trading_effective_mode{mode="paper"}) or on() vector(0)
+          ) < 1
+          and on() (
+            count(trading_effective_mode) > 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          surface: paper-l0
+        annotations:
+          summary: "effective_mode ≠ paper (ventana L0)"
+          description: >-
+            Gauge trading_effective_mode no marca mode=paper.
+            Must M1 sprint S-WAVE-E-OBS — investigar ya; no live.
+
+      - alert: PaperSnapshotStale20m
+        expr: |
+          (time() - portfolio_snapshot_last_unixtime) > 1200
+          and on() (
+            count(portfolio_snapshot_last_unixtime) > 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+          surface: paper-l0
+        annotations:
+          summary: "Snapshot portfolio >20m sin refresh"
+          description: >-
+            portfolio_snapshot_last_unixtime stale. El gauge lo hidrata el
+            scrape de API (sidecar PAPER_TELEMETRY_DIR/last_portfolio_snapshot.json
+            o MAX(captured_at) en DB); si el worker persiste bien y sigue
+            firing, revisar volumen compartido / DB / SnapshotAgent Celery.
+            Equity SoT puede quedar desfasada vs ledger.
+
+      - alert: PipelineHealthDegraded
+        expr: |
+          pipeline_health_degraded == 1
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
+        for: 20m
+        labels:
+          severity: warning
+          surface: paper-l0
+        annotations:
+          summary: "PipelineHealth degraded (no-paper o post-E4 real)"
+          description: >-
+            pipeline_health_degraded=1 fuera de paper idle. En paper, E4 debe
+            evitar false FAIL por writes=0 sin fills.
+
+      - alert: PipelineHealthDegradedPaperInfo
+        expr: |
+          pipeline_health_degraded == 1
+          and on() (
+            max(trading_effective_mode{mode="paper"}) == 1
+          )
+        for: 45m
+        labels:
+          severity: info
+          surface: paper-l0
+        annotations:
+          summary: "Pipeline degraded en paper (info / E4)"
+          description: >-
+            En paper idle es frecuente hasta E4. No reiniciar stack ni wipe telemetry.
+            Correlacionar con Health SRE + logs PipelineHealth.
+
+      - alert: BinanceRecvWindowErrors
+        expr: |
+          increase(binance_api_errors_total{code="-1021"}[30m]) >= 3
+        for: 5m
+        labels:
+          severity: warning
+          surface: paper-l0
+        annotations:
+          summary: "Ráfaga -1021 recvWindow"
+          description: >-
+            ≥3 errores Binance code=-1021 en 30m. Revisar skew reloj / recvWindow
+            en path PnL (no implica live).
+
+      - alert: PaperEquityGaugeAbsent
+        expr: |
+          absent(paper_equity_usdt)
+          and on() (
+            max(trading_effective_mode{mode="paper"}) == 1
+          )
+        for: 30m
+        labels:
+          severity: warning
+          surface: paper-l0
+        annotations:
+          summary: "paper_equity_usdt ausente con mode=paper"
+          description: >-
+            Backend aún no exporta equity SoT a Prom (E3). Desk usa
+            paper_telemetry + digest hasta merge.
