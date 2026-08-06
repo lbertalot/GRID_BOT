@@ -998,6 +998,13 @@ class PaperEquitySeries:
             returns.append(_normalize(current / previous - 1))
         return returns
 
+    def peak_equity_usdt(self) -> Optional[Decimal]:
+        """Pico de equity MtM en la serie — insumo IC-2 (DD desde HWM del Core)."""
+        path = self._equity_path()
+        if not path:
+            return None
+        return max(eq for _, eq in path)
+
     def max_drawdown(self) -> Decimal:
         """`|min_t (E_t / max_{s≤t} E_s − 1)|` sobre toda la serie de snapshots."""
         peak = None

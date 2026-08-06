@@ -351,6 +351,20 @@ class PaperTradingSystem:
                 inventory_value=breakdown["inventory_value"],
                 deployed_capital=self._ledger.deployed_capital,
             )
+        # E7 IC-WIRE: observar IC-1/IC-2 en cada marca (enforce paper).
+        try:
+            from app.core.inventory_controls import evaluate_and_enforce_from_paper
+
+            mid = next(iter(marks.values())) if marks else None
+            peak = self.series.peak_equity_usdt()
+            evaluate_and_enforce_from_paper(
+                mid=mid,
+                equity_mtm=breakdown["equity"],
+                peak_equity=peak if peak is not None else breakdown["equity"],
+                enforce=True,
+            )
+        except Exception as ic_exc:  # noqa: BLE001 — marca no debe fallar por IC
+            logger.warning("[PaperTrading] IC-WIRE observe skip: %s", ic_exc)
         return breakdown["equity"]
 
     def daily_closes(self) -> List[Tuple[datetime, Decimal]]:

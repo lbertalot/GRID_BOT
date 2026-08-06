@@ -1109,6 +1109,38 @@ class OptimizedGridManager:
     ):
         """Execute a trade and return the result"""
         try:
+            # E7 IC-WIRE: IC-1/IC-2 gate BUY del Core (paper-safe; no live).
+            if str(action).upper() == "BUY":
+                try:
+                    from app.core.inventory_controls import get_inventory_control_guard
+
+                    guard = get_inventory_control_guard()
+                    # Actualiza IC-1 con el precio de la señal antes del gate.
+                    if price and guard.config.range_floor is not None:
+                        guard.observe(mid=price, enforce=False)
+                    if not guard.allows_core_buy():
+                        logger.warning(
+                            "[IC-WIRE] BUY bloqueado (%s %s @ %s) ic1=%s ic2=%s armed=%s",
+                            symbol,
+                            action,
+                            price,
+                            guard.state.ic1_active,
+                            guard.state.ic2_active,
+                            guard.state.armed,
+                        )
+                        return None
+                except Exception as ic_exc:  # noqa: BLE001 — fail-closed en paper
+                    paper_trading = (
+                        os.getenv("PAPER_TRADING", "false").lower() == "true"
+                    )
+                    if paper_trading:
+                        logger.error(
+                            "[IC-WIRE] error en gate BUY — fail-closed paper: %s",
+                            ic_exc,
+                        )
+                        return None
+                    logger.warning("[IC-WIRE] gate BUY omitido (no-paper): %s", ic_exc)
+
             # Place the order
             order = await self._place_order(symbol, action, quantity)
 

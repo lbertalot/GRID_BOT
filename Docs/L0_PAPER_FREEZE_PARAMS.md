@@ -101,7 +101,30 @@ Metadata freeze (`grid_config_paper_l0.json`): `ic_controls.IC1_stop_rebuy_outsi
 
 Metadata: `ic_controls.IC2_flatten_core_at_deployed_dd_pct = "10.00"`.
 
-### 2.3 Simulacro (desk A5, deadline ~2026-08-20)
+### 2.3 Estado IC-WIRE (E7) — sprint S-WAVE-E-OBS
+
+| Campo | Valor |
+|-------|--------|
+| **Slice** | E7 IC-WIRE · owner `trader-market-maker` · apoyo `trading-backend-tdd` |
+| **Deadline** | **≤ 2026-08-13** (desk A2) |
+| **Modo** | Paper-only · sizing desplegado **200** inmutable · **PROMOTE_LIVE=NO** |
+| **Código** | `app/core/inventory_controls.py` · gate BUY en `OptimizedGridManager._execute_trade` · observe en `PaperTradingEngine.mark_to_market` |
+| **Tests** | `tests/test_inventory_controls_ic_wire.py` (TDD) |
+| **Métricas** | `ic1_stop_rebuy_active`, `ic2_flatten_active`, `ic1_trips_total`, `ic2_trips_total` |
+| **ADR** | `Docs/ADR_IC_WIRE_E7.md` |
+
+| Control | Runtime (2026-08-06 kickoff) | Residual → fecha |
+|---------|------------------------------|------------------|
+| **IC-1** evento `IC1_stop_rebuy_outside_range` | **Cableado** (observe + log + gauge) | — |
+| **IC-1** gate BUY / no re-post bajo piso | **Cableado** (`allows_core_buy` en `_execute_trade`) | Cancel-all BUY pendientes en exchange paper sim: owner backend **≤ 2026-08-11** |
+| **IC-2** evento + DD ≥ 10% desplegado | **Cableado** (peak serie / observe) | — |
+| **IC-2** flatten inventario paper | **API stub** `flatten_core_paper` (sell inyectable) | Enganche auto ledger+marks en ciclo Celery: MM+backend **≤ 2026-08-12** |
+| **IC-2** breaker `system_integrity` | Inject opcional (tests); prod best-effort pendiente sync API | backend-tdd **≤ 2026-08-12** |
+| Simulacro desk A5 (forzar mid/MtM) | Abierto | MM+devops **≤ 2026-08-20** (no bloquea E7 gate 08-13) |
+
+**Veredicto kickoff:** `IC_WIRE_STUB_ENFORCE` — evento+gate paper-safe listos; flatten E2E en ciclo y cancel-all pendientes = residual con owner+fecha arriba. **No** reinicia ventana (hash freeze intacto).
+
+### 2.4 Simulacro (desk A5, deadline ~2026-08-20)
 
 Antes de firmar la ventana completa (no bloquea el primer tick, sí A7 de la ventana):
 
@@ -258,4 +281,5 @@ Firmas: Desk Lead ________  Market Maker ________
 
 | Fecha | Cambio | Autor |
 |-------|--------|-------|
+| 2026-08-06 | E7 IC-WIRE kickoff: stub+enforce paper (`inventory_controls`) + §2.3 status | trader-market-maker |
 | 2026-08-05 | A5 — freeze params L0 + DoD primer tick + go/no-go día 0 | trader-market-maker |
