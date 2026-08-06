@@ -77,6 +77,10 @@ x-app-env: &app-env
   # B19 / ADR-008: ops ledger en volume nombrado (kill floor). Ver
   # Docs/ops/ops-ledger-persistence.md
   OPS_LEDGER_PATH: /var/lib/gridbot/ops/ops_ledger.json
+  # Desk digest horario → Telegram (ventana paper L0). Opt-in local.
+  DESK_HOURLY_STATUS_ENABLED: "true"
+  DESK_WINDOW_DAY0_ANCHOR: "2026-08-06"
+  DESK_OPS_DOC_DIR: /app/Docs/ops
 
 x-app-volumes: &app-volumes
   - ./app:/app/app
@@ -88,6 +92,7 @@ x-app-volumes: &app-volumes
   - ./grid_config_paper_l0.hash:/app/grid_config_paper_l0.hash:ro
   - ./paper_trading_state.json:/app/paper_trading_state.json
   - ./paper_telemetry:/app/paper_telemetry
+  - ./Docs:/app/Docs
   - ./logs:/app/logs
   - ./cache:/app/cache
   - ./data:/app/data
