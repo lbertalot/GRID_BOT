@@ -14,6 +14,12 @@ router = APIRouter()
 async def prometheus_metrics():
     """Endpoint principal para métricas de Prometheus"""
     try:
+        try:
+            from app.core.obs_gauges import publish_obs_gauges
+
+            publish_obs_gauges()
+        except Exception:
+            pass
         # Generar métricas de Prometheus directamente
         metrics_content = generate_latest()
 
