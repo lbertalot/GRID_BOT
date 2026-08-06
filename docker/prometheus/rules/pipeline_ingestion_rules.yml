@@ -2,41 +2,60 @@ groups:
   - name: gridbot.pipeline.ingestion
     interval: 30s
     rules:
+      # Paper-aware (S-OBS-P0 / E4 soft): mute writes==0 mientras mode=paper.
+      # Gate: (max(trading_effective_mode{mode="paper"}) or vector(0)) < 1
+      # → solo firar fuera de paper (gauge ausente cuenta como no-paper).
       - alert: TradesNoInserts60m
-        expr: increase(db_writes_total{table="trades",operation="insert",status="ok"}[60m]) == 0
+        expr: |
+          increase(db_writes_total{table="trades",operation="insert",status="ok"}[60m]) == 0
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Sin inserts en trades por 60m"
-          description: "No se registraron inserts exitosos en trades durante 60m."
+          description: "No se registraron inserts exitosos en trades durante 60m (mute si paper)."
 
       - alert: BalancesNoWrites60m
-        expr: increase(db_writes_total{table="balances",operation=~"insert|upsert|update",status="ok"}[60m]) == 0
+        expr: |
+          increase(db_writes_total{table="balances",operation=~"insert|upsert|update",status="ok"}[60m]) == 0
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Sin escrituras en balances por 60m"
-          description: "No se registraron escrituras exitosas en balances durante 60m."
+          description: "No se registraron escrituras exitosas en balances durante 60m (mute si paper)."
 
       - alert: AlertsNoInserts60m
-        expr: increase(db_writes_total{table="alerts",operation="insert",status="ok"}[60m]) == 0
+        expr: |
+          increase(db_writes_total{table="alerts",operation="insert",status="ok"}[60m]) == 0
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Sin inserts en alerts por 60m"
-          description: "No se registraron inserts exitosos en alerts durante 60m."
+          description: "No se registraron inserts exitosos en alerts durante 60m (mute si paper)."
 
       - alert: PerformanceMetricsNoInserts60m
-        expr: increase(db_writes_total{table="performance_metrics",operation="insert",status="ok"}[60m]) == 0
+        expr: |
+          increase(db_writes_total{table="performance_metrics",operation="insert",status="ok"}[60m]) == 0
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Sin inserts en performance_metrics por 60m"
-          description: "No se registraron inserts exitosos en performance_metrics durante 60m."
+          description: "No se registraron inserts exitosos en performance_metrics durante 60m (mute si paper)."
 
       - alert: PipelineAuthErrorsBurst
         expr: increase(pipeline_errors_total{error_type="auth"}[10m]) > 5
