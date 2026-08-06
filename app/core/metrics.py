@@ -817,6 +817,38 @@ pipeline_health_table_ok = Gauge(
     ["table"],
 )
 
+# E3 / S-OBS-P0 — gauges desk paper-aware
+pipeline_health_degraded = Gauge(
+    "pipeline_health_degraded",
+    "1 si el último check_pipeline_db_writes reportó degraded, 0 si ok",
+)
+
+trading_effective_mode = Gauge(
+    "trading_effective_mode",
+    "1 para el effective_mode vigente (paper|real_blocked|real_armed|unknown)",
+    ["mode"],
+)
+
+paper_equity_usdt = Gauge(
+    "paper_equity_usdt",
+    "Último equity paper USDT (SoT: paper_equity_series.json)",
+)
+
+paper_equity_e0_usdt = Gauge(
+    "paper_equity_e0_usdt",
+    "Equity E_0 de referencia paper (USDT)",
+)
+
+paper_equity_samples = Gauge(
+    "paper_equity_samples",
+    "Cantidad de samples en paper_equity_series.json",
+)
+
+portfolio_snapshot_last_unixtime = Gauge(
+    "portfolio_snapshot_last_unixtime",
+    "Unix time del último portfolio_snapshot persistido",
+)
+
 pipeline_errors_total = Counter(
     "pipeline_errors_total",
     "Total de errores por etapa y tipo",

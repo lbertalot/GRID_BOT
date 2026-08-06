@@ -535,23 +535,36 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         await auto_circuit_breaker.check_and_activate_breakers()
                     )
 
-                    # Verificar estado después de auto-activación
+                    # Verificar estado después de auto-activación (misma fuente Redis/shared)
                     ck = get_shared_breakers()
                     breakers = (
                         ck.get_all_breakers_status()
                         if hasattr(ck, "get_all_breakers_status")
                         else {}
                     )
+                    active = list(breakers.get("active_breakers") or [])
+                    newly = list(
+                        (activation_results or {}).get("breakers_activated") or []
+                    )
+                    try:
+                        from app.core.breakers_status import log_cycle_breakers_status
+
+                        log_cycle_breakers_status(
+                            active_breakers=active, newly_activated=newly
+                        )
+                    except Exception:
+                        if active:
+                            logger.warning(
+                                f"[Cycle] Circuit breakers activos: {active}"
+                            )
+                        else:
+                            logger.info("[Cycle] Circuit breakers activos: []")
                     if breakers.get("critical_mode") or (
-                        "system_integrity" in breakers.get("active_breakers", [])
+                        "system_integrity" in active
                     ):
                         breakers_block = True
-                        logger.warning(
-                            f"[Cycle] Circuit breakers activos: {activation_results.get('breakers_activated', [])}"
-                        )
-                        logger.warning(
-                            f"[Cycle] Razones: {activation_results.get('reasons', [])}"
-                        )
+                        if newly:
+                            logger.warning(f"[Cycle] Razones: {(activation_results or {}).get('reasons', [])}")
                 except Exception as e:
                     logger.error(f"[Cycle] Error verificando circuit breakers: {e}")
                     breakers_block = False
