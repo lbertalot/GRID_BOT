@@ -37,6 +37,7 @@ celery_app = Celery(
         "app.services.alert_tasks",
         "app.services.portfolio_snapshot_service",  # portfolio-snapshot-agent
         "app.services.pipeline_health_tasks",
+        "app.services.desk_status_tasks",
     ],
 )
 
@@ -118,6 +119,17 @@ celery_app.conf.beat_schedule = {
     "pipeline-db-writes-health": {
         "task": "app.services.pipeline_health_tasks.check_pipeline_db_writes",
         "schedule": 900.0,  # 15 minutos
+        "options": {"queue": "low"},
+    },
+    # Desk paper window: digest CEO + áreas → Telegram (opt-in DESK_HOURLY_STATUS_ENABLED)
+    "desk-hourly-ceo-digest": {
+        "task": "app.services.desk_status_tasks.send_desk_hourly_digest",
+        "schedule": crontab(minute=5),  # cada hora :05 UTC
+        "options": {"queue": "low"},
+    },
+    "desk-eod-day-plan": {
+        "task": "app.services.desk_status_tasks.send_desk_eod_day_plan",
+        "schedule": crontab(hour=0, minute=45),  # post-cierre 00:45 UTC
         "options": {"queue": "low"},
     },
 }
