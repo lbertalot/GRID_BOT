@@ -877,3 +877,27 @@ ops_cap_alerts_fired_total = Counter(
     "Transiciones a alerta de ops (cap excedido / reserva proyectada agotada)",
     ["kind"],
 )
+
+# ============================================================================
+# IC-WIRE (E7) — contención inventario Core (desk IC-1 / IC-2)
+# ============================================================================
+
+ic1_stop_rebuy_active = Gauge(
+    "ic1_stop_rebuy_active",
+    "1 si IC-1 freno de carga fuera de rango está activo (paper Core)",
+)
+
+ic2_flatten_active = Gauge(
+    "ic2_flatten_active",
+    "1 si IC-2 flatten Core (−10% desplegado) está activo / book desarmado",
+)
+
+ic1_trips_total = Counter(
+    "ic1_trips_total",
+    "Activaciones IC-1 (mid bajo piso de rango freeze)",
+)
+
+ic2_trips_total = Counter(
+    "ic2_trips_total",
+    "Activaciones IC-2 (DD MtM Core ≥ umbral % del capital desplegado)",
+)
