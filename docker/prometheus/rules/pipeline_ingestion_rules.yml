@@ -2,7 +2,7 @@ groups:
   - name: gridbot.pipeline.ingestion
     interval: 30s
     rules:
-      # Paper-aware (S-OBS-P0 / E4 soft): mute writes==0 mientras mode=paper.
+      # Paper-aware (S-OBS-P0 / E1+E3): mute writes==0 mientras mode=paper.
       # Gate: (max(trading_effective_mode{mode="paper"}) or vector(0)) < 1
       # → solo firar fuera de paper (gauge ausente cuenta como no-paper).
       - alert: TradesNoInserts60m
