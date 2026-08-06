@@ -12,7 +12,6 @@ que existían en performance_analyzer.get_portfolio_value_history().
 """
 
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -24,6 +23,7 @@ from app.core.paper_equity_ledger import (
     compute_paper_portfolio_value,
     paper_equity_is_source_of_truth,
 )
+from app.core.primary_symbol import resolve_primary_symbol
 from app.db.session import SessionLocal
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.services.binance_client_singleton import get_binance_client_singleton
@@ -35,8 +35,8 @@ from app.core.metrics import (
 
 logger = logging.getLogger(__name__)
 
-# Símbolo principal del bot — usado como referencia en el snapshot
-PRIMARY_SYMBOL = os.getenv("TRADING_SYMBOL", "BTCUSDT")
+# Símbolo principal — paper L0 freeze = ETHUSDT (ver resolve_primary_symbol)
+PRIMARY_SYMBOL = resolve_primary_symbol()
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
         "btc_value_usdt": btc_value_usdt,
         "other_assets_usdt": other_assets_usdt,
         "btc_price": btc_price,
-        "primary_symbol": PRIMARY_SYMBOL,
+        "primary_symbol": resolve_primary_symbol(),
     }
 
 
@@ -231,6 +231,16 @@ def save_portfolio_snapshot() -> Optional[PortfolioSnapshot]:
             snapshot.total_value_usdt,
             snapshot.id,
         )
+        try:
+            from app.core.obs_gauges import publish_obs_gauges
+
+            ts = snapshot.captured_at
+            if ts is not None:
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                publish_obs_gauges(snapshot_unixtime=ts.timestamp())
+        except Exception:
+            pass
         return snapshot
     except Exception as exc:
         db.rollback()

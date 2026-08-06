@@ -47,6 +47,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Set, Tuple
 
+from app.core.primary_symbol import resolve_primary_symbol
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
@@ -1293,7 +1295,7 @@ def compute_paper_portfolio_value(
         "btc_value_usdt": float(btc_value),
         "other_assets_usdt": float(other_value),
         "btc_price": float(btc_price) if btc_price is not None else None,
-        "primary_symbol": os.getenv("TRADING_SYMBOL", "BTCUSDT"),
+        "primary_symbol": resolve_primary_symbol(),
     }
 
 
