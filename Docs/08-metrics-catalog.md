@@ -33,6 +33,10 @@
 | `breaker_state` | Gauge | `type` | Estado de breaker (0 inactivo, 1 activo) por tipo |
 | `order_validation_rejects_total` | Counter | `reason`, `symbol` | Total de rechazos de validación de órdenes |
 | `integrity_score` | Gauge | `component` | Score de integridad (0-100) por componente |
+| `ic1_stop_rebuy_active` | Gauge | – | 1 si IC-1 freno fuera de rango activo (E7) |
+| `ic2_flatten_active` | Gauge | – | 1 si IC-2 flatten Core activo / desarmado (E7) |
+| `ic1_trips_total` | Counter | – | Activaciones IC-1 |
+| `ic2_trips_total` | Counter | – | Activaciones IC-2 |
 
 ### MÉTRICAS DE OPERACIONES Y TRADING
 
