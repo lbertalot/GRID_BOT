@@ -219,3 +219,55 @@ def test_stale_sidecar_falls_through_to_db(
 
     db_hydrate.assert_called_once()
     snap_set.assert_called_once_with(9999.0)
+
+
+def test_hydrate_pipeline_table_ok_from_latest_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PAPER_TRADING", "true")
+    monkeypatch.setenv("FORCE_REAL_MODE", "false")
+    monkeypatch.setenv("TRADING_ENABLED", "false")
+    monkeypatch.setenv("PAPER_TELEMETRY_DIR", str(tmp_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+    latest_dir = tmp_path / "pipeline_health"
+    latest_dir.mkdir(parents=True)
+    (latest_dir / "LATEST.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "checks": {
+                    "trades": {"ok": True},
+                    "alerts": {"ok": False},
+                    "portfolio_snapshots": {"ok": True},
+                    "_sql_fallback": {"ok": False},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from app.core import metrics as m
+    from app.core.obs_gauges import publish_obs_gauges
+
+    with (
+        patch.object(m.pipeline_health_table_ok, "labels") as table_labels,
+        patch.object(m.pipeline_health_degraded, "set") as deg_set,
+    ):
+        gauge = table_labels.return_value
+        publish_obs_gauges()
+
+    tables = {c.kwargs.get("table") or c.args[0] for c in table_labels.call_args_list}
+    # labels(table=name) — extract
+    called_tables = set()
+    for c in table_labels.call_args_list:
+        if c.kwargs.get("table"):
+            called_tables.add(c.kwargs["table"])
+        elif c.args:
+            called_tables.add(c.args[0])
+    assert "trades" in called_tables
+    assert "alerts" in called_tables
+    assert "portfolio_snapshots" in called_tables
+    assert "_sql_fallback" not in called_tables
+    assert gauge.set.call_count >= 3
+    deg_set.assert_called_with(0)

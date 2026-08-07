@@ -6,6 +6,9 @@ pipeline degraded. Paper-only — no activa live.
 E3 hotfix: Prometheus scrapea solo el proceso API. El worker publica el gauge
 en su proceso (invisible al scrape). Al scrapear, si no hay unixtime explícito,
 se hidrata fail-soft desde sidecar compartido o MAX(captured_at) en DB.
+
+E3b: ``pipeline_health_table_ok`` también vive en el worker; al scrape se
+hidrata desde ``REPORTS_DIR/pipeline_health/LATEST.json`` (volumen compartido).
 """
 
 from __future__ import annotations
@@ -23,10 +26,15 @@ logger = logging.getLogger(__name__)
 _MODE_LABELS = ("paper", "real_blocked", "real_armed", "unknown")
 _SIDECAR_FILENAME = "last_portfolio_snapshot.json"
 _DEFAULT_SIDECAR_MAX_AGE_SEC = 3600.0
+_PIPELINE_LATEST = "pipeline_health/LATEST.json"
 
 
 def _telemetry_dir() -> Path:
     return Path(os.getenv("PAPER_TELEMETRY_DIR", "paper_telemetry"))
+
+
+def _reports_dir() -> Path:
+    return Path(os.getenv("REPORTS_DIR", "reports"))
 
 
 def _sidecar_path() -> Path:
@@ -127,6 +135,46 @@ def resolve_snapshot_unixtime(
     return _hydrate_snapshot_from_db()
 
 
+def _load_pipeline_health_latest() -> Optional[dict[str, Any]]:
+    """Lee REPORTS_DIR/pipeline_health/LATEST.json — fail-soft."""
+    path = _reports_dir() / _PIPELINE_LATEST
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("obs_gauges: LATEST pipeline_health no usable: %s", exc)
+        return None
+
+
+def hydrate_pipeline_health_gauges(
+    *,
+    pipeline_degraded: Optional[bool] = None,
+) -> None:
+    """Publica pipeline_health_* en el proceso del scrape (API).
+
+    Preferencia: argumento explícito para degraded; tablas siempre desde LATEST
+    si existe (el worker escribe el JSON en volumen compartido).
+    """
+    from app.core import metrics as m
+
+    report = _load_pipeline_health_latest()
+    if report:
+        checks = report.get("checks") or {}
+        if isinstance(checks, dict):
+            for name, c in checks.items():
+                if str(name).startswith("_"):
+                    continue
+                if isinstance(c, dict) and "ok" in c:
+                    m.pipeline_health_table_ok.labels(table=str(name)).set(
+                        1 if c.get("ok") else 0
+                    )
+        if pipeline_degraded is None and "ok" in report:
+            pipeline_degraded = not bool(report.get("ok"))
+
+    if pipeline_degraded is not None:
+        m.pipeline_health_degraded.set(1 if pipeline_degraded else 0)
+
+
 def publish_obs_gauges(
     *,
     snapshot_unixtime: Optional[float] = None,
@@ -159,10 +207,13 @@ def publish_obs_gauges(
             if explicit:
                 _write_snapshot_sidecar(float(resolved))
 
-        if pipeline_degraded is not None:
-            m.pipeline_health_degraded.set(1 if pipeline_degraded else 0)
+        hydrate_pipeline_health_gauges(pipeline_degraded=pipeline_degraded)
     except Exception as exc:  # noqa: BLE001
         logger.debug("obs_gauges publish failed: %s", exc)
 
 
-__all__ = ["publish_obs_gauges", "resolve_snapshot_unixtime"]
+__all__ = [
+    "publish_obs_gauges",
+    "resolve_snapshot_unixtime",
+    "hydrate_pipeline_health_gauges",
+]
