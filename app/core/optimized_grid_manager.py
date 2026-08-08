@@ -181,7 +181,27 @@ class OptimizedGridManager:
             return None
 
     async def get_asset_balances(self) -> Dict[str, float]:
-        """Get current asset balances from Binance with robust error handling"""
+        """Balances: en paper SoT usa ledger; si no, Binance spot."""
+        try:
+            from app.core.paper_equity_ledger import paper_equity_is_source_of_truth
+            from app.core.paper_cycle_liquidity import build_paper_balances_from_ledger
+
+            if paper_equity_is_source_of_truth():
+                symbols = [
+                    a.symbol
+                    for a in self.config.assets.values()
+                    if getattr(a, "is_active", True)
+                ]
+                balances = build_paper_balances_from_ledger(symbols=symbols)
+                logger.info(
+                    "📄 Balances paper (ledger): %s activos — USDT=%s",
+                    len(balances),
+                    balances.get("USDT"),
+                )
+                return balances
+        except Exception as exc:
+            logger.warning("paper balances fallback a exchange: %s", exc)
+
         try:
             if not self.client:
                 logger.error("❌ Cliente de Binance no inicializado")
@@ -323,7 +343,7 @@ class OptimizedGridManager:
                 else:
                     quantity_to_use = raw_min_qty
 
-            # Ajustar a step_size si corresponde, y limitar cantidad a objetivo de test para ETH
+            # Ajustar a step_size si corresponde
             limits = self.asset_limits.get(symbol)
             if limits and getattr(limits, "step_size", None):
                 step_size = float(limits.step_size)
@@ -331,23 +351,53 @@ class OptimizedGridManager:
                 quantity_to_use = float(
                     f"{math.floor(quantity_to_use / step_size) * step_size:.{precision}f}"
                 )
-                # Compatibilidad con test: si ETHUSDT y config.quantity >= 0.003, usar 0.003
+                # Cap histórico 0.003 ETH solo si sigue cumpliendo min_notional
                 if symbol == "ETHUSDT" and quantity_to_use >= 0.003:
-                    quantity_to_use = float(
+                    capped = float(
                         f"{math.floor(0.003 / step_size) * step_size:.{precision}f}"
                     )
+                    if capped * current_price >= min_notional:
+                        quantity_to_use = capped
+                # Re-bump si floor/cap dejaron nocional bajo el mínimo
+                if quantity_to_use * current_price < min_notional and step_size > 0:
+                    steps = math.ceil((min_notional / current_price) / step_size)
+                    quantity_to_use = float(f"{(steps * step_size):.{precision}f}")
+            elif quantity_to_use * current_price < min_notional and current_price > 0:
+                quantity_to_use = min_notional / current_price
 
             # Log detallado del saldo y mínimos requeridos
             logger.info(
                 f"[{symbol}] Saldo {base_asset} disponible: {current_balance}, cantidad requerida: {quantity_to_use}"
             )
             logger.info(
-                f"[{symbol}] Valor nocional: {notional_value:.4f} USDT, mínimo requerido: {min_notional} USDT"
+                f"[{symbol}] Valor nocional: {(quantity_to_use * current_price):.4f} USDT, mínimo requerido: {min_notional} USDT"
             )
 
-            if current_balance >= quantity_to_use:
+            paper_mode = False
+            try:
+                from app.core.paper_equity_ledger import paper_equity_is_source_of_truth
+                from app.core.paper_cycle_liquidity import can_afford_grid_quantity
+
+                paper_mode = paper_equity_is_source_of_truth()
+                affordable = can_afford_grid_quantity(
+                    balances=balances,
+                    base_asset=base_asset,
+                    quantity=quantity_to_use,
+                    price=current_price,
+                    paper_mode=paper_mode,
+                )
+            except Exception:
+                affordable = current_balance >= quantity_to_use
+
+            # Recalcular notional tras ajuste de qty
+            notional_value = quantity_to_use * current_price
+
+            if affordable:
                 optimal_quantities[symbol] = quantity_to_use
-                logger.info(f"✅ [{symbol}] Saldo suficiente para operar")
+                logger.info(
+                    f"✅ [{symbol}] Saldo suficiente para operar"
+                    + (" (paper USDT/base)" if paper_mode else "")
+                )
             else:
                 missing = max(0, quantity_to_use - current_balance)
                 self.insufficient_funds[symbol] = {
@@ -356,9 +406,11 @@ class OptimizedGridManager:
                     "faltante": missing,
                     "min_notional": min_notional,
                     "precio_actual": current_price,
+                    "usdt": balances.get("USDT", 0),
                 }
                 logger.warning(
                     f"⛔ [{symbol}] Saldo insuficiente - Faltan {missing} {base_asset}"
+                    + (f" / USDT={balances.get('USDT', 0)}" if paper_mode else "")
                 )
 
         return optimal_quantities
@@ -403,32 +455,38 @@ class OptimizedGridManager:
             logger.info("Iniciando ciclo de trading con verificación de riesgos...")
 
             # Verificar y ejecutar rebalanceo automático si es necesario
+            # Paper SoT: no rebalancear contra Binance (cash vive en ledger).
             try:
-                from app.services.auto_rebalancer import auto_rebalancer
+                from app.core.paper_equity_ledger import paper_equity_is_source_of_truth
 
-                rebalance_status = await auto_rebalancer.get_rebalance_status()
-
-                if rebalance_status.get("assets_needing_rebalance", 0) > 0:
-                    logger.info(
-                        f"🔄 Detectados {rebalance_status['assets_needing_rebalance']} activos que necesitan rebalanceo"
-                    )
-
-                    if rebalance_status.get("can_rebalance", False):
-                        logger.info("✅ Ejecutando rebalanceo automático...")
-                        rebalance_result = await auto_rebalancer.check_and_rebalance()
-                        logger.info(
-                            f"Rebalanceo completado: {rebalance_result.get('status')}"
-                        )
-                    else:
-                        logger.warning("⚠️ No se puede rebalancear - USDT insuficiente")
-                        logger.warning(
-                            f"   Necesario: ${rebalance_status.get('total_needed_usdt', 0):.2f}"
-                        )
-                        logger.warning(
-                            f"   Disponible: ${rebalance_status.get('available_usdt', 0):.2f}"
-                        )
+                if paper_equity_is_source_of_truth():
+                    logger.info("📄 Skip rebalance exchange (paper ledger SoT)")
                 else:
-                    logger.info("✅ Todos los activos tienen saldo suficiente")
+                    from app.services.auto_rebalancer import auto_rebalancer
+
+                    rebalance_status = await auto_rebalancer.get_rebalance_status()
+
+                    if rebalance_status.get("assets_needing_rebalance", 0) > 0:
+                        logger.info(
+                            f"🔄 Detectados {rebalance_status['assets_needing_rebalance']} activos que necesitan rebalanceo"
+                        )
+
+                        if rebalance_status.get("can_rebalance", False):
+                            logger.info("✅ Ejecutando rebalanceo automático...")
+                            rebalance_result = await auto_rebalancer.check_and_rebalance()
+                            logger.info(
+                                f"Rebalanceo completado: {rebalance_result.get('status')}"
+                            )
+                        else:
+                            logger.warning("⚠️ No se puede rebalancear - USDT insuficiente")
+                            logger.warning(
+                                f"   Necesario: ${rebalance_status.get('total_needed_usdt', 0):.2f}"
+                            )
+                            logger.warning(
+                                f"   Disponible: ${rebalance_status.get('available_usdt', 0):.2f}"
+                            )
+                    else:
+                        logger.info("✅ Todos los activos tienen saldo suficiente")
 
             except Exception as e:
                 logger.error(f"Error en rebalanceo automático: {e}")
@@ -491,6 +549,23 @@ class OptimizedGridManager:
                     f"📊 {symbol}: Precio actual ${current_price}, cantidad óptima {quantity}"
                 )
 
+                # Paper: hidratar last_action desde ledger (persiste entre ciclos).
+                try:
+                    from app.core.paper_cycle_liquidity import resolve_last_grid_action
+
+                    hydrated = resolve_last_grid_action(
+                        symbol, fallback=asset_config.last_action
+                    )
+                    if hydrated and hydrated != asset_config.last_action:
+                        logger.info(
+                            "📄 %s last_action hidratado desde ledger: %s",
+                            symbol,
+                            hydrated,
+                        )
+                        asset_config.last_action = hydrated
+                except Exception as hyd_exc:  # noqa: BLE001
+                    logger.debug("last_action hydrate skip: %s", hyd_exc)
+
                 action = decide_grid_action(
                     prices.get(symbol, 0),
                     asset_config.grid_levels,
@@ -529,8 +604,37 @@ class OptimizedGridManager:
                         logger.info(f"🔍 {symbol}: Validación fallida - {message}")
                         logger.info(f"   📊 Detalles: {details}")
 
+                        # Subir a min_quantity_required (min_notional) si el fund_manager lo pide
+                        min_qty_req = details.get("min_quantity_required")
+                        if min_qty_req and float(min_qty_req) > quantity_to_use:
+                            adjusted_quantity = float(min_qty_req)
+                            logger.info(
+                                f"🔄 {symbol}: Reintento con min_quantity_required={adjusted_quantity}"
+                            )
+                            (
+                                is_valid,
+                                message,
+                                details,
+                            ) = await fund_manager.validate_trade_requirements(
+                                symbol=symbol,
+                                side=action["action"],
+                                quantity=adjusted_quantity,
+                                price=current_price,
+                                balances=balances,
+                            )
+                            if is_valid:
+                                quantity_to_use = adjusted_quantity
+                                logger.info(
+                                    f"✅ {symbol}: Validación OK tras bump min_notional"
+                                )
+                            else:
+                                logger.warning(
+                                    f"⛔ {symbol}: Sigue inválido tras bump - {message}"
+                                )
+                                logger.info(f"   📊 Detalles: {details}")
+
                         # Intentar con cantidad reducida si es posible
-                        if "shortage" in details:
+                        if not is_valid and "shortage" in details:
                             shortage = details.get("shortage", 0)
                             if shortage > 0:
                                 # Calcular cantidad ajustada
@@ -554,6 +658,7 @@ class OptimizedGridManager:
 
                                 if is_valid_adj:
                                     quantity_to_use = adjusted_quantity
+                                    is_valid = True
                                     logger.info(
                                         f"✅ {symbol}: Validación exitosa con cantidad ajustada"
                                     )
@@ -565,7 +670,7 @@ class OptimizedGridManager:
                             else:
                                 logger.warning(f"⛔ {symbol}: {message}")
                                 continue
-                        else:
+                        elif not is_valid:
                             logger.warning(f"⛔ {symbol}: {message}")
                             continue
 
@@ -718,6 +823,17 @@ class OptimizedGridManager:
             asset_config = self.config.assets.get(symbol)
             if not asset_config:
                 return None
+
+            try:
+                from app.core.paper_cycle_liquidity import resolve_last_grid_action
+
+                hydrated = resolve_last_grid_action(
+                    symbol, fallback=asset_config.last_action
+                )
+                if hydrated:
+                    asset_config.last_action = hydrated
+            except Exception:
+                pass
 
             action = decide_grid_action(
                 current_price, asset_config.grid_levels, asset_config.last_action

@@ -26,7 +26,10 @@ def decide_grid_action(
 ) -> Dict:
     """
     Decide si comprar o vender según el precio actual y la última acción.
-    Lógica optimizada para ser más sensible a los precios actuales.
+
+    Cerca de un nivel (tolerancia), **alterna** respecto a ``last_action`` para
+    cerrar ciclos de grid (BUY→SELL→BUY). Sin eso, precio≈nivel + last=BUY
+    dejaba ``action=None`` y solo acumulaba compras.
     """
     if not grid_levels:
         return {"action": None, "level": None}
@@ -49,25 +52,24 @@ def decide_grid_action(
         range_size * 0.10
     )  # Aumentado a 10% para facilitar generación de señales
 
-    # Determinar la acción basada en la posición del precio respecto al nivel más cercano
     price_diff = abs(current_price - closest_level)
+    last = (last_action or "").upper() or None
 
-    # Si el precio está muy cerca del nivel (dentro de la tolerancia), generar señal
+    # Cerca del nivel: alternar para completar round-trip
     if price_diff <= tolerance:
-        # Determinar dirección basada en la posición del precio
+        if last == "BUY":
+            return {"action": "SELL", "level": closest_level}
+        if last == "SELL":
+            return {"action": "BUY", "level": closest_level}
+        # Sin historial: lado según posición relativa al nivel
         if current_price <= closest_level:
-            # Precio en o por debajo del nivel -> SEÑAL DE COMPRA
-            if last_action != "BUY":
-                return {"action": "BUY", "level": closest_level}
-        else:
-            # Precio por encima del nivel -> SEÑAL DE VENTA
-            if last_action != "SELL":
-                return {"action": "SELL", "level": closest_level}
+            return {"action": "BUY", "level": closest_level}
+        return {"action": "SELL", "level": closest_level}
 
-    # Verificar si el precio está en un extremo del rango (lógica adicional)
-    if current_price <= min_level + tolerance and last_action != "BUY":
+    # Extremos del rango
+    if current_price <= min_level + tolerance and last != "BUY":
         return {"action": "BUY", "level": min_level}
-    elif current_price >= max_level - tolerance and last_action != "SELL":
+    if current_price >= max_level - tolerance and last != "SELL":
         return {"action": "SELL", "level": max_level}
 
     return {"action": None, "level": None}
