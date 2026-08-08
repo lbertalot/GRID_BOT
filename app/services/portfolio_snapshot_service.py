@@ -285,3 +285,88 @@ def capture_portfolio_snapshot(self) -> Dict:
     except Exception as exc:
         logger.error("[SnapshotAgent] Fallo en tarea Celery: %s", exc)
         raise self.retry(exc=exc)
+
+
+# ---------------------------------------------------------------------------
+# Capture-on-startup (paper-safe) — evita PaperSnapshotStale20m tras recreate
+# ---------------------------------------------------------------------------
+
+
+def should_enqueue_startup_portfolio_snapshot() -> bool:
+    """Solo encola al arrancar worker si modo paper y flag no desactivado.
+
+    Paper-safe: no dispara captura de arranque en effective_mode≠paper
+    (evita spam get_account al reiniciar workers fuera de paper).
+    Kill switch: ``PORTFOLIO_SNAPSHOT_ON_STARTUP=false``.
+    """
+    import os
+
+    flag = os.getenv("PORTFOLIO_SNAPSHOT_ON_STARTUP", "true").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return False
+    return bool(paper_equity_is_source_of_truth())
+
+
+def enqueue_startup_portfolio_snapshot() -> bool:
+    """Encola ``capture_portfolio_snapshot`` si aplica. Returns True si encoló."""
+    if not should_enqueue_startup_portfolio_snapshot():
+        logger.info(
+            "[SnapshotAgent] skip startup capture "
+            "(not paper SoT or PORTFOLIO_SNAPSHOT_ON_STARTUP=false)"
+        )
+        return False
+
+    # Debounce: prefork / doble worker_ready no debe spamear 2 captures.
+    try:
+        import os
+
+        from redis import Redis
+
+        redis_url = os.getenv("REDIS_URL") or os.getenv(
+            "CELERY_BROKER_URL", "redis://localhost:6379/0"
+        )
+        client = Redis.from_url(redis_url, decode_responses=True)
+        got_lock = client.set(
+            "gridbot:portfolio_snapshot:startup",
+            "1",
+            nx=True,
+            ex=120,
+        )
+        if not got_lock:
+            logger.info(
+                "[SnapshotAgent] skip startup capture (debounce lock held)"
+            )
+            return False
+    except Exception as exc:  # noqa: BLE001 — fail-open: aún encolar una vez
+        logger.debug("[SnapshotAgent] startup debounce unavailable: %s", exc)
+
+    capture_portfolio_snapshot.delay()
+    logger.info(
+        "[SnapshotAgent] enqueued capture_portfolio_snapshot on worker_ready (paper)"
+    )
+    return True
+
+
+_STARTUP_SNAPSHOT_SIGNAL_CONNECTED = False
+
+
+def _connect_worker_ready_startup_snapshot() -> None:
+    """Registra handler Celery ``worker_ready`` (idempotente)."""
+    global _STARTUP_SNAPSHOT_SIGNAL_CONNECTED
+    if _STARTUP_SNAPSHOT_SIGNAL_CONNECTED:
+        return
+    from celery.signals import worker_ready
+
+    @worker_ready.connect(weak=False)
+    def _on_worker_ready_portfolio_snapshot(**_kwargs) -> None:  # noqa: ANN003
+        try:
+            enqueue_startup_portfolio_snapshot()
+        except Exception as exc:  # noqa: BLE001 — never break worker boot
+            logger.warning(
+                "[SnapshotAgent] startup enqueue failed (non-fatal): %s", exc
+            )
+
+    _STARTUP_SNAPSHOT_SIGNAL_CONNECTED = True
+
+
+_connect_worker_ready_startup_snapshot()

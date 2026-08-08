@@ -44,6 +44,11 @@ x-app-env: &app-env
   EMERGENCY_STOP: "false"
   FORCE_REAL_MODE: ""
   BINANCE_TESTNET: "false"
+  # Market data real (ticker/klines). NO habilita órdenes reales:
+  # PAPER_TRADING=true sigue simulando fills en OptimizedGridManager.
+  USE_REAL_BINANCE: "1"
+  # Capture portfolio al worker_ready en paper (anti PaperSnapshotStale20m).
+  PORTFOLIO_SNAPSHOT_ON_STARTUP: "true"
   # Estrategia
   CALIBRATION_MODE: "false"
   MIN_USDT_BALANCE: "15.0"

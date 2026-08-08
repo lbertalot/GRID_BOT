@@ -856,20 +856,24 @@ def trading_cycle_tick() -> Dict[str, Any]:
 @shared_task(acks_late=True, reject_on_worker_lost=True)
 def execute_trading_cycle() -> Dict[str, Any]:
     """
-    Ejecuta un ciclo completo de trading con validaciones mejoradas
+    Ejecuta un ciclo completo de trading con validaciones mejoradas.
+    Paper-first: liquidez SoT = PaperEquityLedger cuando effective_mode=paper.
     """
     try:
-        logger.info("[EMOJI] Iniciando ciclo de trading REAL")
-        logger.info("[EMOJI] Ejecutando TRADING REAL con dinero real")
+        _paper = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        if _paper:
+            logger.info("[Cycle] Iniciando ciclo de trading PAPER (simulación)")
+        else:
+            logger.info("[Cycle] Iniciando ciclo de trading (modo no-paper)")
 
-        # Verificar credenciales de Binance
-        logger.info("[EMOJI] Validando credenciales de Binance...")
+        # Verificar credenciales de Binance (market data / auth; paper no ordena real)
+        logger.info("[Cycle] Validando credenciales/conectividad Binance...")
         try:
             client_singleton = get_binance_client_singleton()
             check = client_singleton.validate_credentials_and_connectivity()
             if not check.get("net_ok", False):
                 logger.error(
-                    "[EMOJI] Conectividad con Binance fallida - abortando ciclo"
+                    "[Cycle] Conectividad con Binance fallida - abortando ciclo"
                 )
                 notify_consecutive_api_failures.delay("binance", 1)
                 try:
@@ -883,7 +887,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 return {"status": "error", "message": "Binance net check failed"}
             if not check.get("auth_ok", False):
                 logger.error(
-                    "[EMOJI] Credenciales/permiso de Binance inválidos - abortando ciclo"
+                    "[Cycle] Credenciales/permiso de Binance inválidos - abortando ciclo"
                 )
                 notify_consecutive_api_failures.delay("binance_auth", 1)
                 try:
@@ -901,7 +905,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
             except Exception:
                 pass
         except Exception as e:
-            logger.error(f"[EMOJI] Error validando Binance pre-ciclo: {e}")
+            logger.error(f"[Cycle] Error validando Binance pre-ciclo: {e}")
             return {"status": "error", "message": str(e)}
 
         # Crear manager de grid trading (usar loop local para evitar nested run)
@@ -915,11 +919,16 @@ def execute_trading_cycle() -> Dict[str, Any]:
             asyncio.set_event_loop(None)
             loop.close()
         if not manager:
-            logger.error("[EMOJI] No se pudo crear el manager de grid trading")
+            logger.error("[Cycle] No se pudo crear el manager de grid trading")
             return {"status": "error", "message": "Manager no disponible"}
 
         # Guardas: evitar operar si liquidez es insuficiente o breakers activos
         try:
+            from app.core.paper_cycle_liquidity import (
+                resolve_available_usdt_for_cycle,
+                should_skip_exchange_rebalancer,
+            )
+
             balances = {}
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -944,12 +953,15 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 finally:
                     asyncio.set_event_loop(None)
                     loop.close()
-            available_usdt = Decimal(str((summary or {}).get("usdt_balance", 0) or 0))
+            exchange_usdt = Decimal(str((summary or {}).get("usdt_balance", 0) or 0))
+            available_usdt, liquidity_source = resolve_available_usdt_for_cycle(
+                exchange_usdt
+            )
 
             # [EMOJI] MODO DE CALIBRACIÓN: Log trades que habrían sido ejecutados
             if CALIBRATION_MODE:
                 logger.info(
-                    f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f}"
+                    f"🔬 [CALIBRATION MODE] Balance USDT: ${available_usdt:.2f} source={liquidity_source}"
                 )
                 logger.info(f"🔬 [CALIBRATION MODE] Umbral mínimo: ${SAFE_MIN_USDT}")
                 logger.info(
@@ -981,12 +993,25 @@ def execute_trading_cycle() -> Dict[str, Any]:
 
             if available_usdt < SAFE_MIN_USDT:
                 logger.warning(
-                    f"[Cycle] Liquidez insuficiente USDT={available_usdt:.2f} < {SAFE_MIN_USDT}"
+                    "[Cycle] Liquidez insuficiente USDT=%s < %s (source=%s, exchange=%s)",
+                    available_usdt,
+                    SAFE_MIN_USDT,
+                    liquidity_source,
+                    exchange_usdt,
                 )
 
-                # [EMOJI] INTEGRACIÓN DEL REBALANCEADOR V2
+                # Paper SoT: no rebalancear contra Binance (cuenta real a menudo USDT=0).
+                if should_skip_exchange_rebalancer(liquidity_source=liquidity_source):
+                    return {
+                        "status": "skipped",
+                        "message": "Insufficient paper USDT",
+                        "available_usdt": str(available_usdt),
+                        "liquidity_source": liquidity_source,
+                    }
+
+                # INTEGRACIÓN DEL REBALANCEADOR V2 (solo no-paper / exchange SoT)
                 logger.info(
-                    "[EMOJI] Disparando rebalanceador automático para generar liquidez..."
+                    "[Cycle] Disparando rebalanceador automático para generar liquidez..."
                 )
                 try:
                     # Ejecutar rebalanceo asíncrono
@@ -997,7 +1022,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                             auto_rebalancer_v2.check_and_rebalance()
                         )
                         logger.info(
-                            f"[EMOJI] Resultado del rebalanceo: {rebalance_result}"
+                            f"[Cycle] Resultado del rebalanceo: {rebalance_result}"
                         )
 
                         # Verificar si se generó liquidez suficiente
@@ -1015,12 +1040,12 @@ def execute_trading_cycle() -> Dict[str, Any]:
 
                             if updated_usdt >= SAFE_MIN_USDT:
                                 logger.info(
-                                    f"[EMOJI] Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading"
+                                    f"[Cycle] Liquidez restaurada: {updated_usdt:.2f} USDT - Continuando con trading"
                                 )
                                 # Continuar con el ciclo normal
                             else:
                                 logger.warning(
-                                    f"[EMOJI] Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT"
+                                    f"[Cycle] Liquidez aún insuficiente después del rebalanceo: {updated_usdt:.2f} USDT"
                                 )
                                 return {
                                     "status": "skipped",
@@ -1039,7 +1064,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                                 )
                                 or f"status={rr.get('status')}"
                             )
-                            logger.warning("[EMOJI] Rebalanceo no exitoso: %s", detail)
+                            logger.warning("[Cycle] Rebalanceo no exitoso: %s", detail)
                             return {
                                 "status": "skipped",
                                 "message": f"Rebalancing: {detail}",
@@ -1050,7 +1075,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                         loop.close()
 
                 except Exception as e:
-                    logger.error(f"[EMOJI] Error ejecutando rebalanceo automático: {e}")
+                    logger.error(f"[Cycle] Error ejecutando rebalanceo automático: {e}")
                     return {"status": "skipped", "message": "Auto-rebalancing failed"}
 
                 return {"status": "skipped", "message": "Insufficient USDT"}
@@ -1090,9 +1115,19 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     high = float(spot_d * Decimal("1.01"))
                     asset.min_price = low
                     asset.max_price = high
-                    # Generar 3 niveles equidistantes dentro del rango
-                    step = (high - low) / 3.0
-                    asset.grids = [round(low + step * i, 8) for i in range(1, 4)]
+                    # grids = int (count); grid_levels = precios de cruce
+                    n_levels = 3
+                    if not isinstance(getattr(asset, "grids", None), int) or asset.grids < 2:
+                        asset.grids = n_levels
+                    step = (high - low) / float(n_levels + 1)
+                    asset.grid_levels = [
+                        round(low + step * i, 8) for i in range(1, n_levels + 1)
+                    ]
+                    logger.info(
+                        "[Cycle] Grilla dinámica ETHUSDT spot=%s levels=%s",
+                        spot,
+                        asset.grid_levels,
+                    )
         except Exception as e:
             logger.warning(f"[Cycle] No se pudo ajustar universo/grilla dinámica: {e}")
 
@@ -1123,8 +1158,6 @@ def execute_trading_cycle() -> Dict[str, Any]:
         total_trades = len(results)
 
         # Generar resumen con modo según flag PAPER_TRADING
-        import os
-
         mode = (
             "PAPER" if os.getenv("PAPER_TRADING", "false").lower() == "true" else "REAL"
         )
