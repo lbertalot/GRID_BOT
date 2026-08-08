@@ -22,14 +22,22 @@ groups:
           summary: "Tick 5m detenido"
           description: "No se observa actividad de fase 'evaluation' en 10 minutos."
 
+      # Paper-aware (L0): ROI diario negativo en paper es ruido (fees/MtM), no edge.
+      # Mute mientras effective_mode=paper — mismo patrón que pipeline_ingestion_rules.
       - alert: LowDailyROI
-        expr: roi_daily_percent{strategy="grid"} < 0
+        expr: |
+          roi_daily_percent{strategy="grid"} < 0
+          and on() (
+            (max(trading_effective_mode{mode="paper"}) or on() vector(0)) < 1
+          )
         for: 30m
         labels:
           severity: warning
         annotations:
           summary: "ROI diario negativo"
-          description: "El ROI diario es < 0% durante 30m"
+          description: >-
+            El ROI diario es < 0% durante 30m (solo fuera de paper).
+            En paper L0 esta alerta está muteada a propósito.
 
       - alert: HighSlippage
         expr: average_slippage > 0.0005
