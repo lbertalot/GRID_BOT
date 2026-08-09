@@ -283,3 +283,29 @@ async def test_deactivate_critical_mode_captura_excepcion(cb_no_cooldown):
     ):
         ok = await cb_no_cooldown.deactivate_critical_mode()
     assert ok is False
+
+
+# ─── COV-1.2: residuales getters / activation_count fail-soft ───
+
+
+@pytest.mark.asyncio
+async def test_activation_count_increment_fail_soft(cb_no_cooldown):
+    """Si _activation_count no es dict, activate sigue OK (except pass)."""
+    cb_no_cooldown._activation_count = None  # type: ignore[assignment]
+    ok = await cb_no_cooldown.activate_breaker("balance_discrepancy", "x")
+    assert ok is True
+    assert cb_no_cooldown.is_breaker_active("balance_discrepancy") is True
+
+
+def test_get_last_activation_ts_fail_soft(cb_no_cooldown):
+    cb_no_cooldown._last_activation_ts = None  # type: ignore[assignment]
+    assert cb_no_cooldown.get_last_activation_ts("balance_discrepancy") == 0.0
+
+
+def test_get_activation_count_fail_soft(cb_no_cooldown):
+    cb_no_cooldown._activation_count = None  # type: ignore[assignment]
+    assert cb_no_cooldown.get_activation_count("balance_discrepancy") == 0
+
+
+def test_get_cooldown_seconds_expuesto(cb_no_cooldown):
+    assert cb_no_cooldown.get_cooldown_seconds() == 0
