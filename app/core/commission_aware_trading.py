@@ -101,7 +101,9 @@ class CommissionAwareTrading:
 
             # Calcular comisión para esta cantidad
             notional_value = max_quantity * current_price_dec
-            commission = calculate_commission(notional_value, "MARKET", symbol)
+            # Third arg is CommissionRates | None (not symbol) — passing a str
+            # raised AttributeError on rates.taker and always hit the except path.
+            commission = calculate_commission(notional_value, "MARKET")
 
             # Ajustar cantidad para incluir comisión
             adjusted_quantity = (
@@ -112,9 +114,7 @@ class CommissionAwareTrading:
             if adjusted_quantity * current_price_dec < min_notional_dec:
                 # Calcular cantidad mínima que cumple notional + comisión
                 min_quantity = min_notional_dec / current_price_dec
-                commission_for_min = calculate_commission(
-                    min_notional_dec, "MARKET", symbol
-                )
+                commission_for_min = calculate_commission(min_notional_dec, "MARKET")
                 total_required = min_notional_dec + commission_for_min.commission_usdt
 
                 if total_required > available_usdt_dec:
