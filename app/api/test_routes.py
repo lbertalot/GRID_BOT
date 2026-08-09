@@ -21,7 +21,7 @@ async def test_binance_connection():
 
         api_key = os.getenv("BINANCE_API_KEY", "")
         api_secret = os.getenv("BINANCE_SECRET_KEY", "")
-        if not api_key or api_secret:
+        if not api_key or not api_secret:
             return {
                 "status": "error",
                 "message": "API Keys de Binance no configuradas",
