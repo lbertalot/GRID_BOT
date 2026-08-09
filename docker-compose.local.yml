@@ -84,6 +84,8 @@ x-app-env: &app-env
   OPS_LEDGER_PATH: /var/lib/gridbot/ops/ops_ledger.json
   # Desk digest horario → Telegram (ventana paper L0). Opt-in local.
   DESK_HOURLY_STATUS_ENABLED: "true"
+  # Auto-reset paper de system_integrity stale antes del digest (kill: false).
+  DESK_AUTO_REMEDIATE_BREAKERS: "true"
   DESK_WINDOW_DAY0_ANCHOR: "2026-08-06"
   DESK_OPS_DOC_DIR: /app/Docs/ops
 

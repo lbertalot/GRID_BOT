@@ -20,6 +20,23 @@ Sin claim de edge; **Pase a Live siempre ❌ NO** en este canal.
 A las **00:45 UTC** `send_desk_eod_day_plan` escribe:
 `Docs/ops/day{N+1}-action-plan-YYYY-MM-DD.md` y un resumen corto por Telegram.
 
+## Auto-remediación (sin paste Telegram)
+
+Antes del digest / EOD plan, si `DESK_AUTO_REMEDIATE_BREAKERS=true` (default):
+
+1. Modo paper SoT
+2. `system_integrity` abierto
+3. Binance `auth_ok` + `net_ok`
+
+→ **reset paper-safe** del breaker + Telegram `🛠️ DESK AUTO · REMEDIADO`.
+
+Si validate falla → Telegram `🛠️ DESK AUTO · HOLD` (revisar IP allowlist).  
+Kill switch: `DESK_AUTO_REMEDIATE_BREAKERS=false`.
+
+El digest se construye **después** del intento, para reflejar RISK ON_TRACK si el reset funcionó.
+
+Código: `app/core/desk_auto_remediation.py` · cableado en `app/services/desk_status_tasks.py`.
+
 ## Fuentes
 - `/` trading mode (`effective_mode`)
 - `paper_telemetry/paper_equity_series.json`
@@ -28,11 +45,11 @@ A las **00:45 UTC** `send_desk_eod_day_plan` escribe:
 
 ## Manual
 ```bash
-# Dry-run (imprime payload)
+# Dry-run (imprime payload; no remedia ni Telegram)
 docker compose -f docker-compose.local.yml exec -T worker \
   python scripts/send_desk_hourly_status.py --dry-run
 
-# Enviar ahora
+# Enviar ahora (incluye auto-remediate)
 docker compose -f docker-compose.local.yml exec -T worker \
   python scripts/send_desk_hourly_status.py
 
