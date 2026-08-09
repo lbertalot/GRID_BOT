@@ -446,3 +446,212 @@ def test_live_status_endpoint_is_read_only(gate_env, client, auth_headers):
     assert (
         client.put("/api/gates/live-status", headers=auth_headers).status_code == 405
     )
+
+
+# ── COV-1.1: edge branches to ≥90% ────────────────────────────────────────────
+
+
+def test_short_and_digit_only_signers_are_placeholders(gate_env, tmp_path):
+    content = (
+        "# LIVE GATE\n\n"
+        "- [x] item\n"
+        '- ceo_signoff: signer="AB" timestamp="2026-09-05T14:00:00Z"\n'
+        '- desk_lead_signoff: signer="12345" timestamp="2026-09-05T14:05:00Z"\n'
+    )
+    _write_gate(tmp_path, content)
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "placeholder_signer:ceo" in status["reasons"]
+    assert "placeholder_signer:desk_lead" in status["reasons"]
+
+
+def test_missing_timestamp_with_signer_is_rejected(gate_env, tmp_path):
+    content = (
+        "# LIVE GATE\n\n"
+        "- [x] item\n"
+        f'- ceo_signoff: signer="{CEO}" timestamp="{TS_CEO}"\n'
+        f'- desk_lead_signoff: signer="{DESK}"\n'
+    )
+    _write_gate(tmp_path, content)
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "missing_timestamp:desk_lead" in status["reasons"]
+
+
+def test_iso_timestamp_with_z_suffix_accepted(gate_env, monkeypatch, tmp_path):
+    content = (
+        "# LIVE GATE\n\n"
+        "- config_hash: sha256:abc\n"
+        "- [x] Dashboard verde\n"
+        '- ceo_signoff: signer="Leandro Bertalot" timestamp="2026-09-05T17:00:00Z"\n'
+        '- desk_lead_signoff: signer="Desk Lead Paper" timestamp="2026-09-05T17:05:00z"\n'
+    )
+    _write_gate(tmp_path, content)
+    _arm_real_flags(monkeypatch)
+    status = get_live_gate_status()
+    assert status["signed"] is True
+    assert gate_allows_real() is True
+
+
+def test_explicit_relative_gate_path(monkeypatch, tmp_path):
+    gate_dir = tmp_path / "Docs" / "gates"
+    gate_dir.mkdir(parents=True)
+    path = gate_dir / "LIVE_GATE_20260905.md"
+    path.write_text(_md_gate(), encoding="utf-8")
+    monkeypatch.setattr("app.core.live_gate._repo_root", lambda: tmp_path)
+    monkeypatch.setenv(LIVE_GATE_PATH_ENV, "Docs/gates/LIVE_GATE_20260905.md")
+    monkeypatch.delenv(LIVE_GATE_DIR_ENV, raising=False)
+    status = get_live_gate_status()
+    assert status["gate_file"] == path.name
+    assert status["signed"] is True
+
+
+def test_explicit_missing_gate_path(monkeypatch, tmp_path):
+    missing = tmp_path / "nope" / "LIVE_GATE_20990101.md"
+    monkeypatch.setenv(LIVE_GATE_PATH_ENV, str(missing))
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "gate_file_missing" in status["reasons"]
+
+
+def test_gate_dir_not_a_directory(monkeypatch, tmp_path):
+    not_dir = tmp_path / "not_a_dir"
+    not_dir.write_text("x", encoding="utf-8")
+    monkeypatch.delenv(LIVE_GATE_PATH_ENV, raising=False)
+    monkeypatch.setenv(LIVE_GATE_DIR_ENV, str(not_dir))
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "gate_file_missing" in status["reasons"]
+
+
+def test_world_writable_gate_rejected(gate_env, monkeypatch):
+    path = gate_env / "LIVE_GATE_20260905.md"
+    path.write_text(_md_gate(), encoding="utf-8")
+    path.chmod(0o666)
+    _arm_real_flags(monkeypatch)
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "gate_file_insecure_permissions" in status["reasons"]
+    assert gate_allows_real() is False
+
+
+def test_json_non_object_fails_closed(gate_env, monkeypatch, tmp_path):
+    _write_gate(tmp_path, "[1, 2, 3]", name="LIVE_GATE_20260905.json")
+    _arm_real_flags(monkeypatch)
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "gate_file_unparsable" in status["reasons"]
+
+
+def test_json_checklist_dict_and_bare_signoff(gate_env, monkeypatch, tmp_path):
+    payload = {
+        "config_hash": "sha256:dict-check",
+        "checklist": {"a": True, "b": True},
+        "ceo_signoff": CEO,  # bare string → invalid (no timestamp)
+        "desk_lead_signoff": {"signer": DESK, "timestamp": TS_DESK},
+    }
+    _write_gate(tmp_path, json.dumps(payload), name="LIVE_GATE_20260905.json")
+    status = get_live_gate_status()
+    assert status["checklist_total"] == 2
+    assert status["signed"] is False
+    assert any("ceo" in r for r in status["reasons"])
+
+
+def test_json_checklist_bare_bool_entries(gate_env, monkeypatch, tmp_path):
+    payload = {
+        "config_hash": "sha256:bools",
+        "checklist": [True, True, False],
+        "ceo_signoff": {"signer": CEO, "timestamp": TS_CEO},
+        "desk_lead_signoff": {"signer": DESK, "timestamp": TS_DESK},
+    }
+    _write_gate(tmp_path, json.dumps(payload), name="LIVE_GATE_20260905.json")
+    status = get_live_gate_status()
+    assert status["checklist_total"] == 3
+    assert status["checklist_done"] == 2
+    assert status["signed"] is False
+    assert "checklist_incomplete" in status["reasons"]
+
+
+def test_stat_oserror_fails_closed(gate_env, monkeypatch):
+    """OSError while resolving/reading the gate must never arm live."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    path = gate_env / "LIVE_GATE_20260905.md"
+    path.write_text(_md_gate(), encoding="utf-8")
+    monkeypatch.setenv(LIVE_GATE_PATH_ENV, str(path))
+
+    with patch.object(Path, "stat", side_effect=OSError("simulated")):
+        status = get_live_gate_status()
+        assert status["signed"] is False
+        assert status["reasons"]
+        assert gate_allows_real() is False
+
+
+def test_read_gate_size_stat_oserror(gate_env):
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from app.core.live_gate import _read_gate_text
+
+    path = gate_env / "LIVE_GATE_20260905.md"
+    path.write_text(_md_gate(), encoding="utf-8")
+    with patch.object(Path, "stat", side_effect=OSError("size")):
+        text, reasons = _read_gate_text(path)
+    assert text is None
+    assert "gate_file_unreadable" in reasons
+
+
+def test_read_gate_mode_stat_oserror(gate_env):
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from app.core.live_gate import _read_gate_text
+
+    path = gate_env / "LIVE_GATE_20260905.md"
+    path.write_text(_md_gate(), encoding="utf-8")
+    real = Path.stat
+    calls = {"n": 0}
+
+    def flaky(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real(self, *args, **kwargs)
+        raise OSError("mode unreadable")
+
+    with patch.object(Path, "stat", flaky):
+        text, reasons = _read_gate_text(path)
+    assert text is None
+    assert "gate_file_unreadable" in reasons
+
+
+def test_outer_exception_fails_closed(monkeypatch):
+    def boom():
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr("app.core.live_gate._resolve_gate_file", boom)
+    status = get_live_gate_status()
+    assert status["signed"] is False
+    assert "gate_status_error" in status["reasons"]
+    assert gate_allows_real() is False
+
+
+def test_valid_iso_timestamp_empty_and_bad(monkeypatch):
+    from app.core.live_gate import _valid_iso_timestamp
+
+    assert _valid_iso_timestamp("") is False
+    assert _valid_iso_timestamp("   ") is False
+    assert _valid_iso_timestamp("2026-09-05T14:00:00Z") is True
+    assert _valid_iso_timestamp("not-a-date") is False
+
+
+def test_config_hash_missing_reason_non_blocking(gate_env, monkeypatch, tmp_path):
+    content = "\n".join(
+        line for line in _md_gate().splitlines() if "config_hash" not in line.lower()
+    )
+    _write_gate(tmp_path, content + "\n")
+    _arm_real_flags(monkeypatch)
+    status = get_live_gate_status()
+    assert status["signed"] is True  # hash missing is non-blocking
+    assert "config_hash_missing" in status["reasons"]
+    assert gate_allows_real() is True
