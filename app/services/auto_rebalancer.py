@@ -331,6 +331,7 @@ class AutoRebalancer:
             price: Precio
             order_id: ID de la orden
         """
+        db = None
         try:
             db = SessionLocal()
             trade = Trade(
