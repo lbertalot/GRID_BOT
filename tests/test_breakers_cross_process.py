@@ -9,7 +9,7 @@ Paper-safe: no toca live ni configs freeze.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,6 +18,7 @@ from app.core.breaker_state_store import (
     InMemoryBreakerStateStore,
     RedisBreakerStateStore,
     build_breaker_state_store,
+    resolve_store_backend,
     trip_record_from_mapping,
 )
 from app.core.circuit_breakers import CircuitBreakers, reset_shared_breakers
@@ -157,3 +158,133 @@ async def test_hydrate_on_init_from_store():
     second = CircuitBreakers(store=store)
     assert second.is_breaker_active("critical_mode") is True
     assert second.get_activation_count("critical_mode") >= 1
+
+
+# ─── COV-1.2: store gaps (Redis mock, resolve, fail-soft) ───
+
+
+def test_redis_store_lazy_client_via_get_redis_client(monkeypatch):
+    """Sin client inyectado, _redis() usa get_redis_client (mock, sin red)."""
+    fake = MagicMock()
+    fake.hgetall.return_value = {}
+    monkeypatch.setattr(
+        "app.core.distributed_lock.get_redis_client",
+        lambda: fake,
+    )
+    store = RedisBreakerStateStore(client=None)
+    assert store.load_all() == {}
+    fake.hgetall.assert_called_once_with(BREAKER_REDIS_KEY)
+
+
+def test_redis_store_decode_str_fields_and_skip_non_dict():
+    """Payload str (no bytes) + JSON no-dict se ignoran; corrupt → fail-soft."""
+    fake = MagicMock()
+    fake.hgetall.return_value = {
+        "ok_breaker": json.dumps({"active": True, "reason": "paper"}),
+        "bad_type": json.dumps([1, 2, 3]),
+        "corrupt": "{not-json",
+    }
+    store = RedisBreakerStateStore(client=fake)
+    loaded = store.load_all()
+    assert "ok_breaker" in loaded
+    assert loaded["ok_breaker"].active is True
+    assert "bad_type" not in loaded
+    assert "corrupt" not in loaded
+
+
+def test_redis_store_clear_all_ok_and_fail_soft():
+    fake = MagicMock()
+    store = RedisBreakerStateStore(client=fake)
+    store.clear_all()
+    fake.delete.assert_called_once_with(BREAKER_REDIS_KEY)
+
+    fake.delete.side_effect = ConnectionError("redis down")
+    store.clear_all()  # no lanza
+
+
+def test_resolve_store_backend_variants(monkeypatch):
+    assert resolve_store_backend("memory") == "memory"
+    assert resolve_store_backend("mem") == "memory"
+    assert resolve_store_backend("local") == "memory"
+    assert resolve_store_backend("redis") == "redis"
+
+    monkeypatch.delenv("CB_SHARED_STORE", raising=False)
+    fake = MagicMock()
+    fake.ping.return_value = True
+    with patch("app.core.distributed_lock.get_redis_client", return_value=fake):
+        assert resolve_store_backend("auto") == "redis"
+
+    with patch(
+        "app.core.distributed_lock.get_redis_client",
+        side_effect=ConnectionError("no redis"),
+    ):
+        assert resolve_store_backend("auto") == "memory"
+
+
+def test_build_breaker_state_store_redis_with_injected_client():
+    fake = MagicMock()
+    store = build_breaker_state_store(backend="redis", redis_client=fake)
+    assert isinstance(store, RedisBreakerStateStore)
+    store.save_breaker(
+        "system_integrity",
+        trip_record_from_mapping({"active": True, "reason": "cov"}),
+    )
+    fake.hset.assert_called()
+
+
+def test_build_breaker_state_store_redis_fallback_memory(monkeypatch):
+    """Redis obligatorio pero connect falla → memoria (fail-soft)."""
+    monkeypatch.setenv("CB_SHARED_STORE", "redis")
+    with patch(
+        "app.core.breaker_state_store.RedisBreakerStateStore.load_all",
+        side_effect=ConnectionError("boom"),
+    ):
+        store = build_breaker_state_store(backend="redis", redis_client=None)
+    assert isinstance(store, InMemoryBreakerStateStore)
+
+
+def test_store_metric_helpers_fail_soft_when_prometheus_down():
+    """_inc_sync_error / _set_backend_metric no propagan si labels explota."""
+    from app.core import breaker_state_store as bss
+
+    with patch("app.core.metrics.breaker_store_sync_errors_total") as m:
+        m.labels.side_effect = RuntimeError("prom down")
+        bss._inc_sync_error("read")
+
+    with patch("app.core.metrics.breaker_store_backend") as m:
+        m.labels.side_effect = RuntimeError("prom down")
+        bss._set_backend_metric("memory")
+
+
+@pytest.mark.asyncio
+async def test_persist_and_hydrate_fail_soft():
+    """Errores de store no rompen activate/hydrate (trading path)."""
+    store = MagicMock()
+    store.load_all.side_effect = RuntimeError("hydrate fail")
+    store.save_breaker.side_effect = RuntimeError("persist fail")
+    cb = CircuitBreakers(store=store)
+    # hydrate falló en init; activate aún debe funcionar in-proc
+    ok = await cb.activate_breaker("system_integrity", "paper persist fail")
+    assert ok is True
+    assert cb.is_breaker_active("system_integrity") is True
+
+
+def test_apply_record_ignora_nombre_desconocido():
+    store = InMemoryBreakerStateStore()
+    cb = CircuitBreakers(store=store)
+    record = trip_record_from_mapping({"active": True, "reason": "ghost"})
+    cb._apply_record("no_existe", record)
+    assert "no_existe" not in cb.breakers
+
+
+def test_reset_shared_breakers_clear_all_fail_soft(monkeypatch):
+    monkeypatch.setenv("CB_SHARED_STORE", "memory")
+    bad = MagicMock()
+    bad.clear_all.side_effect = RuntimeError("clear fail")
+    bad.load_all.return_value = {}
+    with patch(
+        "app.core.breaker_state_store.build_breaker_state_store",
+        return_value=bad,
+    ):
+        cb = reset_shared_breakers()
+    assert isinstance(cb, CircuitBreakers)
