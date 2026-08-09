@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 
 import pytest
 
-_HAS_TENSORFLOW = importlib.util.find_spec("tensorflow") is not None
+
+def _has_real_tensorflow() -> bool:
+    """True solo si hay TF real (no stub de coverage / ModuleType sin loader)."""
+    try:
+        spec = importlib.util.find_spec("tensorflow")
+    except ValueError:
+        # Stub en sys.modules con __spec__ is None (p.ej. tests cov Z4).
+        return False
+    if spec is None:
+        return False
+    mod = sys.modules.get("tensorflow")
+    if mod is not None and getattr(mod, "__gridbot_stub__", False):
+        return False
+    return True
+
+
+_HAS_TENSORFLOW = _has_real_tensorflow()
 
 
 def test_hoeffding_tree_classifier_lives_in_river_tree() -> None:
