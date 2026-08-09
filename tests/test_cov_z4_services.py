@@ -33,15 +33,23 @@ def _install_tf_stub():
     ):
         return
 
-    tf = types.ModuleType("tensorflow")
+    import importlib.machinery
+
+    def _mod(name: str) -> types.ModuleType:
+        m = types.ModuleType(name)
+        m.__spec__ = importlib.machinery.ModuleSpec(name, loader=None)
+        m.__loader__ = None
+        return m
+
+    tf = _mod("tensorflow")
     tf.__gridbot_stub__ = True
     tf.random = types.SimpleNamespace(set_seed=lambda *_a, **_k: None)
 
-    keras = types.ModuleType("tensorflow.keras")
-    layers = types.ModuleType("tensorflow.keras.layers")
-    callbacks = types.ModuleType("tensorflow.keras.callbacks")
-    models = types.ModuleType("tensorflow.keras.models")
-    optimizers = types.ModuleType("tensorflow.keras.optimizers")
+    keras = _mod("tensorflow.keras")
+    layers = _mod("tensorflow.keras.layers")
+    callbacks = _mod("tensorflow.keras.callbacks")
+    models = _mod("tensorflow.keras.models")
+    optimizers = _mod("tensorflow.keras.optimizers")
 
     class _Layer:
         def __init__(self, *a, **k):
