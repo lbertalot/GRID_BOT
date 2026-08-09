@@ -96,6 +96,8 @@ class StrategyFactory:
                 return None
 
             config_class = self.config_classes[strategy_type]
+            # Evitar choque: el 1er arg selecciona la clase; el modelo también pide strategy_type.
+            kwargs.setdefault("strategy_type", strategy_type)
             config = config_class(**kwargs)
 
             logger.info(f"Configuración creada para {strategy_type.value}")
