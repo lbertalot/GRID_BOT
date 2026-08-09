@@ -13,6 +13,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -242,6 +243,48 @@ def test_summary_legacy_mantiene_contrato(client):
     assert {"critical_mode", "active_breakers", "total_active", "breakers"} <= set(
         payload.keys()
     )
+
+
+def test_api_summary_contrato_alias(client):
+    """Alias /api/breakers/summary (dashboard bajo /api/*)."""
+    response = client.get("/api/breakers/summary")
+    assert response.status_code == 200
+    payload = response.json()
+    assert {"critical_mode", "active_breakers", "total_active", "breakers"} <= set(
+        payload.keys()
+    )
+
+
+def test_summary_y_status_retornan_500_si_breakers_explotan(client):
+    """Fail paths HTTP: errores internos → 500 paper-safe (sin live reset)."""
+    from unittest.mock import MagicMock
+
+    from app.api import breakers_routes as br
+
+    broken = MagicMock()
+    broken.get_all_breakers_status.side_effect = RuntimeError("summary boom")
+    br.router.breakers = broken
+    try:
+        r = client.get("/breakers/summary")
+        assert r.status_code == 500
+        assert "Error interno" in r.json()["detail"]
+    finally:
+        if hasattr(br.router, "breakers"):
+            delattr(br.router, "breakers")
+
+    broken_status = MagicMock()
+    with patch(
+        "app.api.breakers_routes.get_breaker_visibility_snapshot",
+        side_effect=RuntimeError("status boom"),
+    ):
+        br.api_router.breakers = broken_status
+        try:
+            r = client.get("/api/breakers/status")
+            assert r.status_code == 500
+            assert "Error interno" in r.json()["detail"]
+        finally:
+            if hasattr(br.api_router, "breakers"):
+                delattr(br.api_router, "breakers")
 
 
 # ─────────────────────────────────────────────────────────────────
