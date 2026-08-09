@@ -463,7 +463,10 @@ class HybridMLEngine:
                 leaf_prediction=self.river_config.leaf_prediction,
             )
         elif self.river_config.model_type == "AdaptiveRandomForest":
-            return ensemble.AdaptiveRandomForestClassifier(n_models=10, seed=42)
+            # river≥0.21: ARFClassifier vive en river.forest
+            from river import forest as river_forest
+
+            return river_forest.ARFClassifier(n_models=10, seed=42)
         elif self.river_config.model_type == "LogisticRegression":
             return linear_model.LogisticRegression()
         else:
@@ -559,8 +562,13 @@ class HybridMLEngine:
         # Actualizar métricas
         self.river_metrics[symbol].update(y, y_pred)
 
-        # Log cada 100 actualizaciones
-        if self.river_metrics[symbol].n_samples % 100 == 0:
+        # Log cada 100 actualizaciones (river≥0.21: n_samples vive en cm)
+        n_samples = getattr(
+            self.river_metrics[symbol],
+            "n_samples",
+            getattr(self.river_metrics[symbol].cm, "n_samples", 0),
+        )
+        if n_samples % 100 == 0:
             accuracy = self.river_metrics[symbol].get()
             self.logger.debug(f"River model accuracy for {symbol}: {accuracy:.3f}")
 
@@ -897,10 +905,13 @@ class HybridMLEngine:
 
         if symbol in self.river_models:
             metric = self.river_metrics[symbol]
+            n_samples = getattr(
+                metric, "n_samples", getattr(metric.cm, "n_samples", 0)
+            )
             status["river_model_info"] = {
                 "model_type": self.river_config.model_type,
                 "accuracy": metric.get(),
-                "samples_processed": metric.n_samples,
+                "samples_processed": n_samples,
             }
 
         return status

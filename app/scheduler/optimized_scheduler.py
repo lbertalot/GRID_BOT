@@ -26,7 +26,7 @@ from app.services.auto_rebalancer import auto_rebalancer
 from app.scheduler.reconciliation_job import run_reconciliation_forever  # new
 from app.scheduler.operation_tracking_job import run_operation_tracking_forever  # new
 from app.services.user_stream_handler import start_user_stream_and_track  # new
-from app.services.binance_credentials import get_api_key  # type: ignore
+from app.services.binance_credentials import get_binance_credentials
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -109,7 +109,7 @@ class OptimizedGridScheduler:
             # Start userDataStream listener (mantener vivo en background)
             async def _start_user_stream():
                 try:
-                    api_key = await get_api_key()
+                    api_key, _ = get_binance_credentials()
                 except Exception:
                     api_key = None
                 if api_key:

@@ -205,10 +205,17 @@ class BinanceClient:
 
                         for filter_data in symbol_data.get("filters", []):
                             filter_type = filter_data["filterType"]
-                            filters[f"{filter_type.lower()}_filter"] = filter_data
+                            # PRICE_FILTER → price_filter (evitar price_filter_filter)
+                            key = filter_type.lower()
+                            if not key.endswith("_filter"):
+                                key = f"{key}_filter"
+                            filters[key] = filter_data
 
+                        # Ignorar claves desconocidas del exchange (forward-compat)
+                        known = set(SymbolFilter.__dataclass_fields__.keys())
+                        safe_filters = {k: v for k, v in filters.items() if k in known}
                         self._exchange_info_cache[symbol] = SymbolFilter(
-                            symbol=symbol, **filters
+                            symbol=symbol, **safe_filters
                         )
 
                     self._cache_timestamp = now
@@ -328,18 +335,20 @@ class BinanceClient:
                     symbol, "Price above maximum", "PRICE_FILTER", price, max_price
                 )
 
-            # Validar tick size
-            if price % tick_size != 0:
-                ORDERS_REJECTED_TOTAL.labels(
-                    reason="invalid_tick_size", symbol=symbol
-                ).inc()
-                raise SymbolFilterError(
-                    symbol,
-                    "Price not aligned with tick size",
-                    "PRICE_FILTER",
-                    price,
-                    tick_size,
-                )
+            # Validar tick size (tolerancia float; evitar falsos positivos de %)
+            if tick_size > 0:
+                steps = price / tick_size
+                if abs(steps - round(steps)) > 1e-8:
+                    ORDERS_REJECTED_TOTAL.labels(
+                        reason="invalid_tick_size", symbol=symbol
+                    ).inc()
+                    raise SymbolFilterError(
+                        symbol,
+                        "Price not aligned with tick size",
+                        "PRICE_FILTER",
+                        price,
+                        tick_size,
+                    )
 
         # Validar cantidad
         if symbol_filter.lot_size_filter:
@@ -363,18 +372,20 @@ class BinanceClient:
                     symbol, "Quantity above maximum", "LOT_SIZE_FILTER", qty, max_qty
                 )
 
-            # Validar step size
-            if qty % step_size != 0:
-                ORDERS_REJECTED_TOTAL.labels(
-                    reason="invalid_step_size", symbol=symbol
-                ).inc()
-                raise SymbolFilterError(
-                    symbol,
-                    "Quantity not aligned with step size",
-                    "LOT_SIZE_FILTER",
-                    qty,
-                    step_size,
-                )
+            # Validar step size (tolerancia float)
+            if step_size > 0:
+                steps_q = qty / step_size
+                if abs(steps_q - round(steps_q)) > 1e-8:
+                    ORDERS_REJECTED_TOTAL.labels(
+                        reason="invalid_step_size", symbol=symbol
+                    ).inc()
+                    raise SymbolFilterError(
+                        symbol,
+                        "Quantity not aligned with step size",
+                        "LOT_SIZE_FILTER",
+                        qty,
+                        step_size,
+                    )
 
         # Validar notional mínimo
         if symbol_filter.min_notional_filter:
