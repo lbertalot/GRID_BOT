@@ -18,7 +18,17 @@ mensaje CEO compacto:
 Sin claim de edge; **Pase a Live siempre ❌ NO** en este canal.
 
 A las **00:45 UTC** `send_desk_eod_day_plan` escribe:
-`Docs/ops/day{N+1}-action-plan-YYYY-MM-DD.md` y un resumen corto por Telegram.
+1. Tear Capa A auto → `Docs/ops/tear-capa-a-YYYY-MM-DD.md` (`app/core/desk_tear_capa_a.py`, AS-1)
+2. `Docs/ops/day{N+1}-action-plan-YYYY-MM-DD.md`
+3. Resumen corto por Telegram (incluye path del tear · **PROMOTE_LIVE: NO**)
+
+## Acciones por área (AS-2)
+
+Tras auto-remediate y al construir el digest, si hay áreas **AT_RISK** / **OFF_TRACK**:
+`plan_actions_for_areas` → Telegram `🛠️ DESK AUTO · ACCIONES` con owner canónico
+(MM / RISK / DEVOPS / …). No requiere paste del CEO.
+
+Código: `app/core/desk_area_actions.py`.
 
 ## Auto-remediación (sin paste Telegram)
 
