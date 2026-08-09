@@ -16,6 +16,14 @@ def digest_stub():
         global_status="AT_RISK",
         effective_mode="paper",
         equity_last="1000.00",
+        areas=[
+            SimpleNamespace(
+                code="RISK",
+                status="AT_RISK",
+                deviation="breakers abiertos",
+            ),
+            SimpleNamespace(code="MM", status="ON_TRACK", deviation=""),
+        ],
     )
     d.full_telegram_payload = MagicMock(return_value="DIGEST PAYLOAD")
     return d
@@ -57,8 +65,11 @@ def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
 
     assert out["ok"] is True
     assert out["remediation"]["acted"] is True
-    assert tg.call_count == 2
+    assert out["area_actions"] and out["area_actions"][0]["code"] == "RISK"
+    # remediate + area actions + digest
+    assert tg.call_count == 3
     assert any("REMEDIADO" in str(c.args[0]) for c in tg.call_args_list)
+    assert any("DESK AUTO · ACCIONES" in str(c.args[0]) for c in tg.call_args_list)
 
 
 def test_run_auto_remediation_swallows_errors(paper_env):
@@ -99,6 +110,10 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
             "app.core.desk_auto_remediation.maybe_remediate_stale_system_integrity",
             return_value=rem_result,
         ),
+        patch(
+            "app.core.desk_tear_capa_a.write_tear_capa_a",
+            return_value=Path("/tmp/tear-capa-a-2026-08-09.md"),
+        ),
         patch.object(mod, "_telegram", return_value=True) as tg,
     ):
         out = mod.send_desk_eod_day_plan()
@@ -106,7 +121,11 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
     assert out["ok"] is True
     assert out["remediation"]["action"] == "hold"
     assert out["path"] == "/tmp/day2.md"
-    assert tg.call_count == 2
+    assert out["tear_path"] == "/tmp/tear-capa-a-2026-08-09.md"
+    assert out["area_actions"] and out["area_actions"][0]["auto"] is False
+    # HOLD remedia + acciones + EOD summary
+    assert tg.call_count == 3
+    assert "Tear Capa A" in tg.call_args_list[-1].args[0]
     assert "Auto-remediate" in tg.call_args_list[-1].args[0]
     assert "hold" in tg.call_args_list[-1].args[0]
 

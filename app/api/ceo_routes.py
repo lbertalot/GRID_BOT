@@ -261,6 +261,7 @@ async def ceo_dashboard(
         {
             "overview": overview,
             "cards": _build_cards(overview),
+            "effective_mode": mode,
             "mode_label": mode_label,
             "mode_css": mode_css,
             "mode_hint": mode_hint,
