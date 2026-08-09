@@ -33,6 +33,14 @@ from app.core.optimized_grid_manager import (
 from unittest.mock import Mock, AsyncMock, patch
 from unittest.mock import MagicMock
 
+# S-COV-85 Wave 0.3: paper_env, mock_binance, decimal_money (opt-in).
+from tests.fixtures.paper_cov import (  # noqa: E402,F401
+    d,
+    decimal_money,
+    mock_binance,
+    paper_env,
+)
+
 
 # Install a lightweight stub of the Binance SDK for all tests unless explicitly disabled
 # Force stubbing in CI to avoid external calls
