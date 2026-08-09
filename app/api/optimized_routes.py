@@ -12,6 +12,7 @@ from app.core.optimized_grid_manager import (
     OptimizedGridManager,
     create_optimized_grid_manager,
 )
+from app.core.trading_mode import get_trading_mode_snapshot
 from app.services.telegram_alert import send_telegram_alert
 # from app.services.auto_rebalancer import auto_rebalancer  # Comentado temporalmente
 
@@ -23,6 +24,19 @@ router = APIRouter(prefix="/api/v1", tags=["optimized-grid"])
 
 # Global grid manager instance
 grid_manager: Optional[OptimizedGridManager] = None
+
+
+def _reject_live_mutations() -> None:
+    """Mutaciones de este router huérfano solo en paper (sin FORCE_REAL_MODE)."""
+    snap = get_trading_mode_snapshot()
+    if snap.get("force_real_mode") or not snap.get("paper_trading"):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Live mutations rejected on optimized_routes (paper-only); "
+                f"effective_mode={snap.get('effective_mode')}"
+            ),
+        )
 
 
 # Pydantic models for API
@@ -121,6 +135,7 @@ async def reload_configuration(
     manager: OptimizedGridManager = Depends(get_grid_manager),
 ):
     """Reload configuration from file"""
+    _reject_live_mutations()
     try:
         config_file = request.config_file_path or "grid_config_optimized.json"
 
@@ -137,6 +152,8 @@ async def reload_configuration(
                 status_code=500, detail="Failed to reload configuration"
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error reloading configuration: {e}")
         raise HTTPException(
@@ -190,6 +207,7 @@ async def reload_configuration(
 async def restart_grid_manager():
     """Restart the grid manager with current configuration"""
     global grid_manager
+    _reject_live_mutations()
 
     try:
         # Get current config file path
@@ -214,6 +232,8 @@ async def restart_grid_manager():
                 status_code=500, detail="Failed to restart grid manager"
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error restarting grid manager: {e}")
         raise HTTPException(
@@ -229,6 +249,7 @@ async def execute_trading_cycle(
     manager: OptimizedGridManager = Depends(get_grid_manager),
 ):
     """Execute a manual trading cycle"""
+    _reject_live_mutations()
     try:
         # Execute in background to avoid blocking
         background_tasks.add_task(manager.execute_grid_trading_cycle)
@@ -237,6 +258,8 @@ async def execute_trading_cycle(
             "message": "Trading cycle initiated",
             "requested_symbols": request.symbols or "all",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error executing trading cycle: {e}")
         raise HTTPException(status_code=500, detail="Error executing trading cycle")
@@ -266,6 +289,7 @@ async def update_asset_config(
     manager: OptimizedGridManager = Depends(get_grid_manager),
 ):
     """Update configuration for a specific asset"""
+    _reject_live_mutations()
     try:
         # Convert request to dict, removing None values
         update_data = {k: v for k, v in request.dict().items() if v is not None}
@@ -284,6 +308,8 @@ async def update_asset_config(
         else:
             raise HTTPException(status_code=404, detail=f"Asset {symbol} not found")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating asset config for {symbol}: {e}")
         raise HTTPException(
@@ -325,6 +351,7 @@ async def save_configuration(
     manager: OptimizedGridManager = Depends(get_grid_manager),
 ):
     """Save current configuration to file"""
+    _reject_live_mutations()
     try:
         success = await manager.save_configuration(filepath)
 
@@ -333,6 +360,8 @@ async def save_configuration(
         else:
             raise HTTPException(status_code=500, detail="Failed to save configuration")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error saving configuration: {e}")
         raise HTTPException(
@@ -344,6 +373,7 @@ async def save_configuration(
 @router.post("/emergency/stop")
 async def emergency_stop(manager: OptimizedGridManager = Depends(get_grid_manager)):
     """Emergency stop all trading activities"""
+    _reject_live_mutations()
     try:
         # Deactivate all assets
         for asset in manager.config.assets.values():
@@ -359,6 +389,8 @@ async def emergency_stop(manager: OptimizedGridManager = Depends(get_grid_manage
             "status": "stopped",
             "active_assets": 0,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error executing emergency stop: {e}")
         raise HTTPException(status_code=500, detail="Error executing emergency stop")
@@ -368,6 +400,7 @@ async def emergency_stop(manager: OptimizedGridManager = Depends(get_grid_manage
 @router.post("/emergency/resume")
 async def resume_trading(manager: OptimizedGridManager = Depends(get_grid_manager)):
     """Resume trading activities"""
+    _reject_live_mutations()
     try:
         # Reactivate all assets
         for asset in manager.config.assets.values():
@@ -387,6 +420,8 @@ async def resume_trading(manager: OptimizedGridManager = Depends(get_grid_manage
             "status": "running",
             "active_assets": active_assets,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error resuming trading: {e}")
         raise HTTPException(status_code=500, detail="Error resuming trading")

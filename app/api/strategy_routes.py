@@ -3,18 +3,36 @@
 Rutas API para Gestión de Estrategias de Trading
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import pandas as pd
 
 from app.core.risk_manager import RiskManager, MarketRegime, RegimePrediction
-from app.services.hybrid_ml_engine import HybridMLEngine
+from app.core.trading_mode import get_trading_mode_snapshot
 from app.services.strategy_selector import StrategySelector, StrategySpec, AccountState
 from app.services.backtesting_service import BacktestingService, BacktestConfig
 
+if TYPE_CHECKING:
+    from app.services.hybrid_ml_engine import HybridMLEngine
+
 router = APIRouter(prefix="/api/v2/strategies", tags=["strategies"])
+
+
+def _reject_ungated_live_execution() -> None:
+    """Paper-first: mutaciones live sin gate dual → 403."""
+    snap = get_trading_mode_snapshot()
+    if snap.get("effective_mode") != "real_armed":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Live strategy execution rejected: paper-only or live gate unsigned "
+                f"(effective_mode={snap.get('effective_mode')})"
+            ),
+        )
 
 
 # Dependencias
@@ -23,8 +41,15 @@ def get_risk_manager() -> RiskManager:
     return RiskManager()
 
 
-def get_ml_engine() -> HybridMLEngine:
-    """Obtiene instancia del HybridMLEngine."""
+def get_ml_engine():
+    """Obtiene instancia del HybridMLEngine (lazy: TF opcional en CI)."""
+    try:
+        from app.services.hybrid_ml_engine import HybridMLEngine
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"HybridMLEngine unavailable (optional ML deps): {exc}",
+        ) from exc
     return HybridMLEngine()
 
 
@@ -68,8 +93,9 @@ async def execute_intelligent_strategy(
     request: ExecuteIntelligentRequest,
     background_tasks: BackgroundTasks,
     risk_manager: RiskManager = Depends(get_risk_manager),
-    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    ml_engine=Depends(get_ml_engine),
     strategy_selector: StrategySelector = Depends(get_strategy_selector),
+    backtest_service: BacktestingService = Depends(get_backtesting_service),
 ) -> Dict[str, Any]:
     """
     Ejecuta estrategia inteligente con predicción de régimen y selección automática.
@@ -130,10 +156,8 @@ async def execute_intelligent_strategy(
             regime_prediction, request.symbol, request.account_state
         )
 
-        # Step 4: Quick backtest check (shadow)
+        # Step 4: Quick backtest check (shadow) — servicio inyectado (DI)
         if request.quick_backtest:
-            backtest_service = get_backtesting_service()
-
             # Backtest rápido con datos recientes
             end_date = datetime.now()
             start_date = end_date - timedelta(days=7)  # Última semana
@@ -169,8 +193,9 @@ async def execute_intelligent_strategy(
             backtest_passed = True
             backtest_metrics = {}
 
-        # Step 5: Enqueue execution task (mock)
+        # Step 5: Enqueue execution task (mock) — live solo si gate armado
         if backtest_passed and not request.paper_mode:
+            _reject_ungated_live_execution()
             # TODO: Implementar enqueue real con Celery
             background_tasks.add_task(
                 execute_strategy_task,
@@ -198,6 +223,8 @@ async def execute_intelligent_strategy(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error executing intelligent strategy: {str(e)}"
@@ -207,7 +234,7 @@ async def execute_intelligent_strategy(
 @router.get("/last_decision")
 async def get_last_decision(
     symbol: str,
-    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    ml_engine=Depends(get_ml_engine),
     strategy_selector: StrategySelector = Depends(get_strategy_selector),
 ) -> Dict[str, Any]:
     """
@@ -266,6 +293,8 @@ async def get_last_decision(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error getting last decision: {str(e)}"
@@ -332,6 +361,8 @@ async def run_backtest(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error running backtest: {str(e)}")
 
@@ -377,6 +408,8 @@ async def get_backtest_results(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error getting backtest results: {str(e)}"
@@ -385,7 +418,7 @@ async def get_backtest_results(
 
 @router.get("/ml/status")
 async def get_ml_status(
-    symbol: Optional[str] = None, ml_engine: HybridMLEngine = Depends(get_ml_engine)
+    symbol: Optional[str] = None, ml_engine=Depends(get_ml_engine)
 ) -> Dict[str, Any]:
     """
     Obtiene el estado de los modelos de ML.
@@ -411,6 +444,8 @@ async def get_ml_status(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error getting ML status: {str(e)}"
@@ -423,7 +458,7 @@ async def train_ml_model(
     start_date: datetime,
     end_date: datetime,
     background_tasks: BackgroundTasks,
-    ml_engine: HybridMLEngine = Depends(get_ml_engine),
+    ml_engine=Depends(get_ml_engine),
     model_type: str = "LSTM",
 ) -> Dict[str, Any]:
     """
@@ -486,6 +521,8 @@ async def train_ml_model(
             "timestamp": datetime.now().isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error training ML model: {str(e)}"
@@ -501,9 +538,7 @@ async def execute_strategy_task(
     print(f"Executing strategy {strategy_spec.strategy_name.value} for {symbol}")
 
 
-async def train_model_task(
-    ml_engine: HybridMLEngine, df: pd.DataFrame, symbol: str, model_type: str
-):
+async def train_model_task(ml_engine, df: pd.DataFrame, symbol: str, model_type: str):
     """Background task para entrenar modelo."""
     try:
         from app.services.hybrid_ml_engine import DeepModelConfig
