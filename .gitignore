@@ -47,6 +47,7 @@ logs/**
 # Tests y resultados temporales
 htmlcov/
 .coverage
+coverage.xml
 .cache/
 
 # Jupyter
