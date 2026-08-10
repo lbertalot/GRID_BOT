@@ -353,7 +353,11 @@ class PaperTradingSystem:
             )
         # E7 IC-WIRE: observar IC-1/IC-2 en cada marca (enforce paper).
         try:
-            from app.core.inventory_controls import evaluate_and_enforce_from_paper
+            from app.core.inventory_controls import (
+                evaluate_and_enforce_from_paper,
+                get_inventory_control_guard,
+                maybe_flatten_open_inventory_paper,
+            )
 
             mid = next(iter(marks.values())) if marks else None
             peak = self.series.peak_equity_usdt()
@@ -363,6 +367,27 @@ class PaperTradingSystem:
                 peak_equity=peak if peak is not None else breakdown["equity"],
                 enforce=True,
             )
+            # IC-B: flatten auto si IC-2 dejó flatten_pending.
+            guard = get_inventory_control_guard()
+            if guard.state.flatten_pending:
+
+                def _sell(*, symbol: str, quantity, price):
+                    return self._ledger.record_sell(
+                        symbol,
+                        quantity,
+                        price,
+                        order_type="MARKET",
+                    )
+
+                positions = {
+                    sym: self._ledger.position(sym) for sym in self._ledger.symbols()
+                }
+                maybe_flatten_open_inventory_paper(
+                    positions=positions,
+                    marks=marks,
+                    sell=_sell,
+                    guard=guard,
+                )
         except Exception as ic_exc:  # noqa: BLE001 — marca no debe fallar por IC
             logger.warning("[PaperTrading] IC-WIRE observe skip: %s", ic_exc)
         return breakdown["equity"]
