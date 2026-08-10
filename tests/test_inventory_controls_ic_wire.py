@@ -183,7 +183,72 @@ def test_rearm_requires_reason():
     assert guard.allows_core_buy() is True
 
 
-def test_load_ic_controls_from_l0_freeze_file():
+def test_guard_ic1_cancels_pending_buys_on_trip():
+    from app.core.paper_pending_orders import (
+        get_paper_pending_order_book,
+        reset_paper_pending_order_book,
+    )
+
+    book = reset_paper_pending_order_book()
+    book.add_buy(symbol="ETHUSDT", price=D("1800"), quantity=D("0.05"))
+    book.add_buy(symbol="ETHUSDT", price=D("1790"), quantity=D("0.05"))
+    assert len(book.list_open(side="BUY")) == 2
+
+    guard = reset_inventory_control_guard(
+        IcControlsConfig(range_floor=FLOOR, deployed_capital=DEPLOYED)
+    )
+    decision = guard.observe(mid=D("1800"), equity_mtm=D("1000"), enforce=True)
+    assert decision.ic1_active is True
+    assert len(book.list_open(side="BUY")) == 0
+    assert any(e.get("cancel_buys") for e in guard.state.last_events)
+
+
+def test_guard_ic2_keeps_flatten_pending_until_maybe_flatten():
+    from app.core.inventory_controls import maybe_flatten_open_inventory_paper
+
+    sold: list[dict] = []
+
+    def _sell(*, symbol: str, quantity: Decimal, price: Decimal):
+        sold.append({"symbol": symbol, "quantity": quantity, "price": price})
+        return sold[-1]
+
+    guard = InventoryControlGuard(
+        IcControlsConfig(range_floor=FLOOR, deployed_capital=DEPLOYED),
+        activate_breaker=lambda *_: None,
+    )
+    guard.observe(mid=D("1923"), equity_mtm=D("1000"), enforce=False)
+    decision = guard.observe(mid=D("1923"), equity_mtm=D("980"), enforce=True)
+    assert decision.ic2_should_flatten is True
+    assert guard.state.flatten_pending is True
+    assert guard.state.armed is False
+
+    fills = maybe_flatten_open_inventory_paper(
+        positions={"ETHUSDT": D("0.2")},
+        marks={"ETHUSDT": D("1923")},
+        sell=_sell,
+        guard=guard,
+    )
+    assert len(fills) == 1
+    assert sold[0]["quantity"] == D("0.2")
+    assert guard.state.flatten_pending is False
+    assert guard.allows_core_buy() is False
+
+
+def test_maybe_flatten_noop_without_pending():
+    from app.core.inventory_controls import maybe_flatten_open_inventory_paper
+
+    guard = reset_inventory_control_guard(
+        IcControlsConfig(range_floor=FLOOR, deployed_capital=DEPLOYED)
+    )
+    assert (
+        maybe_flatten_open_inventory_paper(
+            positions={"ETHUSDT": D("1")},
+            marks={"ETHUSDT": D("1900")},
+            sell=lambda **kw: kw,
+            guard=guard,
+        )
+        == []
+    )
     path = Path(__file__).resolve().parents[1] / "grid_config_paper_l0.json"
     if not path.is_file():
         pytest.skip("grid_config_paper_l0.json ausente")

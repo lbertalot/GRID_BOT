@@ -240,7 +240,7 @@ class FlattenPort(Protocol):
 
 
 class InventoryControlGuard:
-    """Observa marcas, emite eventos y enforce paper-safe (stub E7)."""
+    """Observa marcas, emite eventos y enforce paper-safe (E7 + IC-A/B)."""
 
     def __init__(
         self,
@@ -248,11 +248,13 @@ class InventoryControlGuard:
         *,
         activate_breaker: Optional[Callable[[str, str], Any]] = None,
         flatten_sell: Optional[FlattenPort] = None,
+        cancel_buys: Optional[Callable[..., Any]] = None,
     ) -> None:
         self.config = config or load_ic_controls_from_grid_config()
         self.state = InventoryControlState()
         self._activate_breaker = activate_breaker
         self._flatten_sell = flatten_sell
+        self._cancel_buys = cancel_buys
 
     def allows_core_buy(self) -> bool:
         """Gate pre-orden BUY del Core: IC-1 activo, IC-2 o desarmado → no."""
@@ -299,6 +301,8 @@ class InventoryControlGuard:
                         m.ic1_trips_total.inc()
                 except Exception:  # noqa: BLE001
                     pass
+                if enforce:
+                    self._enforce_ic1_cancel_buys()
             elif not ic1 and self.state.ic1_active:
                 events.append(
                     _event(EVENT_IC1, active=False, mid=str(mid_d), recovered=True)
@@ -374,25 +378,70 @@ class InventoryControlGuard:
             dd_pct_deployed=dd_pct,
         )
 
+    def _enforce_ic1_cancel_buys(self) -> None:
+        """IC-A: cancel-all BUY pendientes paper-sim al trip IC-1."""
+        try:
+            if self._cancel_buys is not None:
+                canceled = self._cancel_buys(
+                    symbol=self.config.symbol,
+                    reason=EVENT_IC1,
+                )
+            else:
+                from app.core.paper_pending_orders import cancel_pending_buys_paper
+
+                canceled = cancel_pending_buys_paper(
+                    symbol=self.config.symbol,
+                    reason=EVENT_IC1,
+                )
+            n = len(canceled) if canceled is not None else 0
+            self.state.last_events.append(
+                _event(EVENT_IC1, cancel_buys=True, canceled_n=n)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[IC-1] cancel-all BUY paper falló: %s", exc)
+
     def _enforce_ic2(self) -> None:
-        """Cancel-all conceptual + flatten paper + breaker; desarma book Core."""
+        """Breaker + desarme; flatten_pending queda True hasta flatten_core_paper."""
         if self._activate_breaker is not None:
             try:
                 self._activate_breaker("system_integrity", BREAKER_REASON_IC2)
             except Exception as exc:  # noqa: BLE001
                 logger.error("[IC-2] no se pudo activar breaker: %s", exc)
+        else:
+            # Best-effort sync compartido (IC-C residual paper-safe).
+            try:
+                import asyncio
+                import inspect
 
-        if self._flatten_sell is not None and self.state.last_mid is not None:
-            # El caller debe inyectar un flatten que use el ledger; stub no inventa qty.
-            logger.warning(
-                "[IC-2] flatten callback listo (pending=%s) — caller liquida inventario",
-                self.state.flatten_pending,
-            )
+                from app.core.circuit_breakers import get_shared_breakers
+
+                ck = get_shared_breakers()
+                activate = getattr(ck, "activate_breaker", None)
+                if activate is None:
+                    pass
+                elif inspect.iscoroutinefunction(activate):
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = None
+                    if loop is None:
+                        asyncio.run(activate("system_integrity", BREAKER_REASON_IC2))
+                    else:
+                        logger.debug(
+                            "[IC-2] breaker async diferido (loop activo) — "
+                            "caller debe sync"
+                        )
+                else:
+                    activate("system_integrity", BREAKER_REASON_IC2)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[IC-2] breaker sync skip: %s", exc)
 
         self.state.armed = False
-        self.state.flatten_pending = False
+        # flatten_pending permanece True → mark_to_market / ciclo liquida inventario
         logger.error(
-            "[IC-2] book Core desarmado — no re-armar sin diagnóstico (≥30 min runbook)"
+            "[IC-2] book Core desarmado (flatten_pending=%s) — "
+            "no re-armar sin diagnóstico (≥30 min runbook)",
+            self.state.flatten_pending,
         )
 
     def flatten_core_paper(
@@ -474,3 +523,25 @@ def evaluate_and_enforce_from_paper(
         range_floor=range_floor,
         enforce=enforce,
     )
+
+
+def maybe_flatten_open_inventory_paper(
+    *,
+    positions: Mapping[str, Decimal],
+    marks: Mapping[str, Any],
+    sell: FlattenPort,
+    guard: Optional[InventoryControlGuard] = None,
+) -> List[Any]:
+    """IC-B: si flatten_pending, liquida inventario paper vía ``sell`` (ledger)."""
+    g = guard or get_inventory_control_guard()
+    if not g.state.flatten_pending:
+        return []
+    open_pos = {
+        str(sym).upper(): qty
+        for sym, qty in positions.items()
+        if _to_decimal(qty, f"qty[{sym}]") > ZERO
+    }
+    if not open_pos:
+        g.state.flatten_pending = False
+        return []
+    return g.flatten_core_paper(positions=open_pos, marks=marks, sell=sell)

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|--------|
-| Estado | **Aceptado (stub enforce)** |
+| Estado | **Aceptado (enforce IC-A/B 2026-08-10)** |
 | Fecha | 2026-08-06 |
 | Slice | S-WAVE-E-OBS / E7 |
 | Owner | `trader-market-maker` |
@@ -39,10 +39,10 @@ Desk-policy L0 §2.5 exige IC-1 (freno rebuy bajo piso −5%) e IC-2 (flatten Co
 
 ## Issue list (owner · fecha)
 
-| ID | Trabajo | Owner | Fecha |
-|----|---------|-------|-------|
-| IC-A | Cancel BUY pendientes / no re-post bajo piso cuando IC-1 | backend-tdd | 2026-08-11 |
-| IC-B | Flatten auto: ciclo Celery llama `flatten_core_paper` + ledger | MM + backend | 2026-08-12 |
-| IC-C | Activar `system_integrity` sync/async compartido en trip IC-2 | backend-tdd | 2026-08-12 |
-| IC-D | Grafana panel IC gauges + alerta paper-aware | devops (E3) | 2026-08-10 |
-| IC-E | Simulacro A5 evidencia tear | MM + devops | 2026-08-20 |
+| ID | Trabajo | Owner | Fecha | Estado |
+|----|---------|-------|-------|--------|
+| IC-A | Cancel BUY pendientes / no re-post bajo piso cuando IC-1 | backend-tdd | 2026-08-11 | **done** 2026-08-10 (`paper_pending_orders`) |
+| IC-B | Flatten auto: ciclo llama `flatten_core_paper` + ledger | MM + backend | 2026-08-12 | **done** 2026-08-10 (`mark_to_market`) |
+| IC-C | Activar `system_integrity` sync/async compartido en trip IC-2 | backend-tdd | 2026-08-12 | **partial** best-effort |
+| IC-D | Grafana panel IC gauges + alerta paper-aware | devops (E3) | 2026-08-10 | abierto |
+| IC-E | Simulacro A5 evidencia tear | MM + devops | 2026-08-20 | abierto |
