@@ -65,6 +65,12 @@ def plan_actions_for_areas(
             elif rem.get("action") == "hold":
                 action = "HOLD validate — actualizar IP allowlist Binance (humano)"
                 auto = False
+            elif rem.get("action") == "hold_trading_reason":
+                action = (
+                    "HOLD trading/PnL — no auto-clear; RCA consecutive losses/IC "
+                    f"({rem.get('breaker_reason') or rem.get('reason') or 'n/a'})"
+                )
+                auto = False
             else:
                 action = "Invocar maybe_remediate_stale_system_integrity / GET breakers"
                 auto = True
