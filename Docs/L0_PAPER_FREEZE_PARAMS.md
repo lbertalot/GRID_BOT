@@ -121,9 +121,9 @@ Metadata: `ic_controls.IC2_flatten_core_at_deployed_dd_pct = "10.00"`.
 | **IC-2** evento + DD ≥ 10% desplegado | **Cableado** (peak serie / observe) | — |
 | **IC-2** flatten inventario paper | **Cableado** (`mark_to_market` → `maybe_flatten_open_inventory_paper`) | Simulacro A5 evidencia ≤ 2026-08-20 |
 | **IC-2** breaker `system_integrity` | Best-effort sync/async en enforce | Validar shared Redis en ops |
-| Simulacro desk A5 (forzar mid/MtM) | Abierto | MM+devops **≤ 2026-08-20** (no bloquea E7 gate 08-13) |
+| Simulacro desk A5 (forzar mid/MtM) | **PASS** 2026-08-10 (`IC_A5_SIMULACRO_2026-08-10.md`) | Re-run script en CI opcional |
 
-**Veredicto 2026-08-10:** `IC_WIRE_ENFORCE` — cancel BUY + flatten E2E paper cableados; simulacro A5 = residual. **No** reinicia ventana (hash freeze intacto).
+**Veredicto 2026-08-10:** `IC_WIRE_ENFORCE` + A5 **PASS** (aislado) + KPI SELL ON_TRACK en ledger. **No** reinicia ventana (hash freeze intacto). **PROMOTE_LIVE: NO**.
 
 ### 2.4 Simulacro (desk A5, deadline ~2026-08-20)
 
