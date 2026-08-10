@@ -95,18 +95,17 @@ de cobertura.
     --cov-fail-under=${COVERAGE_FAIL_UNDER}
   ```
 - **Gate escalonado**: la variable `COVERAGE_FAIL_UNDER` (env del workflow)
-  arranca en `29` (baseline real medido = 29.05 %). Plan:
+  arranca históricamente en baseline ~25–29 %. **Actual (COV-4.3, 2026-08-10): `70`**.
 
   | Fecha (objetivo)  | Gate | Justificación                              |
   |-------------------|------|--------------------------------------------|
-  | 2026-04-26 (hoy)  | 29 % | Baseline real medido (29.05 %)             |
-  | 2026-05 (sprint)  | 35 % | Sumar P2 (middleware + scheduler)          |
-  | 2026-06           | 45 % | Sumar P3 (api routes + strategies)         |
-  | 2026-07           | 60 % | Cobertura cruzada de servicios             |
-  | 2026-08           | 75 % | Drift de tests pre-existentes resuelto     |
-  | 2026-09           | 85 % | Objetivo final (TESTING_RULES.md §3)       |
+  | 2026-04-26        | 25–29 % | Baseline real medido                     |
+  | 2026-08-10 (COV-4.3) | **70 %** | CI/Codecov main ~78 %; catch-up seguro |
+  | Next (COV-4.3b / post ≥80) | 80 % | Solo con TOTAL CI ≥80 estable          |
+  | Next (meta S-COV-85) | **85 %** | Objetivo sprint + Codecov target (COV-4.4) |
 
-  > Subir el gate **antes** de mergear PRs que añadan cobertura, no después.
+  > Subir el gate **después** de verde en main con margen; no saltar a un
+  > umbral por encima del TOTAL medido (p. ej. 80 con 78 % → no-go).
 
 - **Step adicional** "QAA suite — línea de defensa": corre
   `pytest tests/test_qaa_*.py -q --no-cov`. Es bloqueante e independiente del gate.
