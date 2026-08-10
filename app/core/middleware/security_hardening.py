@@ -61,6 +61,7 @@ _RATE_LIMIT_EXEMPT_PATHS = frozenset(
     {
         "/healthz",
         "/health",
+        "/ping",  # keep-alive / Docker probe (main._keep_alive_loop)
         "/metrics",
         "/favicon.ico",
     }
