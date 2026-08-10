@@ -906,6 +906,41 @@ class OptimizedGridManager:
             logger.error(f"❌ Error asentando fill paper en el ledger: {exc}")
             return False
 
+    @staticmethod
+    def _build_paper_simulated_order(
+        *,
+        symbol: str,
+        action: str,
+        quantity: float,
+        commission: float,
+        commission_percentage: float,
+        notional_value: float,
+    ) -> Dict[str, Any]:
+        """Payload FILLED paper-sim (seam testeable; sin red)."""
+        now_ms = int(datetime.now().timestamp() * 1000)
+        return {
+            "orderId": f"paper_{int(datetime.now().timestamp())}",
+            "symbol": symbol,
+            "side": action,
+            "type": "MARKET",
+            "quantity": str(quantity),
+            "status": "FILLED",
+            "price": "0",
+            "executedQty": str(quantity),
+            "cummulativeQuoteQty": "0",
+            "timeInForce": "GTC",
+            "time": now_ms,
+            "updateTime": now_ms,
+            "isWorking": False,
+            "origQuoteOrderQty": "0",
+            "commission_info": {
+                "commission_usdt": commission,
+                "commission_percentage": commission_percentage,
+                "notional_value": notional_value,
+                "order_type": "MARKET",
+            },
+        }
+
     async def _place_order(
         self, symbol: str, action: str, quantity: float
     ) -> Optional[Dict]:
@@ -941,31 +976,14 @@ class OptimizedGridManager:
                 logger.info(
                     f"📄 Simulando orden en modo Paper Trading: {action} {quantity} {symbol}"
                 )
-
-                # Crear orden simulada con información de comisión
-                simulated_order = {
-                    "orderId": f"paper_{int(datetime.now().timestamp())}",
-                    "symbol": symbol,
-                    "side": action,
-                    "type": "MARKET",
-                    "quantity": str(quantity),
-                    "status": "FILLED",
-                    "price": "0",  # Precio de mercado
-                    "executedQty": str(quantity),
-                    "cummulativeQuoteQty": "0",
-                    "timeInForce": "GTC",
-                    "time": int(datetime.now().timestamp() * 1000),
-                    "updateTime": int(datetime.now().timestamp() * 1000),
-                    "isWorking": False,
-                    "origQuoteOrderQty": "0",
-                    "commission_info": {
-                        "commission_usdt": commission,
-                        "commission_percentage": commission_percentage,
-                        "notional_value": notional_value,
-                        "order_type": "MARKET",
-                    },
-                }
-
+                simulated_order = self._build_paper_simulated_order(
+                    symbol=symbol,
+                    action=action,
+                    quantity=quantity,
+                    commission=commission,
+                    commission_percentage=commission_percentage,
+                    notional_value=notional_value,
+                )
                 logger.info(
                     f"✅ Orden simulada creada: {simulated_order['orderId']} - Comisión: ${commission:.6f} USDT"
                 )
