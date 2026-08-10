@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.desk_hourly_status import (
+    STATUS_AT,
     STATUS_OFF,
     STATUS_ON,
     collect_desk_digest,
@@ -14,6 +15,7 @@ from app.core.desk_hourly_status import (
     window_day_number,
     write_day2_action_plan,
 )
+from app.core.desk_area_actions import plan_actions_for_areas
 
 HASH = "630abf63e4ff9e3a8499d68afe8c9ff09b2752709df667b3dc0ceea840744f6f"
 
@@ -206,3 +208,94 @@ def test_telegram_payload_truncates_under_limit():
         expected_hash=HASH,
     )
     assert len(d.full_telegram_payload()) <= 4096
+
+
+def test_equity_dd_at_risk_triggers_mm_quant_and_actions():
+    """CEO 2026-08-10: ΔE₀ ≤ −1.5% → AT_RISK QUANT+MM + DESK AUTO ACCIONES."""
+    now = datetime(2026, 8, 10, 18, 5, tzinfo=timezone.utc)
+    samples = [
+        _sample(
+            at="2026-08-10T00:00:00+00:00",
+            equity="1000",
+            daily_close="2026-08-10T00:00:00+00:00",
+        ),
+        _sample(at="2026-08-10T18:00:00+00:00", equity="984"),  # −1.6%
+    ]
+    d = collect_desk_digest(
+        when=now,
+        series_samples=samples,
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": False,
+        },
+        any_open_breakers=False,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert d.global_status == STATUS_AT
+    assert by["MM"].status == STATUS_AT
+    assert by["QUANT"].status == STATUS_AT
+    assert "ΔE0" in by["MM"].deviation or "E0" in by["MM"].deviation
+    assert "EN RIESGO (AT_RISK)" in d.ceo_digest_text()
+    actions = plan_actions_for_areas(d.areas)
+    codes = {a.code for a in actions}
+    assert "MM" in codes and "QUANT" in codes
+    assert any("PnL" in a.action or "tear" in a.action.lower() for a in actions)
+
+
+def test_equity_dd_off_track_at_minus_3_pct():
+    """CEO 2026-08-10: ΔE₀ ≤ −3% → OFF_TRACK QUANT+MM."""
+    now = datetime(2026, 8, 10, 18, 5, tzinfo=timezone.utc)
+    samples = [
+        _sample(
+            at="2026-08-10T00:00:00+00:00",
+            equity="1000",
+            daily_close="2026-08-10T00:00:00+00:00",
+        ),
+        _sample(at="2026-08-10T18:00:00+00:00", equity="970"),  # −3.0%
+    ]
+    d = collect_desk_digest(
+        when=now,
+        series_samples=samples,
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": False,
+        },
+        any_open_breakers=False,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert d.global_status == STATUS_OFF
+    assert by["MM"].status == STATUS_OFF
+    assert by["QUANT"].status == STATUS_OFF
+    assert "FUERA DE CURSO (OFF_TRACK)" in d.ceo_digest_text()
+
+
+def test_equity_dd_below_threshold_stays_on_track():
+    now = datetime(2026, 8, 10, 12, 5, tzinfo=timezone.utc)
+    samples = [
+        _sample(
+            at="2026-08-10T00:00:00+00:00",
+            equity="1000",
+            daily_close="2026-08-10T00:00:00+00:00",
+        ),
+        _sample(at="2026-08-10T12:00:00+00:00", equity="990"),  # −1.0%
+    ]
+    d = collect_desk_digest(
+        when=now,
+        series_samples=samples,
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": False,
+        },
+        any_open_breakers=False,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert d.global_status == STATUS_ON
+    assert by["MM"].status == STATUS_ON
+    assert by["QUANT"].status == STATUS_ON
+    assert plan_actions_for_areas(d.areas) == []
