@@ -109,8 +109,9 @@ de cobertura.
 
 - **Step adicional** "QAA suite — línea de defensa": corre
   `pytest tests/test_qaa_*.py -q --no-cov`. Es bloqueante e independiente del gate.
-- **Codecov**: subida no bloqueante (`fail_ci_if_error: false`). El badge en
-  `README.md` consume `CODECOV_TOKEN` (secret del repo).
+- **Codecov** (COV-4.4): `informational: false`, project `target: 85%` con
+  `threshold: 7%` (margen ~78% actual). Patch `target: 50%`. Ver `codecov.yml`.
+  Reducir threshold cuando main sostenga ≥85%.
 
 ### 2.4 `migrations`
 
