@@ -112,6 +112,8 @@ de cobertura.
 - **Codecov** (COV-4.4): `informational: false`, project `target: 85%` con
   `threshold: 7%` (margen ~78% actual). Patch `target: 50%`. Ver `codecov.yml`.
   Reducir threshold cuando main sostenga ≥85%.
+- **Matriz / baseline docs** (COV-4.5): [`test-matrix.md`](test-matrix.md) ·
+  `TESTING_RULES.md` §7.
 
 ### 2.4 `migrations`
 

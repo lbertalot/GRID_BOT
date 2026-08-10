@@ -1,7 +1,8 @@
 # TESTING_RULES.md — Reglas de Testing de GridBot v2.5
 
-> Última sincronización con código: 2026-02-17
-> Suite de tests: `tests/` (63 archivos verificados)
+> Última sincronización con código: **2026-08-10** (S-COV-85 Wave 4)  
+> Suite: `tests/` + `tests/unit/test_cov_*` · matriz: [`Docs/test-matrix.md`](Docs/test-matrix.md)  
+> Baseline cobertura = **Codecov/CI main ~78.33%** · gate pytest **70** · meta **85%** · **PROMOTE_LIVE: NO**
 
 ---
 
@@ -198,56 +199,53 @@ Estos tests DEBEN pasar siempre. Son la línea de defensa contra regresiones cr�
 
 ---
 
-## 7. Deuda de Testing — Estado real (actualizado 2026-04-26)
+## 7. Deuda de Testing — Estado real (actualizado 2026-08-10)
 
-### 7.1 Resuelto en esta iteración (FASE 3 P1)
+### 7.1 Resuelto — FASE 3 P1 + S-COV-85 (extracto)
 
-| Módulo | Estado anterior | Estado actual | Test file |
+| Módulo | Antes | Después (aprox.) | Suite |
 |---|---|---|---|
-| `app/services/trade_executor.py` | Sin tests (skipped por drift) | **87 %** ≥ 80 % objetivo | `tests/test_trade_executor_p1.py` (17 tests) |
-| `app/services/reconciliation_service.py` | 21 % (path `has_internal_accounting=False` sin cubrir) | **85 %** ≥ 80 % objetivo | `tests/test_reconciliation_service_p1.py` (13 tests) |
-| `app/core/auth.py` | 32 % | **95 %** ≥ 95 % objetivo | `tests/test_auth_p1.py` |
-| `app/services/order_validation.py` | 68 % | **92 %** ≥ 90 % objetivo | `tests/test_order_validation_p1.py` |
-| `app/core/circuit_breakers.py` | 79 % | **100 %** ≥ 90 % objetivo | `tests/test_circuit_breakers_p1.py` (22 tests) |
-| `app/core/risk_manager.py` | 76 % | **96 %** ≥ 85 % objetivo | (cobertura indirecta vía suite QAA) |
+| `trade_executor` / validation / commission | parcial | ≥90% unit | `test_*_p1` + `test_cov_3_4_*` |
+| `circuit_breakers` / store / routes | parcial | ~100% unit | `test_cov_1_2_*` |
+| `desk_auto_remediation` / desk_status_tasks | bajo | ~100% | `test_cov_1_3_*` |
+| `paper_equity_ledger` / grid paper | parcial | ≥90% | `test_cov_1_4_*`, `test_cov_1_6_*` |
+| `scheduler/grid_job` + config | bajo | ~100% / ≥97% | `test_cov_3_5_*` |
+| `metrics_service` + read paths | parcial | ~99% | `test_cov_3_7_*` |
+| `fund_manager` / `auto_rebalancer_v2` | bajo | ~97% / ~83% | `test_cov_4_1_*` |
+| `main` lifespan + security middleware | parcial | ~64% / ~97% | `test_cov_4_2_*` |
 
-> Verificación: `pytest tests/test_qaa_*.py -q` → **170 passed, 0 failed, 25 skipped**.
+> Matriz completa y gates: [`Docs/test-matrix.md`](Docs/test-matrix.md).  
+> Verificación orientativa CI: `Required test coverage of 70% reached. Total coverage: 78.33%` (main 2026-08-10).
 
 ### 7.2 Deuda diferida — planificada
 
 | Módulo | Estado | Prioridad | Plan |
 |---|---|---|---|
-| `app/core/middleware/prometheus_http.py` | Sin test directo | Media (P2) | Sprint siguiente — añadir test de instrumentación HTTP |
-| `app/core/middleware/security_hardening.py` | Sin test directo | Media (P2) | Sprint siguiente |
-| `app/scheduler/grid_job.py` | Sin test directo | Media (P2) | Sprint siguiente |
-| `app/scheduler/reconciliation_job.py` | Sin test directo | Media (P2) | Sprint siguiente |
-| `app/api/{alert,breakers,risk,portfolio}_routes.py` | Cobertura general baja | Baja (P3) | Backlog — TDD por endpoint |
-| `app/services/strategy_factory.py` + `strategies/{base,rsi_macd}.py` | Sin tests específicos | Baja (P3) | Backlog |
-| `strategy_selector.get_strategy_history()` | `TODO: NOT IMPLEMENTED` | Baja | Implementación pendiente, no test |
-| `strategy_selector.get_strategy_performance()` | `TODO: NOT IMPLEMENTED` | Baja | Implementación pendiente, no test |
-| `HybridMLEngine` integración E2E | Sin test E2E | Media | Backlog |
-| `auto_rebalancer_v2` | Test parcial | Media | Ampliar `tests/test_auto_rebalancer_v2.py` |
+| `HybridMLEngine` / backtest stubs | Sin TF en CI | Media | **COV-3.8 defer** |
+| Drift `_BROKEN_PREEXISTING_TEST_FILES` | skip en CI | Media | PR dedicado (no chase pp) |
+| E2E `_E2E_TEST_FILES` | skip en CI | Baja | Solo con API local |
+| Escalera pytest 70→80→85 | Gate 70 | P0 S-COV | Subir con margen TOTAL |
+| Codecov threshold 7% | Meta 85% | P0 | Bajar threshold al ≥85% estable |
+| `strategy_selector` history/perf TODOs | No impl. | Baja | Implementación + test |
 
 ### 7.3 Drift de tests pre-existentes
 
-`tests/conftest.py` mantiene la lista `_BROKEN_PREEXISTING_TEST_FILES` (14 archivos) que se *skipean* por code drift no resuelto. Eliminarlos uno a uno es trabajo de los próximos sprints; cada eliminación de la lista exige rehacer las fixtures y volver a verde.
+`tests/conftest.py` mantiene `_BROKEN_PREEXISTING_TEST_FILES` (skip en `CI=true`).
+No ampliar la lista en PRs de cobertura; cada salida de la lista exige fixtures al día.
 
-### 7.4 Cobertura global
+### 7.4 Cobertura global — baseline S-COV-85
 
-| Entorno | Baseline 2026-04-26 | Medido 2026-08-10 | Gate activo |
+| Entorno | Baseline 2026-04-26 | **Baseline 2026-08-10** | Gate activo |
 |---|---|---|---|
 | Local (`python3.11`) | 29.05 % | — | — |
-| CI (GitHub Actions hosted) | 25.70 % | ~78 % (Codecov/project) | `--cov-fail-under=70` |
+| CI pytest TOTAL | 25.70 % | **~78.33%** (`21438` stmts / miss ~4645) | `--cov-fail-under=70` |
+| Codecov project | ~25 % (informational) | **~78.33%** (blocking, target 85%) | `codecov.yml` |
 
-El delta histórico ~3.3 pp entre local y CI se debía a diferencias de entorno
-(redis/postgres, skips hosted, `sys.path`). Post S-COV-85 Waves 1–4.2 el
-TOTAL CI se sitúa ~78 %.
-
-- **Gate CI actual**: `--cov-fail-under=70` (COV-4.3; ver `.github/workflows/ci.yml`).
-- **Codecov project** (COV-4.4): `target: 85%`, `informational: false`,
-  `threshold: 7%` (margen hasta ~78% medido). Patch `target: 50%`.
-- **Escalera restante CI pytest**: 70→80→85 (subir solo con TOTAL ≥ umbral + margen).
-- **Plan**: documentado en `Docs/CICD_RUNBOOK.md` y sprint `S-COV-85`.
+- **Fuente de verdad de baseline docs** = Codecov/CI main (este § + `Docs/test-matrix.md`).
+- **Gate CI**: `--cov-fail-under=70` (COV-4.3).
+- **Codecov** (COV-4.4): project `target: 85%`, `informational: false`, `threshold: 7%`; patch `50%`.
+- **Escalera restante**: pytest 70→80→85; Codecov threshold →1–2% al cruzar 85%.
+- Runbook: `Docs/CICD_RUNBOOK.md` · sprint monorepo `Docs/engineering/sprint-S-COV-85-2026-08-09.md`.
 
 ### 7.5 Deuda de seguridad (Bandit + pip-audit)
 
