@@ -42,10 +42,13 @@ Antes del digest / EOD plan, si `DESK_AUTO_REMEDIATE_BREAKERS=true` (default):
 1. Modo paper SoT
 2. `system_integrity` abierto
 3. Binance `auth_ok` + `net_ok`
+4. **Reason allowlist** solo: `binance_net_fail` / `binance_auth_fail` (y aliases)
 
 → **reset paper-safe** del breaker + Telegram `🛠️ DESK AUTO · REMEDIADO`.
 
 Si validate falla → Telegram `🛠️ DESK AUTO · HOLD` (revisar IP allowlist).  
+Si reason es trading/PnL (p.ej. *pérdidas consecutivas*, IC-2) → Telegram
+`🛠️ DESK AUTO · HOLD (no auto-clear)` — **no** reset; owner RISK+MM.  
 Kill switch: `DESK_AUTO_REMEDIATE_BREAKERS=false`.
 
 El digest se construye **después** del intento, para reflejar RISK ON_TRACK si el reset funcionó.

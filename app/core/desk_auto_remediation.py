@@ -108,14 +108,23 @@ def maybe_remediate_stale_system_integrity(
         }
 
     # Solo auto-clear razones de net/auth conocidas (stale post-allowlist).
+    # Nunca resetear breakers de trading/PnL (p.ej. pérdidas consecutivas, IC-2):
+    # validate auth/net OK no implica que el riesgo de mercado haya desaparecido.
     reason_key = si_reason.strip().lower()
-    if reason_key and reason_key not in STALE_INTEGRITY_REASONS:
-        # Si reason vacío o desconocido pero validate OK, aún reset paper-safe
-        # (patrón ops histórico: stale tras IP). Logueamos el reason.
+    if reason_key not in STALE_INTEGRITY_REASONS:
         logger.info(
-            "desk auto-remediate: system_integrity reason=%r validate OK → reset",
+            "desk auto-remediate: refuse reason=%r (solo net/auth stale)",
             si_reason,
         )
+        return {
+            "acted": False,
+            "action": "hold_trading_reason",
+            "reason": "reason_not_stale_net_auth",
+            "at": moment,
+            "validate": {"auth_ok": auth_ok, "net_ok": net_ok},
+            "breaker_reason": si_reason,
+            "active_breakers": active,
+        }
 
     try:
         import asyncio
@@ -167,6 +176,14 @@ def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
                 f"(auth={result.get('validate', {}).get('auth_ok')} "
                 f"net={result.get('validate', {}).get('net_ok')}).\n"
                 "Revisar IP allowlist Binance. PROMOTE_LIVE: NO"
+            )
+        if result.get("action") == "hold_trading_reason":
+            return (
+                "🛠️ DESK AUTO · HOLD (no auto-clear)\n"
+                f"system_integrity por razón de trading/PnL: "
+                f"{result.get('breaker_reason') or 'n/a'}.\n"
+                "Validate auth/net OK no autoriza reset. "
+                "Owner: RISK + MM (RCA). PROMOTE_LIVE: NO · paper-only"
             )
         return None
     return (
