@@ -25,6 +25,11 @@ WINDOW_ANCHOR_ENV = "DESK_WINDOW_DAY0_ANCHOR"  # YYYY-MM-DD UTC
 ENABLED_ENV = "DESK_HOURLY_STATUS_ENABLED"
 GAP_WARN_HOURS = 2.0
 E0_REFERENCE = "1000"  # acta L0; informativo
+# CEO 2026-08-10: umbral digest PnL → AT_RISK/OFF_TRACK + DESK AUTO ACCIONES
+EQUITY_DD_AT_RISK_PCT = -1.5
+EQUITY_DD_OFF_TRACK_PCT = -3.0
+EQUITY_DD_AT_RISK_ENV = "DESK_EQUITY_DD_AT_RISK_PCT"
+EQUITY_DD_OFF_TRACK_ENV = "DESK_EQUITY_DD_OFF_TRACK_PCT"
 
 
 @dataclass
@@ -229,6 +234,44 @@ def merge_global_status(statuses: Sequence[str]) -> str:
     return STATUS_AT
 
 
+def _worse_status(a: str, b: str) -> str:
+    return a if _RANK.get(a, 0) >= _RANK.get(b, 0) else b
+
+
+def _equity_dd_thresholds() -> tuple[float, float]:
+    at = EQUITY_DD_AT_RISK_PCT
+    off = EQUITY_DD_OFF_TRACK_PCT
+    try:
+        raw_at = (os.getenv(EQUITY_DD_AT_RISK_ENV) or "").strip()
+        if raw_at:
+            at = float(raw_at)
+    except Exception:
+        at = EQUITY_DD_AT_RISK_PCT
+    try:
+        raw_off = (os.getenv(EQUITY_DD_OFF_TRACK_ENV) or "").strip()
+        if raw_off:
+            off = float(raw_off)
+    except Exception:
+        off = EQUITY_DD_OFF_TRACK_PCT
+    return at, off
+
+
+def equity_dd_status_from_delta_pct(delta_pct: Optional[str]) -> Optional[str]:
+    """Mapea Δ vs E_0 (%) → AT_RISK / OFF_TRACK; None si no aplica o sobre umbral."""
+    if delta_pct is None:
+        return None
+    try:
+        value = float(str(delta_pct).rstrip("%"))
+    except Exception:
+        return None
+    at_thr, off_thr = _equity_dd_thresholds()
+    if value <= off_thr:
+        return STATUS_OFF
+    if value <= at_thr:
+        return STATUS_AT
+    return None
+
+
 def _expected_hash() -> Optional[str]:
     return (os.getenv(EXPECTED_HASH_ENV) or "").strip() or None
 
@@ -307,21 +350,13 @@ def collect_desk_digest(
 
     mm_status = STATUS_ON
     mm_dev = "ninguno"
+    mm_next = "verificar sidecar + samples"
     if not hash_ok:
         mm_status = STATUS_OFF
         mm_dev = f"hash drift last≠expected ({(last_hash or '?')[:12]}…)"
     elif not last_hash and not exp:
         mm_status = STATUS_AT
         mm_dev = "hash no disponible"
-    mm = AreaStatus(
-        code="MM",
-        status=mm_status,
-        plan="freeze L0 hash invariable",
-        done=f"hash={(cfg_hash or 'UNAVAILABLE')[:16]}…",
-        deviation=mm_dev,
-        next_60m="verificar sidecar + samples",
-        blocks="QUANT/BE" if mm_status == STATUS_OFF else "nadie",
-    )
 
     be_status = STATUS_ON
     be_dev = "ninguno"
@@ -350,6 +385,7 @@ def collect_desk_digest(
 
     quant_status = STATUS_ON
     quant_dev = "ninguno"
+    quant_next = "checklist A1–A8 parcial"
     closes = [s for s in (samples or []) if s.get("daily_close_at")]
     if not closes:
         quant_status = STATUS_AT
@@ -357,13 +393,37 @@ def collect_desk_digest(
     if be_status == STATUS_OFF:
         quant_status = STATUS_OFF
         quant_dev = "Capa A bloqueada por gap/serie"
+
+    # PnL / ΔE₀ (CEO 2026-08-10): no deja falso verde con drawdown material
+    pnl_status = equity_dd_status_from_delta_pct(delta_pct)
+    if pnl_status is not None:
+        dd_label = delta_pct or "n/a"
+        pnl_dev = f"ΔE0={dd_label} (umbral AT {EQUITY_DD_AT_RISK_PCT}% / OFF {EQUITY_DD_OFF_TRACK_PCT}%)"
+        mm_status = _worse_status(mm_status, pnl_status)
+        if "ΔE0" not in mm_dev:
+            mm_dev = pnl_dev if mm_dev == "ninguno" else f"{mm_dev}; {pnl_dev}"
+        mm_next = "RCA PnL/DD + SELL/IC; no spacing↓ ni sizing↑"
+        quant_status = _worse_status(quant_status, pnl_status)
+        if "ΔE0" not in quant_dev:
+            quant_dev = pnl_dev if quant_dev == "ninguno" else f"{quant_dev}; {pnl_dev}"
+        quant_next = "tear Capa A intraday con costos + gaps"
+
+    mm = AreaStatus(
+        code="MM",
+        status=mm_status,
+        plan="freeze L0 hash invariable + edge paper",
+        done=f"hash={(cfg_hash or 'UNAVAILABLE')[:16]}…",
+        deviation=mm_dev,
+        next_60m=mm_next,
+        blocks="QUANT/BE" if mm_status == STATUS_OFF else "nadie",
+    )
     quant = AreaStatus(
         code="QUANT",
         status=quant_status,
         plan="Capa A cobertura / cierres",
         done=f"daily_closes={len(closes)}",
         deviation=quant_dev,
-        next_60m="checklist A1–A8 parcial",
+        next_60m=quant_next,
         blocks="DL" if quant_status == STATUS_OFF else "nadie",
     )
 
