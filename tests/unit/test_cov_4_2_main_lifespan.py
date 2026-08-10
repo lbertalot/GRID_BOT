@@ -248,12 +248,27 @@ def test_prometheus_http_middleware_sets_correlation(paper_env):
 # ── main.py endpoint gaps ────────────────────────────────────────────────────
 
 
+def _clear_app_rate_limit_windows(app) -> None:
+    """El RateLimitMiddleware es in-memory y se comparte en toda la suite CI."""
+    from app.core.middleware.security_hardening import RateLimitMiddleware
+
+    node = getattr(app, "middleware_stack", None)
+    seen: set[int] = set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if isinstance(node, RateLimitMiddleware) and hasattr(node, "_windows"):
+            node._windows.clear()
+        node = getattr(node, "app", None)
+
+
 @pytest.fixture
 def main_client(paper_env, monkeypatch):
     monkeypatch.setenv("EXPORT_OPENAPI", "1")
     from app.main import app
 
+    _clear_app_rate_limit_windows(app)
     with TestClient(app) as client:
+        _clear_app_rate_limit_windows(app)
         yield client
 
 
