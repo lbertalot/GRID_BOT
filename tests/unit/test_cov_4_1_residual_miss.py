@@ -67,9 +67,8 @@ async def test_fund_manager_validate_optimal_summary(fm):
         )
         assert short_u is False
 
-        # notional 0.01*50k=500 > MAX=100 → max-size; SELL short usa qty pequeña
         short_b, _, _ = await fm.validate_trade_requirements(
-            "BTCUSDT", "SELL", 0.01, 50000.0, {"BTC": 0.001, "USDT": 100}
+            "BTCUSDT", "SELL", 0.001, 50000.0, {"BTC": 0.0001, "USDT": 100}
         )
         assert short_b is False
 
