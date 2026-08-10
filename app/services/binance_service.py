@@ -743,11 +743,28 @@ class BinanceService:
     def _get_simulated_open_orders(
         self, symbol: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Retorna órdenes abiertas simuladas"""
-        return []
+        """Órdenes abiertas paper-sim (book IC-A)."""
+        try:
+            from app.core.paper_pending_orders import get_paper_pending_order_book
+
+            book = get_paper_pending_order_book()
+            return [
+                o.as_binance_dict()
+                for o in book.list_open(symbol=symbol)
+            ]
+        except Exception:
+            return []
 
     def _simulate_cancel_order(self, symbol: str, order_id: int) -> Dict[str, Any]:
-        """Simula cancelación de orden"""
+        """Cancela orden paper-sim en el book pendiente."""
+        try:
+            from app.core.paper_pending_orders import get_paper_pending_order_book
+
+            canceled = get_paper_pending_order_book().cancel(int(order_id))
+            if canceled is not None:
+                return canceled.as_binance_dict()
+        except Exception:
+            pass
         return {
             "orderId": order_id,
             "symbol": symbol,
