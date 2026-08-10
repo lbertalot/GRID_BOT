@@ -28,7 +28,12 @@ Tras auto-remediate y al construir el digest, si hay áreas **AT_RISK** / **OFF_
 `plan_actions_for_areas` → Telegram `🛠️ DESK AUTO · ACCIONES` con owner canónico
 (MM / RISK / DEVOPS / …). No requiere paste del CEO.
 
-Código: `app/core/desk_area_actions.py`.
+**Umbral PnL (CEO 2026-08-10):** Δ equity vs E_0 (`E0_REFERENCE=1000`):
+- ≤ **−1.5%** → MM + QUANT **AT_RISK** (global ≥ AT_RISK) + ACCIONES
+- ≤ **−3.0%** → MM + QUANT **OFF_TRACK**
+Override opcional: `DESK_EQUITY_DD_AT_RISK_PCT` / `DESK_EQUITY_DD_OFF_TRACK_PCT`.
+
+Código: `app/core/desk_area_actions.py` · umbral en `desk_hourly_status.py`.
 
 ## Auto-remediación (sin paste Telegram)
 
