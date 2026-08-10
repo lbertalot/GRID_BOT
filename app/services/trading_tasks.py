@@ -975,7 +975,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
                     )
                     logger.info("🔬 [CALIBRATION MODE] - Cantidad estimada: 0.0025 ETH")
                     logger.info(
-                        f"🔬 [CALIBRATION MODE] - Valor estimado: ${available_usdt * 0.8:.2f}"
+                        f"🔬 [CALIBRATION MODE] - Valor estimado: ${available_usdt * Decimal('0.8'):.2f}"
                     )
                     logger.info("🔬 [CALIBRATION MODE] - Confianza: 0.60 (GridTrading)")
                     logger.info(
