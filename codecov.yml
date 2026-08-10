@@ -1,38 +1,34 @@
 # codecov.yml — Configuración de Codecov para GridBot v2.5
 #
-# Estrategia escalonada (alineada con TESTING_RULES.md §7.4 y CICD_RUNBOOK.md):
-#   - Baseline CI real: ~25% global (2026-04-26)
-#   - Gate local/CI pytest: --cov-fail-under=70 (COV-4.3, 2026-08-10)
-#   - Codecov: informational (no bloquea PRs) durante sprint code-hygiene
-#   - Plan: elevar thresholds +5pp por sprint hasta 85% global
+# S-COV-85 COV-4.4 (2026-08-10):
+#   - Project target: 85% (meta sprint) con threshold que absorbe el TOTAL
+#     actual ~78% (85 − 7 = 78). Reducir threshold a 1–2% al cruzar 85%.
+#   - informational: false → Codecov status deja de ser solo cosmético.
+#   - Gate pytest CI: COVERAGE_FAIL_UNDER=70 (COV-4.3); subir 80→85 aparte.
+#   - Patch: umbral sensible para código nuevo (no exige 85% en cada diff).
 #
-# Razón para mode: off / informational:
-#   El proyecto tiene ~75% de código legacy sin tests (drift documentado en
-#   TESTING_RULES.md §7). Los PRs de sincronización y los módulos nuevos se
-#   comparan contra una base de cobertura baja, generando falsos negativos
-#   que bloquean merges legítimos. Se normaliza en sprint 2026-06.
+# Histórico: baseline CI ~25% (2026-04-26); informational=true durante hygiene.
 
 coverage:
-  # Porcentaje de caída tolerable antes de marcar como failure
   precision: 2
   round: down
-  range: "20...85"
+  range: "70...90"
 
   status:
     project:
       default:
-        # Informational: reporta pero no bloquea el merge
-        informational: true
-        # Permite caídas de hasta 5pp respecto a la base
-        threshold: 5%
-        target: auto
+        # COV-4.4: bloquea si cae por debajo de target−threshold
+        informational: false
+        target: 85%
+        # Margen hasta TOTAL medido ~78% (Codecov/project post-#108/#109).
+        # Bajar a "2%" cuando main sostenga ≥85% estable 2–3 días.
+        threshold: 7%
 
     patch:
       default:
-        # Informational: el código nuevo puede tener cobertura baja
-        # mientras el sprint de tests no esté completo
-        informational: true
-        target: 15%
+        informational: false
+        # Código nuevo: cobertura útil sin exigir meta global en el diff
+        target: 50%
         threshold: 5%
 
 comment:
