@@ -69,9 +69,15 @@ def plan_actions_for_areas(
                 action = "Invocar maybe_remediate_stale_system_integrity / GET breakers"
                 auto = True
         elif code == "MM":
-            action = "MM: chequear SELL/24h + IC-1/IC-2; no bajar spacing"
+            if "ΔE0" in deviation or "E0=" in deviation:
+                action = "MM: RCA PnL/DD + SELL/IC; no bajar spacing; no sizing↑"
+            else:
+                action = "MM: chequear SELL/24h + IC-1/IC-2; no bajar spacing"
         elif code == "QUANT":
-            action = "QUANT: tear Capa A EOD + gaps serie"
+            if "ΔE0" in deviation or "E0=" in deviation:
+                action = "QUANT: tear Capa A intraday con costos + gaps serie"
+            else:
+                action = "QUANT: tear Capa A EOD + gaps serie"
         elif code == "DEVOPS":
             action = "DEVOPS: daily_close_at + gaps ≤2h + Health SRE"
         elif code == "BE":
