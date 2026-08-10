@@ -2,7 +2,7 @@
 #
 # Estrategia escalonada (alineada con TESTING_RULES.md §7.4 y CICD_RUNBOOK.md):
 #   - Baseline CI real: ~25% global (2026-04-26)
-#   - Gate local pytest: --cov-fail-under=25
+#   - Gate local/CI pytest: --cov-fail-under=70 (COV-4.3, 2026-08-10)
 #   - Codecov: informational (no bloquea PRs) durante sprint code-hygiene
 #   - Plan: elevar thresholds +5pp por sprint hasta 85% global
 #
