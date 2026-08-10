@@ -244,7 +244,9 @@ El delta histórico ~3.3 pp entre local y CI se debía a diferencias de entorno
 TOTAL CI se sitúa ~78 %.
 
 - **Gate CI actual**: `--cov-fail-under=70` (COV-4.3; ver `.github/workflows/ci.yml`).
-- **Escalera restante**: 70→80→85 (subir solo con TOTAL ≥ umbral + margen estable).
+- **Codecov project** (COV-4.4): `target: 85%`, `informational: false`,
+  `threshold: 7%` (margen hasta ~78% medido). Patch `target: 50%`.
+- **Escalera restante CI pytest**: 70→80→85 (subir solo con TOTAL ≥ umbral + margen).
 - **Plan**: documentado en `Docs/CICD_RUNBOOK.md` y sprint `S-COV-85`.
 
 ### 7.5 Deuda de seguridad (Bandit + pip-audit)
