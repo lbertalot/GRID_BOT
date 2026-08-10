@@ -234,17 +234,18 @@ Estos tests DEBEN pasar siempre. Son la línea de defensa contra regresiones cr�
 
 ### 7.4 Cobertura global
 
-| Entorno | Baseline 2026-04-26 | Gate activo |
-|---|---|---|
-| Local (`python3.11`) | 29.05 % | — |
-| CI (GitHub Actions hosted) | 25.70 % | `--cov-fail-under=25` |
+| Entorno | Baseline 2026-04-26 | Medido 2026-08-10 | Gate activo |
+|---|---|---|---|
+| Local (`python3.11`) | 29.05 % | — | — |
+| CI (GitHub Actions hosted) | 25.70 % | ~78 % (Codecov/project) | `--cov-fail-under=70` |
 
-El delta ~3.3 pp entre local y CI se debe a diferencias de entorno:
-redis/postgres siempre disponibles localmente vs skips adicionales en hosted,
-variaciones en `sys.path` y módulos importados durante la sesión de tests.
+El delta histórico ~3.3 pp entre local y CI se debía a diferencias de entorno
+(redis/postgres, skips hosted, `sys.path`). Post S-COV-85 Waves 1–4.2 el
+TOTAL CI se sitúa ~78 %.
 
-- **Gate CI actual**: `--cov-fail-under=25` (ver `.github/workflows/ci.yml`).
-- **Plan de subida**: +5 pp por sprint hasta 85 %. Documentado en `docs/CICD_RUNBOOK.md`.
+- **Gate CI actual**: `--cov-fail-under=70` (COV-4.3; ver `.github/workflows/ci.yml`).
+- **Escalera restante**: 70→80→85 (subir solo con TOTAL ≥ umbral + margen estable).
+- **Plan**: documentado en `Docs/CICD_RUNBOOK.md` y sprint `S-COV-85`.
 
 ### 7.5 Deuda de seguridad (Bandit + pip-audit)
 
