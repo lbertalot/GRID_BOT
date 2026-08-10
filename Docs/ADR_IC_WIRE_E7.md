@@ -45,4 +45,4 @@ Desk-policy L0 §2.5 exige IC-1 (freno rebuy bajo piso −5%) e IC-2 (flatten Co
 | IC-B | Flatten auto: ciclo llama `flatten_core_paper` + ledger | MM + backend | 2026-08-12 | **done** 2026-08-10 (`mark_to_market`) |
 | IC-C | Activar `system_integrity` sync/async compartido en trip IC-2 | backend-tdd | 2026-08-12 | **partial** best-effort |
 | IC-D | Grafana panel IC gauges + alerta paper-aware | devops (E3) | 2026-08-10 | abierto |
-| IC-E | Simulacro A5 evidencia tear | MM + devops | 2026-08-20 | abierto |
+| IC-E | Simulacro A5 evidencia tear | MM + devops | 2026-08-20 | **done** 2026-08-10 (`scripts/simulacro_ic_a5_paper.py` · PASS aislado) |
