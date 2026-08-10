@@ -4,12 +4,14 @@ Paper-safe. Opt-in: DESK_HOURLY_STATUS_ENABLED=true.
 
 Antes del digest: auto-remediación paper de ``system_integrity`` stale
 (DESK_AUTO_REMEDIATE_BREAKERS, default true) para no depender de paste Telegram.
+EOD: escribe tear Capa A automático (AS-1).
+Digest: acciones por área AT_RISK/OFF_TRACK (AS-2).
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from app.core.celery_app import celery_app
 
@@ -50,9 +52,49 @@ def _run_auto_remediation() -> Dict[str, Any]:
         return {"acted": False, "action": "error", "reason": str(exc)}
 
 
+def _run_area_actions(digest: Any, remediation: Dict[str, Any]) -> List[Dict[str, Any]]:
+    try:
+        from app.core.desk_area_actions import (
+            format_actions_telegram,
+            plan_actions_for_areas,
+        )
+
+        actions = plan_actions_for_areas(
+            getattr(digest, "areas", None) or [],
+            remediation=remediation,
+        )
+        note = format_actions_telegram(actions)
+        if note:
+            _telegram(note)
+        return [
+            {
+                "code": a.code,
+                "status": a.status,
+                "owner": a.owner,
+                "action": a.action,
+                "auto": a.auto,
+            }
+            for a in actions
+        ]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("desk area actions error (non-fatal): %s", exc)
+        return []
+
+
+def _run_tear_capa_a() -> Optional[str]:
+    try:
+        from app.core.desk_tear_capa_a import write_tear_capa_a
+
+        path = write_tear_capa_a()
+        return str(path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("tear Capa A EOD error (non-fatal): %s", exc)
+        return None
+
+
 @celery_app.task(name="app.services.desk_status_tasks.send_desk_hourly_digest")
 def send_desk_hourly_digest() -> Dict[str, Any]:
-    """Cada hora (:05 UTC): auto-remediate → digest CEO → Telegram."""
+    """Cada hora (:05 UTC): auto-remediate → digest → acciones área → Telegram."""
     from app.core.desk_hourly_status import build_live_digest, is_enabled
 
     if not is_enabled():
@@ -61,14 +103,16 @@ def send_desk_hourly_digest() -> Dict[str, Any]:
 
     remediation = _run_auto_remediation()
     digest = build_live_digest()
+    area_actions = _run_area_actions(digest, remediation)
     payload = digest.full_telegram_payload(include_area_blocks=False)
     sent = _telegram(payload)
     logger.info(
-        "desk hourly digest day=%s global=%s sent=%s remediated=%s",
+        "desk hourly digest day=%s global=%s sent=%s remediated=%s actions=%s",
         digest.day_n,
         digest.global_status,
         sent,
         remediation.get("acted"),
+        len(area_actions),
     )
     return {
         "ok": True,
@@ -79,12 +123,13 @@ def send_desk_hourly_digest() -> Dict[str, Any]:
         "equity_last": digest.equity_last,
         "chars": len(payload),
         "remediation": remediation,
+        "area_actions": area_actions,
     }
 
 
 @celery_app.task(name="app.services.desk_status_tasks.send_desk_eod_day_plan")
 def send_desk_eod_day_plan() -> Dict[str, Any]:
-    """Post-cierre (~00:45 UTC): remedia → action plan Día N+1 + Telegram."""
+    """Post-cierre (~00:45 UTC): remedia → tear Capa A → day plan → Telegram."""
     from app.core.desk_hourly_status import (
         build_live_digest,
         is_enabled,
@@ -96,14 +141,18 @@ def send_desk_eod_day_plan() -> Dict[str, Any]:
 
     remediation = _run_auto_remediation()
     digest = build_live_digest()
+    area_actions = _run_area_actions(digest, remediation)
+    tear_path = _run_tear_capa_a()
     path = write_day2_action_plan(digest)
     summary = (
         f"📋 EOD PLAN | Día {digest.day_n}→{min(30, digest.day_n + 1)}/30\n"
         f"Veredicto día: {digest.global_status}\n"
+        f"Tear Capa A: {tear_path or 'UNAVAILABLE'}\n"
         f"Archivo: {path}\n"
         f"E_last={digest.equity_last or 'UNAVAILABLE'} mode={digest.effective_mode}\n"
         f"Auto-remediate: acted={remediation.get('acted')} "
         f"action={remediation.get('action')}\n"
+        f"Area actions: {len(area_actions)}\n"
         f"PROMOTE_LIVE: NO · paper-only"
     )
     sent = _telegram(summary)
@@ -111,7 +160,9 @@ def send_desk_eod_day_plan() -> Dict[str, Any]:
         "ok": True,
         "sent": sent,
         "path": str(path),
+        "tear_path": tear_path,
         "day_n": digest.day_n,
         "global_status": digest.global_status,
         "remediation": remediation,
+        "area_actions": area_actions,
     }

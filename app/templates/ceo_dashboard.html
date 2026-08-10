@@ -45,6 +45,15 @@
             letter-spacing: 0.04em;
         }
 
+        .mode-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.75rem;
+            opacity: 0.9;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 4px;
+            padding: 0.15rem 0.45rem;
+            letter-spacing: 0.02em;
+        }
         .gate-badge {
             margin-left: auto;
             font-size: 0.8rem;
@@ -153,8 +162,9 @@
 </head>
 <body>
 <header>
-    <div class="mode-banner {{ mode_css }}">
+    <div class="mode-banner {{ mode_css }}" data-effective-mode="{{ effective_mode }}">
         <span class="mode-word">{{ mode_label }}</span>
+        <span class="mode-code" title="effective_mode SoT">{{ effective_mode }}</span>
         <span>{{ mode_hint }}</span>
         <span class="gate-badge {{ gate_badge_css }}">{{ gate_badge }}</span>
     </div>
