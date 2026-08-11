@@ -122,17 +122,50 @@ def test_reset_async_deactivate(paper_env, monkeypatch):
     assert r["acted"] is True and r["action"] == "reset_system_integrity"
 
 
-def test_reset_sync_and_unknown_reason(paper_env, monkeypatch):
+def test_refuse_unknown_or_pnl_reason_even_if_validate_ok(paper_env, monkeypatch):
+    """CEO/ops 2026-08-10: no borrar 'pérdidas consecutivas' por auth/net OK."""
+    _paper_sot(monkeypatch)
+    mock_ck = _ck(monkeypatch, deactivate=MagicMock())
+    from app.core.desk_auto_remediation import (
+        format_remediation_telegram,
+        maybe_remediate_stale_system_integrity,
+    )
+
+    r = maybe_remediate_stale_system_integrity(
+        breakers=_si_breakers("Demasiadas pérdidas consecutivas: 5"),
+        validate={"auth_ok": True, "net_ok": True},
+    )
+    assert r["acted"] is False
+    assert r["action"] == "hold_trading_reason"
+    assert "consecutivas" in (r.get("breaker_reason") or "").lower()
+    mock_ck.deactivate_breaker.assert_not_called()
+    msg = format_remediation_telegram(r)
+    assert msg and "no auto-clear" in msg and "PROMOTE_LIVE: NO" in msg
+
+
+def test_refuse_empty_reason(paper_env, monkeypatch):
     _paper_sot(monkeypatch)
     mock_ck = _ck(monkeypatch, deactivate=MagicMock())
     from app.core.desk_auto_remediation import maybe_remediate_stale_system_integrity
 
     r = maybe_remediate_stale_system_integrity(
-        breakers=_si_breakers("weird_stale_reason"),
+        breakers=_si_breakers(""),
+        validate={"auth_ok": True, "net_ok": True},
+    )
+    assert r["acted"] is False and r["action"] == "hold_trading_reason"
+    mock_ck.deactivate_breaker.assert_not_called()
+
+
+def test_reset_sync_binance_auth_fail(paper_env, monkeypatch):
+    _paper_sot(monkeypatch)
+    mock_ck = _ck(monkeypatch, deactivate=MagicMock())
+    from app.core.desk_auto_remediation import maybe_remediate_stale_system_integrity
+
+    r = maybe_remediate_stale_system_integrity(
+        breakers=_si_breakers("binance_auth_fail"),
         validate={"auth_ok": True, "net_ok": True},
     )
     assert r["acted"] is True
-    assert r["breaker_reason_before"] == "weird_stale_reason"
     mock_ck.deactivate_breaker.assert_called_once_with("system_integrity")
 
 
