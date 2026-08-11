@@ -15,7 +15,7 @@ from app.core.desk_hourly_status import (
     window_day_number,
     write_day2_action_plan,
 )
-from app.core.desk_area_actions import plan_actions_for_areas
+from app.core.desk_area_actions import format_actions_telegram, plan_actions_for_areas
 
 HASH = "630abf63e4ff9e3a8499d68afe8c9ff09b2752709df667b3dc0ceea840744f6f"
 
@@ -299,3 +299,43 @@ def test_equity_dd_below_threshold_stays_on_track():
     assert by["MM"].status == STATUS_ON
     assert by["QUANT"].status == STATUS_ON
     assert plan_actions_for_areas(d.areas) == []
+
+
+def test_equity_dd_pause_gate_at_minus_5_pct():
+    """Desk Día 7: ΔE₀ ≤ −5% → OFF + ACCIONES pausa (no auto emergency_stop)."""
+    from app.core.desk_hourly_status import equity_dd_pause_recommended
+
+    now = datetime(2026, 8, 11, 12, 5, tzinfo=timezone.utc)
+    samples = [
+        _sample(
+            at="2026-08-11T00:00:00+00:00",
+            equity="1000",
+            daily_close="2026-08-11T00:00:00+00:00",
+        ),
+        _sample(at="2026-08-11T12:00:00+00:00", equity="950"),  # −5.0%
+    ]
+    assert equity_dd_pause_recommended("-5.0%") is True
+    assert equity_dd_pause_recommended("-2.5%") is False
+    d = collect_desk_digest(
+        when=now,
+        series_samples=samples,
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": False,
+        },
+        any_open_breakers=False,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert d.global_status == STATUS_OFF
+    assert by["MM"].status == STATUS_OFF
+    assert by["QUANT"].status == STATUS_OFF
+    assert by["RISK"].status == STATUS_OFF
+    assert any("PAUSE" in n for n in d.notes)
+    assert "EMERGENCY_STOP" in by["MM"].next_60m
+    actions = plan_actions_for_areas(d.areas)
+    assert any("EMERGENCY_STOP" in a.action for a in actions)
+    assert "PROMOTE_LIVE: NO" in (format_actions_telegram(actions) or "")
+    # No auto-flip de flags live/emergency en el digest
+    assert d.effective_mode == "paper"
