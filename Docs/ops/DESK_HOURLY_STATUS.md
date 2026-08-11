@@ -31,8 +31,9 @@ Tras auto-remediate y al construir el digest, si hay áreas **AT_RISK** / **OFF_
 **Umbral PnL (CEO 2026-08-10):** Δ equity vs E_0 (`E0_REFERENCE=1000`):
 - ≤ **−1.5%** → MM + QUANT **AT_RISK** (global ≥ AT_RISK) + ACCIONES
 - ≤ **−3.0%** → MM + QUANT **OFF_TRACK**
-- ≤ **−5.0%** → **PAUSE** MM/QUANT/RISK OFF + ACCIONES
+- ≤ **−5.0%** → **PAUSE_GATE** MM/QUANT/RISK OFF + ACCIONES
   `desk-lead: evaluar EMERGENCY_STOP paper` (**no** auto-flip; PROMOTE_LIVE NO)
+  (token `PAUSE_GATE` solo cuando dispara; legend usa `gate_pausa=` para no FP)
 Override opcional: `DESK_EQUITY_DD_AT_RISK_PCT` / `DESK_EQUITY_DD_OFF_TRACK_PCT` /
 `DESK_EQUITY_DD_PAUSE_PCT`.
 
