@@ -238,13 +238,13 @@ No ampliar la lista en PRs de cobertura; cada salida de la lista exige fixtures 
 | Entorno | Baseline 2026-04-26 | **Baseline 2026-08-10** | Gate activo |
 |---|---|---|---|
 | Local (`python3.11`) | 29.05 % | — | — |
-| CI pytest TOTAL | 25.70 % | **~78.33%** (`21438` stmts / miss ~4645) | `--cov-fail-under=70` |
-| Codecov project | ~25 % (informational) | **~78.33%** (blocking, target 85%) | `codecov.yml` |
+| CI pytest TOTAL | 25.70 % | **~83.52%** (post-#122 / COV-5.9) | `--cov-fail-under=80` |
+| Codecov project | ~25 % (informational) | **~83.52%** (blocking, target 85%) | `codecov.yml` |
 
 - **Fuente de verdad de baseline docs** = Codecov/CI main (este § + `Docs/test-matrix.md`).
-- **Gate CI**: `--cov-fail-under=70` (COV-4.3).
+- **Gate CI**: `--cov-fail-under=80` (post-COV-5.9).
 - **Codecov** (COV-4.4): project `target: 85%`, `informational: false`, `threshold: 7%`; patch `50%`.
-- **Escalera restante**: pytest 70→80→85; Codecov threshold →1–2% al cruzar 85%.
+- **Escalera restante**: pytest 80→85; Codecov threshold →1–2% al cruzar 85%.
 - Runbook: `Docs/CICD_RUNBOOK.md` · sprint monorepo `Docs/engineering/sprint-S-COV-85-2026-08-09.md`.
 
 ### 7.5 Deuda de seguridad (Bandit + pip-audit)

@@ -1,14 +1,14 @@
 # Test matrix — GRID_BOT (S-COV-85 baseline)
 
 > **Baseline documentada = Codecov/CI main** · actualizado **2026-08-10**  
-> HEAD ref: post-#110 (`d43d3de`) · CI TOTAL **~78.33%** · `COVERAGE_FAIL_UNDER=70` · Codecov project **target 85%** (threshold 7%)  
+> HEAD ref: post-#122 (COV-5.9) · CI TOTAL **~83.52%** · `COVERAGE_FAIL_UNDER=80` · Codecov project **target 85%** (threshold 7%)  
 > Referencias: [`TESTING_RULES.md`](../TESTING_RULES.md) · [`CICD_RUNBOOK.md`](CICD_RUNBOOK.md) · monorepo `Docs/engineering/test-matrix.md` · rule `30-tdd-trading` · **PROMOTE_LIVE: NO**
 
 ## Gates activos
 
 | Gate | Valor | Dónde |
 |------|-------|-------|
-| Pytest CI | `--cov-fail-under=70` | `.github/workflows/ci.yml` |
+| Pytest CI | `--cov-fail-under=80` | `.github/workflows/ci.yml` |
 | Codecov project | target **85%**, threshold **7%**, blocking | `codecov.yml` |
 | Codecov patch | target **50%**, blocking | `codecov.yml` |
 | Live / órdenes reales | Prohibido en CI | rule `40-no-live-without-gate` |
@@ -42,8 +42,8 @@ cd GRID_BOT
 export PAPER_TRADING=true FORCE_REAL_MODE=false TRADING_ENABLED=false \
        USE_REAL_BINANCE=0 CI=true EMERGENCY_STOP=true CB_SHARED_STORE=memory
 python3.11 -m pytest tests/unit/ -q --tb=line
-# Suite CI (gate 70):
-# python3.11 -m pytest tests/ -q --cov=app --cov-fail-under=70
+# Suite CI (gate 80):
+# python3.11 -m pytest tests/ -q --cov=app --cov-fail-under=80
 ```
 
 ## Residual hacia 85%
