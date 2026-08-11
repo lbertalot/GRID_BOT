@@ -4,7 +4,7 @@
 #   - Project target: 85% (meta sprint) con threshold que absorbe el TOTAL
 #     actual ~78% (85 − 7 = 78). Reducir threshold a 1–2% al cruzar 85%.
 #   - informational: false → Codecov status deja de ser solo cosmético.
-#   - Gate pytest CI: COVERAGE_FAIL_UNDER=70 (COV-4.3); subir 80→85 aparte.
+#   - Gate pytest CI: COVERAGE_FAIL_UNDER=80 (post-COV-5.9); subir 80→85 aparte.
 #   - Patch: umbral sensible para código nuevo (no exige 85% en cada diff).
 #
 # Histórico: baseline CI ~25% (2026-04-26); informational=true durante hygiene.
