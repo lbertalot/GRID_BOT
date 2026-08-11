@@ -28,8 +28,10 @@ E0_REFERENCE = "1000"  # acta L0; informativo
 # CEO 2026-08-10: umbral digest PnL → AT_RISK/OFF_TRACK + DESK AUTO ACCIONES
 EQUITY_DD_AT_RISK_PCT = -1.5
 EQUITY_DD_OFF_TRACK_PCT = -3.0
+EQUITY_DD_PAUSE_PCT = -5.0  # desk-lead: evaluar emergency_stop paper (no auto)
 EQUITY_DD_AT_RISK_ENV = "DESK_EQUITY_DD_AT_RISK_PCT"
 EQUITY_DD_OFF_TRACK_ENV = "DESK_EQUITY_DD_OFF_TRACK_PCT"
+EQUITY_DD_PAUSE_ENV = "DESK_EQUITY_DD_PAUSE_PCT"
 
 
 @dataclass
@@ -238,9 +240,10 @@ def _worse_status(a: str, b: str) -> str:
     return a if _RANK.get(a, 0) >= _RANK.get(b, 0) else b
 
 
-def _equity_dd_thresholds() -> tuple[float, float]:
+def _equity_dd_thresholds() -> tuple[float, float, float]:
     at = EQUITY_DD_AT_RISK_PCT
     off = EQUITY_DD_OFF_TRACK_PCT
+    pause = EQUITY_DD_PAUSE_PCT
     try:
         raw_at = (os.getenv(EQUITY_DD_AT_RISK_ENV) or "").strip()
         if raw_at:
@@ -253,23 +256,44 @@ def _equity_dd_thresholds() -> tuple[float, float]:
             off = float(raw_off)
     except Exception:
         off = EQUITY_DD_OFF_TRACK_PCT
-    return at, off
+    try:
+        raw_pause = (os.getenv(EQUITY_DD_PAUSE_ENV) or "").strip()
+        if raw_pause:
+            pause = float(raw_pause)
+    except Exception:
+        pause = EQUITY_DD_PAUSE_PCT
+    return at, off, pause
+
+
+def _parse_delta_pct(delta_pct: Optional[str]) -> Optional[float]:
+    if delta_pct is None:
+        return None
+    try:
+        return float(str(delta_pct).rstrip("%"))
+    except Exception:
+        return None
 
 
 def equity_dd_status_from_delta_pct(delta_pct: Optional[str]) -> Optional[str]:
     """Mapea Δ vs E_0 (%) → AT_RISK / OFF_TRACK; None si no aplica o sobre umbral."""
-    if delta_pct is None:
+    value = _parse_delta_pct(delta_pct)
+    if value is None:
         return None
-    try:
-        value = float(str(delta_pct).rstrip("%"))
-    except Exception:
-        return None
-    at_thr, off_thr = _equity_dd_thresholds()
+    at_thr, off_thr, _pause = _equity_dd_thresholds()
     if value <= off_thr:
         return STATUS_OFF
     if value <= at_thr:
         return STATUS_AT
     return None
+
+
+def equity_dd_pause_recommended(delta_pct: Optional[str]) -> bool:
+    """True si ΔE₀ ≤ umbral pausa (−5% default): evaluar emergency_stop paper (humano)."""
+    value = _parse_delta_pct(delta_pct)
+    if value is None:
+        return False
+    _at, _off, pause_thr = _equity_dd_thresholds()
+    return value <= pause_thr
 
 
 def _expected_hash() -> Optional[str]:
@@ -395,10 +419,15 @@ def collect_desk_digest(
         quant_dev = "Capa A bloqueada por gap/serie"
 
     # PnL / ΔE₀ (CEO 2026-08-10): no deja falso verde con drawdown material
+    notes = []
     pnl_status = equity_dd_status_from_delta_pct(delta_pct)
+    pause = equity_dd_pause_recommended(delta_pct)
     if pnl_status is not None:
         dd_label = delta_pct or "n/a"
-        pnl_dev = f"ΔE0={dd_label} (umbral AT {EQUITY_DD_AT_RISK_PCT}% / OFF {EQUITY_DD_OFF_TRACK_PCT}%)"
+        pnl_dev = (
+            f"ΔE0={dd_label} (umbral AT {EQUITY_DD_AT_RISK_PCT}% / "
+            f"OFF {EQUITY_DD_OFF_TRACK_PCT}% / PAUSE {EQUITY_DD_PAUSE_PCT}%)"
+        )
         mm_status = _worse_status(mm_status, pnl_status)
         if "ΔE0" not in mm_dev:
             mm_dev = pnl_dev if mm_dev == "ninguno" else f"{mm_dev}; {pnl_dev}"
@@ -407,6 +436,24 @@ def collect_desk_digest(
         if "ΔE0" not in quant_dev:
             quant_dev = pnl_dev if quant_dev == "ninguno" else f"{quant_dev}; {pnl_dev}"
         quant_next = "tear Capa A intraday con costos + gaps"
+
+    if pause:
+        # No auto emergency_stop: solo OFF + ACCIONES desk-lead (rule 40 / paper-safe)
+        pause_dev = (
+            f"PAUSE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — evaluar emergency_stop paper "
+            "(humano; no auto; PROMOTE_LIVE NO)"
+        )
+        mm_status = STATUS_OFF
+        quant_status = STATUS_OFF
+        if "PAUSE" not in mm_dev:
+            mm_dev = pause_dev if mm_dev == "ninguno" else f"{mm_dev}; {pause_dev}"
+        if "PAUSE" not in quant_dev:
+            quant_dev = pause_dev if quant_dev == "ninguno" else f"{quant_dev}; {pause_dev}"
+        mm_next = (
+            "desk-lead: evaluar EMERGENCY_STOP paper; no spacing↓/sizing↑; RCA MM"
+        )
+        quant_next = "tear inmediato + gaps; no claim edge"
+        notes.append(pause_dev)
 
     mm = AreaStatus(
         code="MM",
@@ -439,10 +486,18 @@ def collect_desk_digest(
         risk_next = "GET /api/breakers/status"
     else:
         risk_next = "GET /api/breakers/status"
+    if pause:
+        risk_status = STATUS_OFF
+        pause_risk = (
+            f"PAUSE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — no reset CB PnL; "
+            "desk-lead evalúa emergency_stop paper"
+        )
+        risk_dev = pause_risk if risk_dev == "ninguno" else f"{risk_dev}; {pause_risk}"
+        risk_next = "desk-lead + prop: evaluar EMERGENCY_STOP paper (no auto)"
     risk = AreaStatus(
         code="RISK",
         status=risk_status,
-        plan="breakers visibles",
+        plan="breakers visibles + gate pausa PnL",
         done=f"any_open={any_open_breakers}",
         deviation=risk_dev,
         next_60m=risk_next,
@@ -485,6 +540,7 @@ def collect_desk_digest(
         hash_ok=hash_ok,
         effective_mode=mode,
         any_open_breakers=any_open_breakers,
+        notes=notes,
     )
 
 
