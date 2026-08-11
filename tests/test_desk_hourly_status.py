@@ -332,10 +332,42 @@ def test_equity_dd_pause_gate_at_minus_5_pct():
     assert by["MM"].status == STATUS_OFF
     assert by["QUANT"].status == STATUS_OFF
     assert by["RISK"].status == STATUS_OFF
-    assert any("PAUSE" in n for n in d.notes)
+    assert any("PAUSE_GATE" in n for n in d.notes)
     assert "EMERGENCY_STOP" in by["MM"].next_60m
     actions = plan_actions_for_areas(d.areas)
     assert any("EMERGENCY_STOP" in a.action for a in actions)
     assert "PROMOTE_LIVE: NO" in (format_actions_telegram(actions) or "")
     # No auto-flip de flags live/emergency en el digest
     assert d.effective_mode == "paper"
+
+
+def test_equity_dd_at_risk_does_not_false_positive_pause_actions():
+    """Legend gate_pausa= no debe disparar ACCIONES de PAUSE_GATE."""
+    now = datetime(2026, 8, 11, 1, 14, tzinfo=timezone.utc)
+    samples = [
+        _sample(
+            at="2026-08-11T00:00:00+00:00",
+            equity="1000",
+            daily_close="2026-08-11T00:00:00+00:00",
+        ),
+        _sample(at="2026-08-11T01:00:00+00:00", equity="976.16"),  # −2.384%
+    ]
+    d = collect_desk_digest(
+        when=now,
+        series_samples=samples,
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": False,
+        },
+        any_open_breakers=True,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert d.global_status == STATUS_AT
+    assert by["MM"].status == STATUS_AT
+    assert "PAUSE_GATE" not in by["MM"].deviation
+    assert "gate_pausa=" in by["MM"].deviation
+    assert d.notes == []
+    actions = plan_actions_for_areas(d.areas)
+    assert not any("EMERGENCY_STOP" in a.action for a in actions)
