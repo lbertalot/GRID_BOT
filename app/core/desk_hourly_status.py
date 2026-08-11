@@ -426,7 +426,7 @@ def collect_desk_digest(
         dd_label = delta_pct or "n/a"
         pnl_dev = (
             f"ΔE0={dd_label} (umbral AT {EQUITY_DD_AT_RISK_PCT}% / "
-            f"OFF {EQUITY_DD_OFF_TRACK_PCT}% / PAUSE {EQUITY_DD_PAUSE_PCT}%)"
+            f"OFF {EQUITY_DD_OFF_TRACK_PCT}% / gate_pausa={EQUITY_DD_PAUSE_PCT}%)"
         )
         mm_status = _worse_status(mm_status, pnl_status)
         if "ΔE0" not in mm_dev:
@@ -440,14 +440,14 @@ def collect_desk_digest(
     if pause:
         # No auto emergency_stop: solo OFF + ACCIONES desk-lead (rule 40 / paper-safe)
         pause_dev = (
-            f"PAUSE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — evaluar emergency_stop paper "
+            f"PAUSE_GATE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — evaluar emergency_stop paper "
             "(humano; no auto; PROMOTE_LIVE NO)"
         )
         mm_status = STATUS_OFF
         quant_status = STATUS_OFF
-        if "PAUSE" not in mm_dev:
+        if "PAUSE_GATE" not in mm_dev:
             mm_dev = pause_dev if mm_dev == "ninguno" else f"{mm_dev}; {pause_dev}"
-        if "PAUSE" not in quant_dev:
+        if "PAUSE_GATE" not in quant_dev:
             quant_dev = pause_dev if quant_dev == "ninguno" else f"{quant_dev}; {pause_dev}"
         mm_next = (
             "desk-lead: evaluar EMERGENCY_STOP paper; no spacing↓/sizing↑; RCA MM"
@@ -489,7 +489,7 @@ def collect_desk_digest(
     if pause:
         risk_status = STATUS_OFF
         pause_risk = (
-            f"PAUSE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — no reset CB PnL; "
+            f"PAUSE_GATE ΔE0≤{EQUITY_DD_PAUSE_PCT}% — no reset CB PnL; "
             "desk-lead evalúa emergency_stop paper"
         )
         risk_dev = pause_risk if risk_dev == "ninguno" else f"{risk_dev}; {pause_risk}"

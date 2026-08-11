@@ -59,7 +59,7 @@ def plan_actions_for_areas(
         auto = False
         action = f"Revisar {code}: {deviation or status}"
         if code == "RISK":
-            if "PAUSE" in deviation:
+            if "PAUSE_GATE" in deviation:
                 action = (
                     "RISK+DL: evaluar EMERGENCY_STOP paper; no reset CB PnL; "
                     "PROMOTE_LIVE NO"
@@ -80,7 +80,7 @@ def plan_actions_for_areas(
                 action = "Invocar maybe_remediate_stale_system_integrity / GET breakers"
                 auto = True
         elif code == "MM":
-            if "PAUSE" in deviation:
+            if "PAUSE_GATE" in deviation:
                 action = (
                     "MM+DL: evaluar EMERGENCY_STOP paper (ΔE0≤-5%); "
                     "no spacing↓/sizing↑; RCA PnL"
@@ -90,8 +90,8 @@ def plan_actions_for_areas(
             else:
                 action = "MM: chequear SELL/24h + IC-1/IC-2; no bajar spacing"
         elif code == "QUANT":
-            if "PAUSE" in deviation:
-                action = "QUANT: tear inmediato + gaps; sin claim edge (PAUSE ΔE0)"
+            if "PAUSE_GATE" in deviation:
+                action = "QUANT: tear inmediato + gaps; sin claim edge (PAUSE_GATE ΔE0)"
             elif "ΔE0" in deviation or "E0=" in deviation:
                 action = "QUANT: tear Capa A intraday con costos + gaps serie"
             else:
