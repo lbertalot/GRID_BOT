@@ -59,7 +59,12 @@ def plan_actions_for_areas(
         auto = False
         action = f"Revisar {code}: {deviation or status}"
         if code == "RISK":
-            if rem.get("acted"):
+            if "PAUSE" in deviation:
+                action = (
+                    "RISK+DL: evaluar EMERGENCY_STOP paper; no reset CB PnL; "
+                    "PROMOTE_LIVE NO"
+                )
+            elif rem.get("acted"):
                 action = "Auto-remediate ya ejecutó reset paper-safe; verificar any_open=false"
                 auto = True
             elif rem.get("action") == "hold":
@@ -75,12 +80,19 @@ def plan_actions_for_areas(
                 action = "Invocar maybe_remediate_stale_system_integrity / GET breakers"
                 auto = True
         elif code == "MM":
-            if "ΔE0" in deviation or "E0=" in deviation:
+            if "PAUSE" in deviation:
+                action = (
+                    "MM+DL: evaluar EMERGENCY_STOP paper (ΔE0≤-5%); "
+                    "no spacing↓/sizing↑; RCA PnL"
+                )
+            elif "ΔE0" in deviation or "E0=" in deviation:
                 action = "MM: RCA PnL/DD + SELL/IC; no bajar spacing; no sizing↑"
             else:
                 action = "MM: chequear SELL/24h + IC-1/IC-2; no bajar spacing"
         elif code == "QUANT":
-            if "ΔE0" in deviation or "E0=" in deviation:
+            if "PAUSE" in deviation:
+                action = "QUANT: tear inmediato + gaps; sin claim edge (PAUSE ΔE0)"
+            elif "ΔE0" in deviation or "E0=" in deviation:
                 action = "QUANT: tear Capa A intraday con costos + gaps serie"
             else:
                 action = "QUANT: tear Capa A EOD + gaps serie"
