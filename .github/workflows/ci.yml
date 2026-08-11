@@ -13,8 +13,9 @@
 #   - Baseline CI medido:    25.70% (2026-04-26). Delta ~3.3pp por diferencias
 #     de entorno hosted (sys.path, skips adicionales, sin redis/binance real).
 #   - S-COV-85 COV-4.3 (2026-08-10): COVERAGE_FAIL_UNDER=70
-#     (CI/Codecov main ~78%; no subir a 80 hasta TOTAL≥80 estable).
-#   - Escalera restante: 70→80→85. Mínimos por módulo crítico en TESTING_RULES §3.
+#   - S-COV-85 post-5.9 (2026-08-10): COVERAGE_FAIL_UNDER=80
+#     (CI/Codecov main ~83.5%; escalera restante 80→85).
+#   - Mínimos por módulo crítico en TESTING_RULES §3.
 
 name: CI / CD
 
@@ -29,7 +30,7 @@ env:
   PYTHON_VERSION: "3.11"
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/grid-bot
   # Gate de cobertura escalonado (S-COV-85). Ver Docs/CICD_RUNBOOK.md.
-  COVERAGE_FAIL_UNDER: "70"
+  COVERAGE_FAIL_UNDER: "80"
 
 # ─── JOB 1: Lint ─────────────────────────────────────────────────────────────
 jobs:
