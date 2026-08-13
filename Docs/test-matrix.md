@@ -34,6 +34,7 @@
 | E2E HTTP localhost | Suite `_E2E_TEST_FILES` en `conftest.py` | skip en `CI=true` | No en CI |
 | Drift skip | `_BROKEN_PREEXISTING_TEST_FILES` | deuda; no ampliar | No |
 | Live | Órdenes reales / FORCE_REAL_MODE | **Nunca en CI** | Nunca auto |
+| Unit S-COV-70 | Archivos CI <70% → ≥70% (branch aislada) | `tests/unit/test_cov_70_*.py` | Sí (calidad) |
 
 ## Comando paper-safe (orientativo)
 
@@ -54,4 +55,5 @@ python3.11 -m pytest tests/unit/ -q --tb=line
 | Codecov threshold 7%→1–2% | Cuando main sostenga ≥85% estable |
 | COV-3.8 hybrid_ml | **defer** |
 | Drift `_BROKEN_*` | PR dedicado; no chase pp |
-| Meta sprint S1 | Codecov main **≥85%** (aún ~78%) |
+| Meta sprint S1 | CI main `f1d17d0` **85.14%**; cola 27 files <70% = S-COV-70 |
+| S-COV-70 | Cada file de la cola CI <70% → **≥70%** · `test/s-cov-70-files-2026-08-13` |
