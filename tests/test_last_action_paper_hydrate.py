@@ -36,7 +36,7 @@ def test_resolve_last_action_from_ledger_buy(paper_env, monkeypatch):
 
 
 def test_resolve_last_action_blocks_repeat_buy_in_decide(paper_env, monkeypatch):
-    """Con last_action=BUY cerca del nivel → SELL (round-trip)."""
+    """Con last_action=BUY y last_level en L_i, precio en L_{i+1} → SELL (Δnivel≥1)."""
     from app.services.grid_strategy import decide_grid_action
     from app.core.paper_cycle_liquidity import resolve_last_grid_action
 
@@ -53,9 +53,13 @@ def test_resolve_last_action_blocks_repeat_buy_in_decide(paper_env, monkeypatch)
     )
     last = resolve_last_grid_action("ethusdt")
     levels = [1900.0, 1910.0, 1920.0]
-    action = decide_grid_action(1909.0, levels, last_action=last)
+    # Mismo nivel que el BUY → no SELL (evita RT intra-nivel)
+    same = decide_grid_action(1909.0, levels, last_action=last, last_level=1910.0)
+    assert same["action"] is None
+    # Un nivel arriba → SELL
+    action = decide_grid_action(1910.0, levels, last_action=last, last_level=1900.0)
     assert action["action"] == "SELL"
-    action_mid = decide_grid_action(1910.0, levels, last_action=last)
+    action_mid = decide_grid_action(1910.0, levels, last_action=last, last_level=1900.0)
     assert action_mid["action"] == "SELL"
 
 

@@ -52,6 +52,7 @@ class AssetConfig(BaseModel):
     quantity: float
     is_active: bool = True
     last_action: Optional[str] = None
+    last_level: Optional[float] = None
     grid_levels: List[float] = Field(default_factory=list)
 
     @field_validator("grid_levels")
@@ -585,9 +586,12 @@ class OptimizedGridManager:
                     f"📊 {symbol}: Precio actual ${current_price}, cantidad óptima {quantity}"
                 )
 
-                # Paper: hidratar last_action desde ledger (persiste entre ciclos).
+                # Paper: hidratar last_action / last_level desde ledger (persiste entre ciclos).
                 try:
-                    from app.core.paper_cycle_liquidity import resolve_last_grid_action
+                    from app.core.paper_cycle_liquidity import (
+                        resolve_last_grid_action,
+                        resolve_last_grid_level,
+                    )
 
                     hydrated = resolve_last_grid_action(
                         symbol, fallback=asset_config.last_action
@@ -599,6 +603,11 @@ class OptimizedGridManager:
                             hydrated,
                         )
                         asset_config.last_action = hydrated
+                    lvl = resolve_last_grid_level(
+                        symbol, fallback=asset_config.last_level
+                    )
+                    if lvl is not None:
+                        asset_config.last_level = float(lvl)
                 except Exception as hyd_exc:  # noqa: BLE001
                     logger.debug("last_action hydrate skip: %s", hyd_exc)
 
@@ -606,6 +615,7 @@ class OptimizedGridManager:
                     prices.get(symbol, 0),
                     asset_config.grid_levels,
                     asset_config.last_action,
+                    asset_config.last_level,
                 )
 
                 if action and action.get("action"):
@@ -849,6 +859,8 @@ class OptimizedGridManager:
                     if result:
                         trading_results.append(result)
                         asset_config.last_action = action["action"]
+                        if action.get("level") is not None:
+                            asset_config.last_level = float(action["level"])
                         logger.info(f"✅ {symbol}: Trade ejecutado exitosamente")
 
                         # Registrar métricas de trading usando el nuevo sistema centralizado
@@ -967,18 +979,29 @@ class OptimizedGridManager:
                 return None
 
             try:
-                from app.core.paper_cycle_liquidity import resolve_last_grid_action
+                from app.core.paper_cycle_liquidity import (
+                    resolve_last_grid_action,
+                    resolve_last_grid_level,
+                )
 
                 hydrated = resolve_last_grid_action(
                     symbol, fallback=asset_config.last_action
                 )
                 if hydrated:
                     asset_config.last_action = hydrated
+                lvl = resolve_last_grid_level(
+                    symbol, fallback=asset_config.last_level
+                )
+                if lvl is not None:
+                    asset_config.last_level = float(lvl)
             except Exception:
                 pass
 
             action = decide_grid_action(
-                current_price, asset_config.grid_levels, asset_config.last_action
+                current_price,
+                asset_config.grid_levels,
+                asset_config.last_action,
+                asset_config.last_level,
             )
 
             if not action or not action.get("action"):
@@ -994,6 +1017,8 @@ class OptimizedGridManager:
 
             if result:
                 asset_config.last_action = action["action"]
+                if action.get("level") is not None:
+                    asset_config.last_level = float(action["level"])
 
             return result
 
