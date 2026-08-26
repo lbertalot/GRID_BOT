@@ -97,7 +97,7 @@ async def test_paper_sot_ledger_vacio_no_hereda_trades_db():
         "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
         return_value=True,
     ), patch(
-        "app.core.paper_equity_ledger.get_paper_ledger",
+        "app.core.paper_equity_ledger.reload_paper_ledger_from_disk",
         return_value=ledger,
     ):
         await auto._check_consecutive_losses(db, results)
@@ -118,9 +118,27 @@ async def test_paper_sot_cinco_cierres_rojos_activa_si():
         "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
         return_value=True,
     ), patch(
-        "app.core.paper_equity_ledger.get_paper_ledger",
+        "app.core.paper_equity_ledger.reload_paper_ledger_from_disk",
         return_value=ledger,
     ):
         await auto._check_consecutive_losses(MagicMock(), results)
     assert "system_integrity" in results["breakers_activated"]
     auto.breakers.activate_breaker.assert_awaited()
+
+
+def test_reload_paper_ledger_from_disk_descarta_singleton(tmp_path, monkeypatch):
+    from app.core import paper_equity_ledger as pel
+
+    path = tmp_path / "paper_equity_ledger.json"
+    first = pel.PaperEquityLedger(
+        initial_cash=Decimal("1000"),
+        deployed_capital=Decimal("200"),
+        storage_path=path,
+    )
+    first.save()
+    monkeypatch.setattr(pel, "_telemetry_dir", lambda: tmp_path)
+    pel._ledger = first
+    reloaded = pel.reload_paper_ledger_from_disk()
+    assert reloaded is not first
+    assert float(reloaded.cash) == 1000.0
+    pel._ledger = None

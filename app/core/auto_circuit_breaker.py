@@ -163,12 +163,12 @@ class AutoCircuitBreaker:
         try:
             try:
                 from app.core.paper_equity_ledger import (
-                    get_paper_ledger,
                     paper_equity_is_source_of_truth,
+                    reload_paper_ledger_from_disk,
                 )
 
                 if paper_equity_is_source_of_truth():
-                    ledger = get_paper_ledger()
+                    ledger = reload_paper_ledger_from_disk()
                     return paper_window_loss_metrics(
                         ledger.closed_cycles(),
                         now=datetime.now(timezone.utc),
@@ -271,15 +271,19 @@ class AutoCircuitBreaker:
         try:
             consecutive_losses = None
             latest_closed_at = None
+            loss_source = "trade_db"
             try:
                 from app.core.paper_equity_ledger import (
-                    get_paper_ledger,
                     paper_equity_is_source_of_truth,
+                    reload_paper_ledger_from_disk,
                 )
 
                 if paper_equity_is_source_of_truth():
-                    closed = get_paper_ledger().closed_cycles()
+                    # Cross-process: releer JSON (otro worker Celery pudo haber
+                    # cerrado ciclos desde el último get_paper_ledger() local).
+                    closed = reload_paper_ledger_from_disk().closed_cycles()
                     consecutive_losses = consecutive_losses_from_closed_cycles(closed)
+                    loss_source = "paper_ledger"
                     closed_ats = [c.closed_at for c in closed if c.closed_at]
                     if closed_ats:
                         latest_closed_at = max(closed_ats)
@@ -298,13 +302,24 @@ class AutoCircuitBreaker:
                 )
 
                 consecutive_losses = 0
+                loss_source = "trade_db"
                 for trade in recent_trades:
                     if trade.profit_loss < 0:
                         consecutive_losses += 1
                     else:
                         break
 
-            if consecutive_losses < self.thresholds["max_consecutive_losses"]:
+            threshold = self.thresholds["max_consecutive_losses"]
+            self.logger.info(
+                "system_integrity check: consecutive_losses=%s threshold=%s "
+                "latest_closed_at=%s source=%s",
+                consecutive_losses,
+                threshold,
+                latest_closed_at.isoformat() if latest_closed_at else None,
+                loss_source,
+            )
+
+            if consecutive_losses < threshold:
                 # Racha rota con datos frescos: cualquier override RCA vigente ya
                 # cumplió su propósito. Se limpia proactivamente para que no quede
                 # "vivo" y termine enmascarando un trip futuro no relacionado.
@@ -323,8 +338,12 @@ class AutoCircuitBreaker:
                 except Exception:  # noqa: BLE001 — nunca romper el path de trading
                     pass
 
-            if consecutive_losses >= self.thresholds["max_consecutive_losses"]:
-                reason = f"Demasiadas pérdidas consecutivas: {consecutive_losses}"
+            if consecutive_losses >= threshold:
+                reason = (
+                    f"Demasiadas pérdidas consecutivas: {consecutive_losses} "
+                    f"(threshold={threshold}, metric=max_consecutive_losses, "
+                    f"latest_closed_at={latest_closed_at.isoformat() if latest_closed_at else 'n/a'})"
+                )
 
                 skip_activation = False
                 try:
@@ -340,6 +359,10 @@ class AutoCircuitBreaker:
                     )
 
                 if skip_activation:
+                    self.logger.warning(
+                        "system_integrity OPEN deferred: %s (override RCA activo)",
+                        reason,
+                    )
                     results["reasons"].append(f"{reason} (override RCA activo, sin reactivar)")
                     return
 

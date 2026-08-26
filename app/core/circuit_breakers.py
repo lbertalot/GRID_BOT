@@ -211,7 +211,11 @@ class CircuitBreakers:
             self.breakers[breaker_type]["activated_at"] = None
             self.breakers[breaker_type]["reason"] = None
 
-            self.logger.info(f"✅ Circuit breaker '{breaker_type}' desactivado")
+            self.logger.info(
+                "✅ Circuit breaker '%s' desactivado (reason previa ya no aplica; "
+                "metric/state cleared)",
+                breaker_type,
+            )
             try:
                 from app.core.metrics import breaker_state
 
