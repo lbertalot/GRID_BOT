@@ -1235,6 +1235,20 @@ def get_paper_ledger() -> PaperEquityLedger:
     return _ledger
 
 
+def reload_paper_ledger_from_disk() -> PaperEquityLedger:
+    """Rehidrata el singleton desde el JSON en disco.
+
+    Celery prefork: ``execute_trading_cycle`` puede escribir el ledger en un
+    child mientras ``trading_cycle_tick`` evalúa breakers en otro. Sin este
+    reload, ``consecutive_losses_from_closed_cycles`` ve racha stale (0) y
+    ``system_integrity`` no abre aunque el archivo ya tenga ≥5 pérdidas.
+    Paper-only. PROMOTE_LIVE: NO.
+    """
+    global _ledger
+    _ledger = None
+    return get_paper_ledger()
+
+
 def get_paper_equity_series() -> PaperEquitySeries:
     """Serie de equity paper del proceso, rehidratada del JSON si existe."""
     global _series
