@@ -35,11 +35,39 @@ def _run_auto_remediation() -> Dict[str, Any]:
             format_remediation_telegram,
             maybe_remediate_stale_system_integrity,
         )
+        from app.core.telegram_ceo_copy import (
+            HOLD_PNL_MIN_REPEAT_S,
+            ceo_plain_enabled,
+            hold_kind_from_remediation,
+            should_emit_ceo,
+        )
 
         result = maybe_remediate_stale_system_integrity()
         note = format_remediation_telegram(result)
         if note:
-            _telegram(note)
+            send = True
+            if ceo_plain_enabled():
+                kind = hold_kind_from_remediation(result)
+                if result.get("acted"):
+                    send = should_emit_ceo(
+                        "remediated",
+                        f"acted|{result.get('action')}",
+                        force=True,
+                    )
+                elif kind == "pnl":
+                    send = should_emit_ceo(
+                        "hold_pnl",
+                        f"pnl|{result.get('breaker_reason') or ''}",
+                        min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
+                    )
+                elif kind == "auth":
+                    send = should_emit_ceo(
+                        "hold_auth",
+                        "auth",
+                        min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
+                    )
+            if send:
+                _telegram(note)
         logger.info(
             "desk auto-remediate acted=%s action=%s reason=%s",
             result.get("acted"),
@@ -105,7 +133,28 @@ def send_desk_hourly_digest() -> Dict[str, Any]:
     digest = build_live_digest()
     area_actions = _run_area_actions(digest, remediation)
     payload = digest.full_telegram_payload(include_area_blocks=False)
-    sent = _telegram(payload)
+    sent = False
+    from app.core.telegram_ceo_copy import (
+        SEMAFORO_ROJO_SISTEMA,
+        ceo_plain_enabled,
+        ceo_semaforo,
+        digest_fingerprint,
+        hold_kind_from_remediation,
+        should_emit_ceo,
+    )
+
+    if ceo_plain_enabled():
+        fp = digest_fingerprint(
+            digest, hold_kind=hold_kind_from_remediation(remediation)
+        )
+        if should_emit_ceo(
+            "digest",
+            fp,
+            force=ceo_semaforo(digest) == SEMAFORO_ROJO_SISTEMA,
+        ):
+            sent = _telegram(payload)
+    else:
+        sent = _telegram(payload)
     logger.info(
         "desk hourly digest day=%s global=%s sent=%s remediated=%s actions=%s",
         digest.day_n,
@@ -144,17 +193,32 @@ def send_desk_eod_day_plan() -> Dict[str, Any]:
     area_actions = _run_area_actions(digest, remediation)
     tear_path = _run_tear_capa_a()
     path = write_day2_action_plan(digest)
-    summary = (
-        f"📋 EOD PLAN | Día {digest.day_n}→{min(30, digest.day_n + 1)}/30\n"
-        f"Veredicto día: {digest.global_status}\n"
-        f"Tear Capa A: {tear_path or 'UNAVAILABLE'}\n"
-        f"Archivo: {path}\n"
-        f"E_last={digest.equity_last or 'UNAVAILABLE'} mode={digest.effective_mode}\n"
-        f"Auto-remediate: acted={remediation.get('acted')} "
-        f"action={remediation.get('action')}\n"
-        f"Area actions: {len(area_actions)}\n"
-        f"PROMOTE_LIVE: NO · paper-only"
+    from app.core.telegram_ceo_copy import (
+        ceo_plain_enabled,
+        digest_fingerprint,
+        hold_kind_from_remediation,
+        render_eod_ceo,
+        should_emit_ceo,
     )
+
+    if ceo_plain_enabled():
+        fp = digest_fingerprint(
+            digest, hold_kind=hold_kind_from_remediation(remediation)
+        )
+        should_emit_ceo("digest", fp, force=True)
+        summary = render_eod_ceo(digest, tear_ok=bool(tear_path))
+    else:
+        summary = (
+            f"📋 EOD PLAN | Día {digest.day_n}→{min(30, digest.day_n + 1)}/30\n"
+            f"Veredicto día: {digest.global_status}\n"
+            f"Tear Capa A: {tear_path or 'UNAVAILABLE'}\n"
+            f"Archivo: {path}\n"
+            f"E_last={digest.equity_last or 'UNAVAILABLE'} mode={digest.effective_mode}\n"
+            f"Auto-remediate: acted={remediation.get('acted')} "
+            f"action={remediation.get('action')}\n"
+            f"Area actions: {len(area_actions)}\n"
+            f"PROMOTE_LIVE: NO · paper-only"
+        )
     sent = _telegram(summary)
     return {
         "ok": True,

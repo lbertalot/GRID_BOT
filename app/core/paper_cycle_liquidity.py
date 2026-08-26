@@ -8,7 +8,7 @@ efectivo es paper — el cash del `PaperEquityLedger` es la fuente de verdad.
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
@@ -149,10 +149,70 @@ def resolve_last_grid_action(
         return fallback
 
 
+def should_enforce_level_notional_on_sell(*, paper: bool) -> bool:
+    """Piso L0 (15/20 USDT) es para BUY/nuevos niveles, no para cerrar inventario paper."""
+    return not bool(paper)
+
+
+def _floor_to_step(qty: Decimal, step: Decimal) -> Decimal:
+    if step <= ZERO:
+        return qty
+    return (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
+
+
+def clip_paper_sell_quantity(
+    *,
+    symbol: str,
+    sizer_qty: Decimal,
+    step_size: Decimal | None = None,
+) -> Decimal:
+    """Clip SELL paper a ``min(sizer, ledger.position)`` con floor a ``step_size``.
+
+    Fuera de paper SoT no recorta: devuelve ``sizer_qty`` tal cual.
+    """
+    sizer = _as_decimal(sizer_qty)
+
+    try:
+        from app.core.paper_equity_ledger import (
+            get_paper_ledger,
+            paper_equity_is_source_of_truth,
+        )
+    except Exception as exc:  # pragma: no cover — import fail → no clip
+        logger.warning("[paper-liq] clip SELL: no se pudo importar ledger: %s", exc)
+        return sizer
+
+    if not paper_equity_is_source_of_truth():
+        return sizer
+
+    try:
+        pos = _as_decimal(get_paper_ledger().position(symbol))
+    except Exception as exc:
+        logger.warning("[paper-liq] clip SELL: position() falló (%s); qty=0", exc)
+        return ZERO
+
+    qty = min(sizer, pos)
+    step = _as_decimal(step_size) if step_size is not None else ZERO
+    if step > ZERO:
+        qty = _floor_to_step(qty, step)
+    if qty <= ZERO:
+        return ZERO
+    logger.info(
+        "[paper-liq] clip SELL %s sizer=%s pos=%s step=%s → qty=%s",
+        symbol,
+        sizer,
+        pos,
+        step,
+        qty,
+    )
+    return qty
+
+
 __all__ = [
     "resolve_available_usdt_for_cycle",
     "should_skip_exchange_rebalancer",
     "build_paper_balances_from_ledger",
     "can_afford_grid_quantity",
     "resolve_last_grid_action",
+    "should_enforce_level_notional_on_sell",
+    "clip_paper_sell_quantity",
 ]

@@ -16,6 +16,9 @@ def digest_stub():
         global_status="AT_RISK",
         effective_mode="paper",
         equity_last="1000.00",
+        equity_delta_pct="-1.8%",
+        any_open_breakers=True,
+        when=None,
         areas=[
             SimpleNamespace(
                 code="RISK",
@@ -40,7 +43,10 @@ def test_hourly_digest_disabled(paper_env):
 
 
 def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
+    from app.core.telegram_ceo_copy import reset_debounce_memory
     from app.services import desk_status_tasks as mod
+
+    reset_debounce_memory()
 
     rem_result = {
         "acted": True,
@@ -66,10 +72,10 @@ def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
     assert out["ok"] is True
     assert out["remediation"]["acted"] is True
     assert out["area_actions"] and out["area_actions"][0]["code"] == "RISK"
-    # remediate + area actions + digest
-    assert tg.call_count == 3
-    assert any("REMEDIADO" in str(c.args[0]) for c in tg.call_args_list)
-    assert any("DESK AUTO · ACCIONES" in str(c.args[0]) for c in tg.call_args_list)
+    # remediate + digest (ACCIONES no van al CEO)
+    assert tg.call_count == 2
+    assert any("Freno de conexión" in str(c.args[0]) for c in tg.call_args_list)
+    assert not any("DESK AUTO · ACCIONES" in str(c.args[0]) for c in tg.call_args_list)
 
 
 def test_run_auto_remediation_swallows_errors(paper_env):
@@ -88,7 +94,10 @@ def test_run_auto_remediation_swallows_errors(paper_env):
 
 
 def test_eod_includes_remediation_fields(paper_env, digest_stub):
+    from app.core.telegram_ceo_copy import reset_debounce_memory
     from app.services import desk_status_tasks as mod
+
+    reset_debounce_memory()
 
     rem_result = {
         "acted": False,
@@ -123,11 +132,10 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
     assert out["path"] == "/tmp/day2.md"
     assert out["tear_path"] == "/tmp/tear-capa-a-2026-08-09.md"
     assert out["area_actions"] and out["area_actions"][0]["auto"] is False
-    # HOLD remedia + acciones + EOD summary
-    assert tg.call_count == 3
-    assert "Tear Capa A" in tg.call_args_list[-1].args[0]
-    assert "Auto-remediate" in tg.call_args_list[-1].args[0]
-    assert "hold" in tg.call_args_list[-1].args[0]
+    # HOLD remedia + EOD CEO (sin lista ACCIONES)
+    assert tg.call_count == 2
+    assert "Cierre del día" in tg.call_args_list[-1].args[0]
+    assert "Dinero real" in tg.call_args_list[-1].args[0]
 
 
 def test_eod_disabled(paper_env):

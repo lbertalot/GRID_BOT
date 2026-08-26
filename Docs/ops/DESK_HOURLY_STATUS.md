@@ -4,18 +4,20 @@
 **Habilitado local:** `DESK_HOURLY_STATUS_ENABLED=true` (compose local)
 
 ## Qué hace
-Cada hora (**minuto :05 UTC**) Celery Beat dispara `send_desk_hourly_digest` con un
-mensaje CEO compacto:
+Cada hora (**minuto :05 UTC**) Celery Beat dispara `send_desk_hourly_digest`.
+Al CEO (default `TELEGRAM_CEO_PLAIN=true`) llega el copy llano — ver
+[`TELEGRAM_CEO_PLAIN.md`](TELEGRAM_CEO_PLAIN.md). No se reenvía si el semáforo
+no cambió. Las ACCIONES de área **no** van a Telegram CEO (sí al day-plan / log).
+
+Formato desk (`TELEGRAM_CEO_PLAIN=false`):
 
 ```
 🧭 Reporte CEO | Día N/30 (HH:MMZ)
 ⚙️ Modo: Paper Trading | Pase a Live: ❌ NO
-💵 Resumen de Capital: Equity + Variación vs E_0
-⚠️/✅ Alerta global + acción si AT_RISK/OFF_TRACK
-✅ Áreas ON TRACK resumidas + notas técnicas (samples / cierres)
+...
 ```
 
-Sin claim de edge; **Pase a Live siempre ❌ NO** en este canal.
+Sin claim de edge; **Dinero real: NO** / Pase a Live ❌ NO.
 
 A las **00:45 UTC** `send_desk_eod_day_plan` escribe:
 1. Tear Capa A auto → `Docs/ops/tear-capa-a-YYYY-MM-DD.md` (`app/core/desk_tear_capa_a.py`, AS-1)
@@ -25,8 +27,8 @@ A las **00:45 UTC** `send_desk_eod_day_plan` escribe:
 ## Acciones por área (AS-2)
 
 Tras auto-remediate y al construir el digest, si hay áreas **AT_RISK** / **OFF_TRACK**:
-`plan_actions_for_areas` → Telegram `🛠️ DESK AUTO · ACCIONES` con owner canónico
-(MM / RISK / DEVOPS / …). No requiere paste del CEO.
+`plan_actions_for_areas` queda en log / day-plan. Telegram `🛠️ DESK AUTO · ACCIONES`
+solo con `TELEGRAM_DESK_VERBOSE=true`. No requiere paste del CEO.
 
 **Umbral PnL (CEO 2026-08-10):** Δ equity vs E_0 (`E0_REFERENCE=1000`):
 - ≤ **−1.5%** → MM + QUANT **AT_RISK** (global ≥ AT_RISK) + ACCIONES
@@ -50,7 +52,8 @@ Antes del digest / EOD plan, si `DESK_AUTO_REMEDIATE_BREAKERS=true` (default):
 
 → **reset paper-safe** del breaker + Telegram `🛠️ DESK AUTO · REMEDIADO`.
 
-Si validate falla → Telegram `🛠️ DESK AUTO · HOLD` (revisar IP allowlist).  
+Si validate falla → Telegram `🛠️ DESK AUTO · HOLD` (revisar IP allowlist).
+Skill: `trading-binance-ip-allowlist` · runbook: `Docs/engineering/runbook-binance-ip-allowlist-browser.md`.  
 Si reason es trading/PnL (p.ej. *pérdidas consecutivas*, IC-2) → Telegram
 `🛠️ DESK AUTO · HOLD (no auto-clear)` — **no** reset; owner RISK+MM.  
 Kill switch: `DESK_AUTO_REMEDIATE_BREAKERS=false`.
@@ -83,4 +86,5 @@ docker compose -f docker-compose.local.yml exec -T worker \
 Requiere `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` en `.env`.
 
 ## Ancla ventana
-`DESK_WINDOW_DAY0_ANCHOR=2026-08-06` → día 1/30 el 2026-08-06 UTC.
+`DESK_WINDOW_DAY0_ANCHOR=2026-08-15` → día 1/30 el 2026-08-15 UTC (T0 canónico post-reset N10).
+

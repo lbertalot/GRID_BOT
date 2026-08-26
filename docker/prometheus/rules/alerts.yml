@@ -54,15 +54,27 @@ groups:
           summary: "PostgreSQL está caído"
           description: "PostgreSQL ha estado caído por más de 1 minuto"
 
-      # Alerta cuando Celery worker no está funcionando
+      # Alerta cuando Celery/Flower no responde al scrape
       - alert: CeleryWorkerDown
         expr: up{job="gridbot-celery"} == 0
         for: 2m
         labels:
           severity: warning
+          component: celery
         annotations:
-          summary: "Celery worker está caído"
-          description: "El worker de Celery ha estado caído por más de 2 minutos"
+          summary: "Flower/Celery scrape caído"
+          description: "up{job=gridbot-celery} == 0 por más de 2 minutos"
+
+      # 0 workers vivos (Flower ve el nodo offline)
+      - alert: CeleryWorkersOnlineZero
+        expr: (sum(flower_worker_online{job="gridbot-celery"} == 1) or vector(0)) == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: celery
+        annotations:
+          summary: "Ningún Celery worker online"
+          description: "flower_worker_online vivos = 0 por más de 2 minutos"
 
       # Alerta cuando la latencia de la API es alta
       - alert: HighAPILatency
@@ -74,12 +86,21 @@ groups:
           summary: "Latencia alta en la API"
           description: "El 95% de las requests tardan más de 1 segundo"
 
-      # Alerta cuando hay muchas tareas fallidas en Celery
+      # Fallos Celery >5% en 1h (métricas Flower estándar)
       - alert: CeleryTaskFailures
-        expr: rate(celery_tasks_failed_total[5m]) > 0.5
+        expr: |
+          (
+            sum(increase(flower_events_total{job="gridbot-celery", type="task-failed"}[1h]))
+            /
+            clamp_min(
+              sum(increase(flower_events_total{job="gridbot-celery", type=~"task-succeeded|task-failed"}[1h])),
+              1
+            )
+          ) > 0.05
         for: 5m
         labels:
           severity: warning
+          component: celery
         annotations:
-          summary: "Muchas tareas fallidas en Celery"
-          description: "Tasa de fallos en tareas de Celery es alta"
+          summary: "Tasa de fallos Celery >5% (1h)"
+          description: "failed/(succeeded+failed) > 5% en la última hora"

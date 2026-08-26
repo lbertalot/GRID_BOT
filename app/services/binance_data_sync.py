@@ -158,6 +158,7 @@ class BinanceDataSync:
                 metrics["pipeline_api_requests_total"].labels(
                     endpoint="binance.get_account", status="total"
                 ).inc()
+            self._emit_api_request(endpoint="binance.get_account", status="total")
             # Obtener información de la cuenta
             started_at = datetime.utcnow()
             account_info = await asyncio.to_thread(self.client.get_account)
@@ -168,6 +169,7 @@ class BinanceDataSync:
                 metrics["pipeline_api_request_latency_seconds"].labels(
                     endpoint="binance.get_account"
                 ).observe((datetime.utcnow() - started_at).total_seconds())
+            self._emit_api_request(endpoint="binance.get_account", status="success")
             balances = account_info.get("balances", [])
 
             # Conectar a la base de datos
@@ -234,6 +236,9 @@ class BinanceDataSync:
                             operation="upsert",
                             status="ok",
                         ).inc()
+                    self._emit_db_write(
+                        table="balances", operation="upsert", status="ok"
+                    )
 
             await conn.close()
 
@@ -259,6 +264,10 @@ class BinanceDataSync:
                 metrics["db_writes_total"].labels(
                     table="balances", operation="upsert", status="error"
                 ).inc()
+            err_type = self._classify_error_type(str(e))
+            self._emit_api_request(endpoint="binance.get_account", status="failure")
+            self._emit_pipeline_error(stage="sync_balances", error_type=err_type)
+            self._emit_db_write(table="balances", operation="upsert", status="error")
             return {"status": "error", "message": str(e)}
 
     async def sync_symbol_info(self, symbols: List[str] = None) -> Dict[str, Any]:
@@ -368,6 +377,9 @@ class BinanceDataSync:
                 metrics["pipeline_api_requests_total"].labels(
                     endpoint="binance.get_recent_trades", status="total"
                 ).inc()
+            self._emit_api_request(
+                endpoint="binance.get_recent_trades", status="total"
+            )
 
             # Obtener operaciones recientes
             started_at = datetime.utcnow()
@@ -384,6 +396,10 @@ class BinanceDataSync:
                 metrics["pipeline_events_processed_total"].labels(
                     stage="sync_recent_trades_fetch"
                 ).inc(len(trades))
+            self._emit_api_request(
+                endpoint="binance.get_recent_trades", status="success"
+            )
+            self._emit_processed("sync_recent_trades_fetch", delta=len(trades))
 
             logger.info(
                 "sync_recent_trades.fetch_completed",
@@ -426,11 +442,17 @@ class BinanceDataSync:
                         metrics["db_writes_total"].labels(
                             table="trades", operation="insert", status="ok"
                         ).inc()
+                    self._emit_db_write(
+                        table="trades", operation="insert", status="ok"
+                    )
                 elif metrics:
                     metrics["pipeline_events_dropped_total"].labels(
                         stage="sync_recent_trades_persist",
                         reason="duplicate_order_id",
                     ).inc()
+                    self._emit_dropped(
+                        "sync_recent_trades_persist", "duplicate_order_id"
+                    )
 
             await conn.close()
 
@@ -474,6 +496,11 @@ class BinanceDataSync:
                 ).inc()
             except Exception:
                 pass
+            err_type = self._classify_error_type(str(e))
+            self._emit_api_request(
+                endpoint="binance.get_recent_trades", status="failure"
+            )
+            self._emit_pipeline_error(stage="sync_recent_trades", error_type=err_type)
             return {"status": "error", "message": str(e)}
 
     async def _ensure_trades_idempotency_columns(
@@ -523,6 +550,56 @@ class BinanceDataSync:
             }
         except Exception:
             return None
+
+    def _emit_db_write(self, *, table: str, operation: str, status: str) -> None:
+        try:
+            from app.core.pipeline_metrics_sidecar import record_db_write
+
+            record_db_write(table=table, operation=operation, status=status)
+        except Exception:
+            pass
+
+    def _emit_processed(self, stage: str, delta: float = 1.0) -> None:
+        try:
+            from app.core.pipeline_metrics_sidecar import bump_labeled_counter
+
+            bump_labeled_counter(
+                "pipeline_events_processed_total", delta=delta, stage=stage
+            )
+            bump_labeled_counter(
+                "gridbot_items_processed_total", delta=delta, stage=stage
+            )
+        except Exception:
+            pass
+
+    def _emit_dropped(self, stage: str, reason: str, delta: float = 1.0) -> None:
+        try:
+            from app.core.pipeline_metrics_sidecar import bump_labeled_counter
+
+            bump_labeled_counter(
+                "pipeline_events_dropped_total", delta=delta, stage=stage, reason=reason
+            )
+            bump_labeled_counter(
+                "gridbot_items_dropped_total", delta=delta, stage=stage, reason=reason
+            )
+        except Exception:
+            pass
+
+    def _emit_pipeline_error(self, stage: str, error_type: str) -> None:
+        try:
+            from app.core.pipeline_metrics_sidecar import record_pipeline_error
+
+            record_pipeline_error(stage=stage, error_type=error_type)
+        except Exception:
+            pass
+
+    def _emit_api_request(self, *, endpoint: str, status: str) -> None:
+        try:
+            from app.core.pipeline_metrics_sidecar import record_api_request
+
+            record_api_request(endpoint=endpoint, status=status)
+        except Exception:
+            pass
 
     async def sync_klines_data(
         self, symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 100
@@ -614,6 +691,7 @@ class BinanceDataSync:
                 metrics["pipeline_api_requests_total"].labels(
                     endpoint="binance.get_account", status="total"
                 ).inc()
+            self._emit_api_request(endpoint="binance.get_account", status="total")
             # Obtener información de la cuenta
             started_at = datetime.utcnow()
             account_info = await asyncio.to_thread(self.client.get_account)
@@ -624,6 +702,7 @@ class BinanceDataSync:
                 metrics["pipeline_api_request_latency_seconds"].labels(
                     endpoint="binance.get_account"
                 ).observe((datetime.utcnow() - started_at).total_seconds())
+            self._emit_api_request(endpoint="binance.get_account", status="success")
 
             # Calcular métricas básicas
             total_trades = 0
@@ -712,6 +791,9 @@ class BinanceDataSync:
                         operation="insert",
                         status="ok",
                     ).inc()
+                self._emit_db_write(
+                    table="performance_metrics", operation="insert", status="ok"
+                )
 
             await conn.close()
 
@@ -742,6 +824,14 @@ class BinanceDataSync:
                     operation="insert",
                     status="error",
                 ).inc()
+            err_type = self._classify_error_type(str(e))
+            self._emit_api_request(endpoint="binance.get_account", status="failure")
+            self._emit_pipeline_error(
+                stage="sync_performance_metrics", error_type=err_type
+            )
+            self._emit_db_write(
+                table="performance_metrics", operation="insert", status="error"
+            )
             return {"status": "error", "message": str(e)}
 
     async def _get_symbol_info(self, asset: str) -> Optional[Dict[str, Any]]:

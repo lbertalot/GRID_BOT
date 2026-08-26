@@ -1,0 +1,106 @@
+# E-OBS-PG-SRE — salud Postgres GRID_BOT (paper).
+# No Telegram CEO: label component=postgres → Alertmanager web.hook.
+# PROMOTE_LIVE: NO.
+groups:
+  - name: gridbot-postgres
+    interval: 30s
+    rules:
+      - alert: GridbotPgDown
+        expr: pg_up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: postgres
+          book: core_grid
+        annotations:
+          summary: "Postgres exporter/pg_up=0 (paper DB)"
+          description: "postgres_exporter no ve el servidor. Paper-only. No es live gate."
+
+      - alert: GridbotPgCacheHitLow
+        expr: |
+          (
+            sum(rate(pg_stat_database_blks_hit{job="postgres", datname="gridbot"}[5m]))
+            / clamp_min(
+                sum(rate(pg_stat_database_blks_hit{job="postgres", datname="gridbot"}[5m]))
+                + sum(rate(pg_stat_database_blks_read{job="postgres", datname="gridbot"}[5m])),
+                1
+              )
+          ) < 0.98
+        for: 5m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "Cache hit ratio Postgres < 98%"
+
+      - alert: GridbotPgCacheHitCritical
+        expr: |
+          (
+            sum(rate(pg_stat_database_blks_hit{job="postgres", datname="gridbot"}[5m]))
+            / clamp_min(
+                sum(rate(pg_stat_database_blks_hit{job="postgres", datname="gridbot"}[5m]))
+                + sum(rate(pg_stat_database_blks_read{job="postgres", datname="gridbot"}[5m])),
+                1
+              )
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "Cache hit ratio Postgres < 95%"
+
+      - alert: GridbotPgConnectionsHigh
+        expr: |
+          sum(pg_stat_database_numbackends{job="postgres", datname="gridbot"})
+          / pg_settings_max_connections{job="postgres"} > 0.70
+        for: 2m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "Backends gridbot > 70% de max_connections"
+
+      - alert: GridbotPgRollbackStorm
+        expr: |
+          rate(pg_stat_database_xact_rollback{job="postgres", datname="gridbot"}[5m])
+          / clamp_min(
+              rate(pg_stat_database_xact_commit{job="postgres", datname="gridbot"}[5m])
+              + rate(pg_stat_database_xact_rollback{job="postgres", datname="gridbot"}[5m]),
+              0.001
+            ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "Rollback ratio Postgres > 5%"
+
+      - alert: GridbotPgDeadlocks
+        expr: rate(pg_stat_database_deadlocks{job="postgres", datname="gridbot"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "Deadlocks en gridbot"
+
+      - alert: GridbotPgIdleInTransaction
+        expr: sum(pg_stat_activity_count{job="postgres", datname="gridbot", state="idle in transaction"}) >= 2
+        for: 2m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "Idle-in-transaction ≥ 2 (fuga de sesión)"
+
+      - alert: GridbotPgTradesBloat
+        expr: |
+          pg_stat_user_tables_n_dead_tup{job="postgres", datname="gridbot", relname="trades"}
+          / clamp_min(pg_stat_user_tables_n_live_tup{job="postgres", datname="gridbot", relname="trades"}, 1) > 0.20
+        for: 15m
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: "Bloat trades dead_ratio > 20% — VACUUM"

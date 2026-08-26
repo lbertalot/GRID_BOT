@@ -657,13 +657,17 @@ async def test_auto_cb_breakers_property_and_metrics():
     db = MagicMock()
     q = db.query.return_value
     q.filter.return_value.scalar.return_value = -20.0
-    metrics = await auto._calculate_loss_metrics(db)
-    assert metrics["total_loss_usd"] == pytest.approx(20.0)
-    assert metrics["daily_loss_pct"] > 0
+    with patch(
+        "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
+        return_value=False,
+    ):
+        metrics = await auto._calculate_loss_metrics(db)
+        assert metrics["total_loss_usd"] == pytest.approx(20.0)
+        assert metrics["daily_loss_pct"] > 0
 
-    db.query.side_effect = RuntimeError("sql")
-    zeros = await auto._calculate_loss_metrics(db)
-    assert zeros["total_loss_pct"] == 0.0
+        db.query.side_effect = RuntimeError("sql")
+        zeros = await auto._calculate_loss_metrics(db)
+        assert zeros["total_loss_pct"] == 0.0
 
 
 async def test_auto_cb_thresholds_and_manual():
@@ -696,23 +700,27 @@ async def test_auto_cb_thresholds_and_manual():
     db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
         losses
     )
-    await auto._check_consecutive_losses(db, results)
-    assert "system_integrity" in results["breakers_activated"]
+    with patch(
+        "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
+        return_value=False,
+    ):
+        await auto._check_consecutive_losses(db, results)
+        assert "system_integrity" in results["breakers_activated"]
 
-    db.query.side_effect = RuntimeError("trades")
-    await auto._check_consecutive_losses(db, results)
+        db.query.side_effect = RuntimeError("trades")
+        await auto._check_consecutive_losses(db, results)
 
-    mixed = [
-        SimpleNamespace(profit_loss=-1.0),
-        SimpleNamespace(profit_loss=1.0),
-    ]
-    db.query.side_effect = None
-    db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
-        mixed
-    )
-    extra = {"breakers_activated": [], "reasons": []}
-    await auto._check_consecutive_losses(db, extra)
-    assert extra["breakers_activated"] == []
+        mixed = [
+            SimpleNamespace(profit_loss=-1.0),
+            SimpleNamespace(profit_loss=1.0),
+        ]
+        db.query.side_effect = None
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
+            mixed
+        )
+        extra = {"breakers_activated": [], "reasons": []}
+        await auto._check_consecutive_losses(db, extra)
+        assert extra["breakers_activated"] == []
 
     db_ok = MagicMock()
     db_ok.query.return_value.filter.return_value.scalar.return_value = 0.0

@@ -320,3 +320,36 @@ def test_metricas_de_breakers_expuestas_en_prometheus(client, cb_no_cooldown):
     assert "breaker_opens_total" in body
     assert "breaker_any_open" in body
     assert "emergency_stop_active" in body
+
+
+async def test_metrics_scrape_sets_breaker_any_open_when_si_open(
+    client, cb_no_cooldown
+):
+    """Grafana CEO lee breaker_any_open en GET /metrics, no en /breakers/status."""
+    from app.core.metrics import breaker_any_open
+
+    breaker_any_open.set(0)
+    await cb_no_cooldown.activate_breaker(
+        "system_integrity", "Demasiadas pérdidas consecutivas: 5"
+    )
+
+    with patch(
+        "app.core.breaker_visibility.get_shared_breakers",
+        return_value=cb_no_cooldown,
+    ), patch("app.core.obs_gauges.publish_obs_gauges"):
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert breaker_any_open._value.get() == 1
+    assert "breaker_any_open" in response.text
+
+
+async def test_metrics_scrape_survives_visibility_errors(client, cb_no_cooldown):
+    with patch(
+        "app.core.breaker_visibility.get_breaker_visibility_snapshot",
+        side_effect=RuntimeError("visibility boom"),
+    ), patch("app.core.obs_gauges.publish_obs_gauges"):
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "text/plain" in (response.headers.get("content-type") or "")

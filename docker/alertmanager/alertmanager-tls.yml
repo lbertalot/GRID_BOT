@@ -10,6 +10,14 @@ route:
   receiver: 'web.hook'
   routes:
     - match:
+        component: postgres
+      receiver: 'web.hook'
+      continue: false
+    - match:
+        component: celery
+      receiver: 'web.hook'
+      continue: false
+    - match:
         severity: critical
       receiver: 'telegram.critical'
       continue: true

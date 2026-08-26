@@ -132,6 +132,15 @@ async def lifespan(app: FastAPI):
             # Conectar componentes entre sí
             integrity_monitor.set_components(balance_validator, operation_tracker)
 
+            # Seed gauges Prometheus ya en arranque (loops periódicos OFF → sin
+            # esto el panel "Integrity scores" queda No data hasta un check on-demand).
+            try:
+                from app.core.metrics import publish_integrity_score_gauges
+
+                publish_integrity_score_gauges(default=100.0)
+            except Exception as seed_exc:
+                logger.warning("No se pudieron seedear integrity_score gauges: %s", seed_exc)
+
             # NOTA: Los loops de integridad (balance_validator, integrity_monitor)
             # hacen llamadas síncronas bloqueantes a Binance API (get_account_info,
             # get_symbol_price) que bloquean el event loop de Uvicorn. Se mantienen
@@ -176,6 +185,24 @@ async def lifespan(app: FastAPI):
 
                     summary = app_breakers.get_all_breakers_status()
                     active_breakers_total.set(float(summary.get("total_active", 0)))
+                except Exception:
+                    pass
+                try:
+                    # Re-publicar scores en memoria (sin I/O Binance) para scrape.
+                    from app.core.metrics import publish_integrity_score_gauges
+
+                    _im = integrity_monitor
+                    if _im is not None:
+                        publish_integrity_score_gauges(
+                            overall=getattr(_im, "overall_integrity_score", 100.0),
+                            balance=getattr(_im, "balance_integrity_score", 100.0),
+                            operation=getattr(
+                                _im, "operation_integrity_score", 100.0
+                            ),
+                            system=getattr(_im, "system_integrity_score", 100.0),
+                        )
+                    else:
+                        publish_integrity_score_gauges(default=100.0)
                 except Exception:
                     pass
                 _time.sleep(60)

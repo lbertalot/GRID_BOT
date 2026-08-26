@@ -56,6 +56,8 @@ Cuando se implemente automatización, enlazar aquí el nombre de la métrica o e
 2. Actualizar **whitelist** en el exchange con la nueva IP **antes** de reanudar órdenes.
 3. Re-ejecutar checklist §3 y registrar nueva IP en §5.
 
+**Parche NAT residencial (paper L0):** si Telegram dispara `🔴 Binance no acepta esta conexión`, usar skill `trading-binance-ip-allowlist` / [`Docs/engineering/runbook-binance-ip-allowlist-browser.md`](../../Docs/engineering/runbook-binance-ip-allowlist-browser.md). 2FA humano. **PROMOTE_LIVE: NO.** No resetear `system_integrity` si el reason es PnL.
+
 ## 8. Referencias
 
 - `AGENTS.md` — stack y secretos críticos.

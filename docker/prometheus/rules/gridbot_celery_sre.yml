@@ -1,0 +1,51 @@
+groups:
+  - name: gridbot_celery_sre
+    interval: 30s
+    rules:
+      - alert: GridbotCeleryScrapeDown
+        expr: up{job="gridbot-celery"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: celery
+        annotations:
+          summary: "Flower scrape caído (job gridbot-celery)"
+          description: "Prometheus no scrapea flower:5555/metrics."
+
+      - alert: GridbotCeleryWorkersZero
+        expr: (sum(flower_worker_online{job="gridbot-celery"} == 1) or vector(0)) == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: celery
+        annotations:
+          summary: "0 Celery workers online"
+          description: "Ningún worker con flower_worker_online=1."
+
+      - alert: GridbotCeleryFailureRateHigh
+        expr: |
+          (
+            sum(increase(flower_events_total{job="gridbot-celery", type="task-failed"}[1h]))
+            /
+            clamp_min(
+              sum(increase(flower_events_total{job="gridbot-celery", type=~"task-succeeded|task-failed"}[1h])),
+              1
+            )
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: celery
+        annotations:
+          summary: "Failure rate Celery >5% (1h)"
+          description: "Revisar task-failed en Flower; paper-only."
+
+      - alert: GridbotCeleryQueueBacklog
+        expr: max(redis_key_size{job="redis", key=~"celery|low"} or redis_list_length{job="redis", key=~"celery|low"} or vector(0)) > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: celery
+        annotations:
+          summary: "Cola Redis Celery >50"
+          description: "Backlog en listas celery/low (redis_exporter CHECK_KEYS)."

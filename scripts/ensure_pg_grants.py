@@ -141,6 +141,15 @@ def main() -> int:
             except Exception as e:
                 print(f"⚠️  GRANT griduser TO gridbot: {e}")
 
+            try:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
+                print("✅ pg_stat_statements disponible (E-OBS-PG-SRE)")
+            except Exception as e:
+                print(
+                    "⚠️  pg_stat_statements: "
+                    f"{e} — requiere shared_preload_libraries y restart de db"
+                )
+
         conn.close()
     except Exception as e:
         print(f"❌ Error conectando a Postgres: {e}", file=sys.stderr)

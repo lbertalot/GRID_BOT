@@ -1,469 +1,1040 @@
 {
+  "annotations": {
+    "list": []
+  },
+  "description": "E-OBS-CELERY — Flower + Redis broker. Paper-only. Datasource uid=prometheus · job=gridbot-celery. No es tear de PnL ni live gate.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
   "id": null,
-  "uid": "gridbot-celery",
-  "title": "GridBot · Celery & Flower",
-  "tags": ["gridbot", "celery", "flower", "workers"],
-  "timezone": "browser",
-  "schemaVersion": 38,
-  "version": 1,
-  "refresh": "30s",
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "templating": {
-    "list": [
-      {
-        "name": "worker",
-        "label": "Worker",
-        "type": "query",
-        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-        "query": "label_values(flower_worker_online, worker)",
-        "refresh": 2,
-        "includeAll": true,
-        "multi": true,
-        "current": {"selected": true, "text": "All", "value": "$__all"}
-      },
-      {
-        "name": "task",
-        "label": "Task",
-        "type": "query",
-        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-        "query": "label_values(flower_events_total, task)",
-        "refresh": 2,
-        "includeAll": true,
-        "multi": true,
-        "current": {"selected": true, "text": "All", "value": "$__all"}
-      }
-    ]
-  },
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Health SRE",
+      "type": "link",
+      "url": "/d/gridbot-health-sre"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Vista CEO",
+      "type": "link",
+      "url": "/d/gridbot-ceo-auto"
+    }
+  ],
+  "liveNow": true,
   "panels": [
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Workers online",
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
-        {
-          "expr": "sum(flower_worker_online)",
-          "legendFormat": "online",
-          "refId": "A"
-        }
-      ],
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "Fila 1 — Golden signals",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Workers vivos (flower_worker_online=1). Rojo = 0 workers.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "green", "value": 1}
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           },
           "unit": "short"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
-    },
-    {
-      "id": 2,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Workers online",
       "type": "stat",
-      "title": "Tasks ejecutándose ahora",
-      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
       "targets": [
         {
-          "expr": "sum(flower_worker_number_of_currently_executing_tasks{worker=~\"$worker\"})",
-          "legendFormat": "running",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(flower_worker_online{job=\"gridbot-celery\", worker=~\"$worker\"} == 1) or vector(0)",
+          "legendFormat": "online",
           "refId": "A"
         }
-      ],
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Tasks en ejecución ahora en workers filtrados.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 5},
-              {"color": "red", "value": 20}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
             ]
           },
           "unit": "short"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "center",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Tasks success / 5m",
-      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
-        {
-          "expr": "sum(increase(flower_events_total{type=\"task-succeeded\", worker=~\"$worker\", task=~\"$task\"}[5m]))",
-          "legendFormat": "succeeded",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         }
       },
+      "title": "Tasks ejecutándose ahora",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(flower_worker_number_of_currently_executing_tasks{job=\"gridbot-celery\", worker=~\"$worker\"}) or vector(0)",
+          "legendFormat": "running",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Succeeded en ventana 5m (increase).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
-    },
-    {
-      "id": 4,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Tasks success / 5m",
       "type": "stat",
-      "title": "Tasks failed / 1h",
-      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
       "targets": [
         {
-          "expr": "sum(increase(flower_events_total{type=\"task-failed\", worker=~\"$worker\", task=~\"$task\"}[1h]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(flower_events_total{job=\"gridbot-celery\", type=\"task-succeeded\", worker=~\"$worker\", task=~\"$task\"}[5m])) or on() vector(0))",
+          "legendFormat": "succeeded",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Failed en 1h. Amarillo ≥1 · rojo ≥10.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Tasks failed / 1h",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(flower_events_total{job=\"gridbot-celery\", type=\"task-failed\", worker=~\"$worker\", task=~\"$task\"}[1h])) or on() vector(0))",
           "legendFormat": "failed",
           "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 1},
-              {"color": "red", "value": 10}
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
+      ]
     },
     {
-      "id": 5,
-      "type": "stat",
-      "title": "Tasks retried / 1h",
-      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
-        {
-          "expr": "sum(increase(flower_events_total{type=\"task-retried\", worker=~\"$worker\", task=~\"$task\"}[1h]))",
-          "legendFormat": "retried",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 1},
-              {"color": "orange", "value": 10}
-            ]
-          },
-          "unit": "short"
-        }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
-    },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "Success rate 1h",
-      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
-        {
-          "expr": "(sum(increase(flower_events_total{type=\"task-succeeded\"}[1h])) / clamp_min(sum(increase(flower_events_total{type=~\"task-succeeded|task-failed\"}[1h])), 1)) * 100",
-          "legendFormat": "success %",
-          "refId": "A"
-        }
-      ],
+      "description": "% fallos 1h = failed / (succeeded+failed). Rojo >5%.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "yellow", "value": 95},
-              {"color": "green", "value": 99}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           },
           "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
+          "decimals": 1
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 5,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      }
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Throughput por task (events/s, 5m rate)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Failure rate 1h",
+      "type": "stat",
       "targets": [
         {
-          "expr": "sum by (task, type) (rate(flower_events_total{worker=~\"$worker\", task=~\"$task\", type=~\"task-succeeded|task-failed|task-retried\"}[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(flower_events_total{job=\"gridbot-celery\", type=\"task-failed\", worker=~\"$worker\", task=~\"$task\"}[1h])) or on() vector(0)) / clamp_min((sum(increase(flower_events_total{job=\"gridbot-celery\", type=~\"task-succeeded|task-failed\", worker=~\"$worker\", task=~\"$task\"}[1h])) or on() vector(0)), 1)) * 100",
+          "legendFormat": "failure %",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "% éxito 1h. Rojo <95% (equivale a fallos >5%).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Success rate 1h",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(flower_events_total{job=\"gridbot-celery\", type=\"task-succeeded\", worker=~\"$worker\", task=~\"$task\"}[1h])) or on() vector(0)) / clamp_min((sum(increase(flower_events_total{job=\"gridbot-celery\", type=~\"task-succeeded|task-failed\", worker=~\"$worker\", task=~\"$task\"}[1h])) or on() vector(0)), 1)) * 100",
+          "legendFormat": "success %",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 101,
+      "title": "Fila 2 — Rendimiento y cuellos de botella",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Throughput = rate(task-succeeded|failed|retried)[5m] * 60 → tasks/min.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "smooth",
+            "showPoints": "never",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "title": "Throughput (tasks/min)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (task, type) (rate(flower_events_total{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\", type=~\"task-succeeded|task-failed|task-retried\"}[5m])) * 60",
           "legendFormat": "{{task}} · {{type}}",
           "refId": "A"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "ops",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 15,
-            "stacking": {"mode": "none", "group": "A"},
-            "showPoints": "never"
-          }
-        }
-      },
-      "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
-        "tooltip": {"mode": "multi", "sort": "desc"}
-      }
+      ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Percentiles globales de runtime (todos los tasks/workers filtrados). 3 series: p50/p95/p99.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "showPoints": "never"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
       "id": 8,
-      "type": "timeseries",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "title": "Task runtime (p50 / p95 / p99)",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, task) (rate(flower_task_runtime_seconds_bucket{worker=~\"$worker\", task=~\"$task\"}[5m])))",
-          "legendFormat": "p50 · {{task}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(flower_task_runtime_seconds_bucket{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\"}[5m])))",
+          "legendFormat": "p50 global",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, task) (rate(flower_task_runtime_seconds_bucket{worker=~\"$worker\", task=~\"$task\"}[5m])))",
-          "legendFormat": "p95 · {{task}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(flower_task_runtime_seconds_bucket{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\"}[5m])))",
+          "legendFormat": "p95 global",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, task) (rate(flower_task_runtime_seconds_bucket{worker=~\"$worker\", task=~\"$task\"}[5m])))",
-          "legendFormat": "p99 · {{task}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(flower_task_runtime_seconds_bucket{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\"}[5m])))",
+          "legendFormat": "p99 global",
           "refId": "C"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "s",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "showPoints": "never"
-          }
-        }
-      },
-      "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
-        "tooltip": {"mode": "multi", "sort": "desc"}
-      }
+      ]
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 102,
+      "title": "Fila 3 — Workers y broker Redis",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Distribución succeeded/failed/retried/revoked/rejected (1h).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 15
+      },
       "id": 9,
-      "type": "piechart",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
       "title": "Distribución de tasks (1h)",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "type": "piechart",
       "targets": [
         {
-          "expr": "sum by (type) (increase(flower_events_total{type=~\"task-succeeded|task-failed|task-retried|task-revoked|task-rejected\", worker=~\"$worker\", task=~\"$task\"}[1h]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (type) (increase(flower_events_total{job=\"gridbot-celery\", type=~\"task-succeeded|task-failed|task-retried|task-revoked|task-rejected\", worker=~\"$worker\", task=~\"$task\"}[1h]))",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
-      ],
-      "options": {
-        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
-        "pieType": "donut",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short"
-        }
-      }
+      ]
     },
     {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Prefetched tasks por worker",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
-        {
-          "expr": "sum by (worker, task) (flower_worker_prefetched_tasks{worker=~\"$worker\", task=~\"$task\"})",
-          "legendFormat": "{{worker}} · {{task}}",
-          "refId": "A"
-        }
-      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Prefetch por worker/task. Alto + cola Redis = backpressure.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
             "showPoints": "never"
-          }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 15
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
-      "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
-        "tooltip": {"mode": "multi"}
-      }
-    },
-    {
-      "id": 11,
+      "title": "Prefetched tasks por worker",
       "type": "timeseries",
-      "title": "Executing tasks por worker",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
       "targets": [
         {
-          "expr": "flower_worker_number_of_currently_executing_tasks{worker=~\"$worker\"}",
-          "legendFormat": "{{worker}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker, task) (flower_worker_prefetched_tasks{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\"})",
+          "legendFormat": "{{worker}} · {{task}}",
           "refId": "A"
         }
-      ],
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Executing ahora por worker.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
             "lineInterpolation": "stepAfter",
             "showPoints": "never"
-          }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 15
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
-      "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]},
-        "tooltip": {"mode": "multi"}
-      }
-    },
-    {
-      "id": 12,
-      "type": "table",
-      "title": "Conteo total por task y estado (1h)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "title": "Executing tasks por worker",
+      "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (task, type) (increase(flower_events_total{worker=~\"$worker\", task=~\"$task\"}[1h]))",
-          "legendFormat": "{{task}} · {{type}}",
-          "refId": "A",
-          "format": "table",
-          "instant": true
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "flower_worker_number_of_currently_executing_tasks{job=\"gridbot-celery\", worker=~\"$worker\"}",
+          "legendFormat": "{{worker}}",
+          "refId": "A"
         }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {"Time": true, "__name__": true, "instance": true, "job": true},
-            "renameByName": {"Value": "count (1h)"}
-          }
-        }
-      ],
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Conteo 1h por task/estado. Color de count (1h) heredado del campo type.",
       "fieldConfig": {
         "defaults": {
-          "custom": {"align": "left"}
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 0
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "count (1h)"},
+            "matcher": {
+              "id": "byName",
+              "options": "count (1h)"
+            },
             "properties": [
-              {"id": "custom.align", "value": "right"},
-              {"id": "custom.cellOptions", "value": {"type": "color-background", "mode": "gradient"}},
-              {"id": "color", "value": {"mode": "continuous-GrYlRd"}}
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "transparent",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.colorBackgroundApplyFromField",
+                "value": "type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "pattern": ".*failed.*",
+                      "result": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    },
+                    "type": "regex"
+                  },
+                  {
+                    "options": {
+                      "pattern": ".*succeeded.*",
+                      "result": {
+                        "color": "green",
+                        "index": 1
+                      }
+                    },
+                    "type": "regex"
+                  },
+                  {
+                    "options": {
+                      "pattern": ".*retried.*",
+                      "result": {
+                        "color": "yellow",
+                        "index": 2
+                      }
+                    },
+                    "type": "regex"
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "transparent",
+                  "mode": "fixed"
+                }
+              }
             ]
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 12,
       "options": {
         "showHeader": true,
-        "sortBy": [{"displayName": "count (1h)", "desc": true}]
-      }
-    },
-    {
-      "id": 13,
-      "type": "timeseries",
-      "title": "Broker Redis · longitud de la cola (celery)",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
-      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
-      "targets": [
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "count (1h)"
+          }
+        ]
+      },
+      "title": "Conteo total por task y estado (1h)",
+      "transformations": [
         {
-          "expr": "redis_list_length{key=\"celery\"}",
-          "legendFormat": "celery queue",
-          "refId": "A"
-        },
-        {
-          "expr": "redis_list_length{key=~\"celery.*\"}",
-          "legendFormat": "{{key}}",
-          "refId": "B"
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {
+              "Value": "count (1h)"
+            }
+          }
         }
       ],
+      "type": "table",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum by (task, type) (increase(flower_events_total{job=\"gridbot-celery\", worker=~\"$worker\", task=~\"$task\"}[1h])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{task}} · {{type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "LLEN de colas Celery vía redis_exporter (REDIS_EXPORTER_CHECK_KEYS). Flower no expone queue depth fiable. Rojo ≥50.",
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
-          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 15,
             "showPoints": "never"
-          }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
-      "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"},
-        "tooltip": {"mode": "multi"}
-      }
+      "title": "Broker Redis · longitud de cola (celery/low)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "redis_key_size{job=\"redis\", key=~\"celery|low\"} or redis_list_length{job=\"redis\", key=~\"celery|low\"}",
+          "legendFormat": "{{key}}",
+          "refId": "A"
+        }
+      ]
     }
-  ]
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": [
+    "gridbot",
+    "celery",
+    "flower",
+    "workers",
+    "paper"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(flower_worker_online{job=\"gridbot-celery\"}, worker)",
+        "includeAll": true,
+        "label": "Worker",
+        "multi": true,
+        "name": "worker",
+        "query": {
+          "query": "label_values(flower_worker_online{job=\"gridbot-celery\"}, worker)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(flower_events_total{job=\"gridbot-celery\"}, task)",
+        "includeAll": true,
+        "label": "Task",
+        "multi": true,
+        "name": "task",
+        "query": {
+          "query": "label_values(flower_events_total{job=\"gridbot-celery\"}, task)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "GridBot · Celery & Flower",
+  "uid": "gridbot-celery",
+  "version": 3
 }

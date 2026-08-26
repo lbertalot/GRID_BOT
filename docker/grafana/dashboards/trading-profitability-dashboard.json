@@ -15,11 +15,27 @@
       }
     ]
   },
+  "description": "Gauges ops de PnL/ROI (profit_total_usdt, roi_*). NO es SoT paper ni tear-sheet Capa A. Para equity SoT usar /d/gridbot-ceo-auto. Paper-only. PROMOTE_LIVE: NO.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "icon": "dashboard",
+      "keepTime": true,
+      "title": "Vista CEO (SoT paper)",
+      "type": "link",
+      "url": "/d/gridbot-ceo-auto"
+    },
+    {
+      "icon": "dashboard",
+      "keepTime": true,
+      "title": "Health SRE",
+      "type": "link",
+      "url": "/d/gridbot-health-sre"
+    }
+  ],
   "navigation": [
     {
       "type": "external_link",
@@ -87,7 +103,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_total_usdt{strategy=\"grid\"}",
+          "expr": "profit_total_usdt{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -158,7 +174,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "roi_daily_percent{strategy=\"grid\"}",
+          "expr": "roi_daily_percent{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -221,7 +237,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "profit_daily_usdt{strategy=\"grid\"}",
+          "expr": "profit_daily_usdt{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -235,28 +251,56 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
           "unit": "currencyUSD"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
       "id": 13,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "portfolio_change_usdt{strategy=\"grid\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "portfolio_change_usdt{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -339,7 +383,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "portfolio_total_value_usdt{strategy=\"grid\"}",
+          "expr": "portfolio_total_value_usdt{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -366,15 +410,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "decimals": 0
         },
         "overrides": []
       },
@@ -406,7 +447,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(trades_executed_total{strategy=\"grid\"})",
+          "expr": "sum(trades_executed_total{job=\"gridbot-api\",strategy=\"grid\"}) or on() vector(0)",
           "refId": "A"
         }
       ],
@@ -473,7 +514,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "time() - bot_last_execution_timestamp{strategy=\"grid\"}",
+          "expr": "time() - bot_last_execution_timestamp{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -535,7 +576,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(bot_errors_total{strategy=\"grid\"}) or vector(0)",
+          "expr": "sum(bot_errors_total{job=\"gridbot-api\",strategy=\"grid\"}) or vector(0)",
           "refId": "A"
         }
       ],
@@ -543,13 +584,62 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 24},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 24
+      },
       "id": 12,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
       "targets": [
-        {"expr": "active_breakers_total", "refId": "A"}
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "active_breakers_total{job=\"gridbot-api\"} or on() vector(0)",
+          "refId": "A"
+        }
       ],
       "title": "⛔ Breakers activos",
       "type": "stat"
@@ -614,7 +704,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "trades_success_rate{strategy=\"grid\"}",
+          "expr": "trades_success_rate{job=\"gridbot-api\",strategy=\"grid\"}",
           "refId": "A"
         }
       ],
@@ -622,12 +712,43 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 32},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 32
+      },
       "id": 14,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "time() - cycle_phase_timestamp{phase=\"evaluation\"}", "refId": "A"}],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "time() - cycle_phase_timestamp{job=\"gridbot-api\", phase=\"evaluation\"}",
+          "refId": "A"
+        }
+      ],
       "title": "⏱️ Segundos desde última evaluación",
       "type": "stat"
     },
@@ -854,7 +975,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "time() - bot_last_execution_timestamp",
+          "expr": "time() - bot_last_execution_timestamp{job=\"gridbot-api\"}",
           "legendFormat": "Tiempo desde última ejecución",
           "refId": "A"
         }
@@ -867,9 +988,11 @@
   "schemaVersion": 38,
   "style": "dark",
   "tags": [
+    "gridbot",
+    "paper",
     "trading",
     "profitability",
-    "user-friendly"
+    "defer"
   ],
   "templating": {
     "list": []
@@ -880,8 +1003,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "💰 Rentabilidad del Bot de Trading",
+  "title": "Rentabilidad del Bot (ops — no SoT paper)",
   "uid": "trading-profitability",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

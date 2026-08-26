@@ -35,6 +35,7 @@
 | Drift skip | `_BROKEN_PREEXISTING_TEST_FILES` | deuda; no ampliar | No |
 | Live | Órdenes reales / FORCE_REAL_MODE | **Nunca en CI** | Nunca auto |
 | Unit S-COV-70 | Archivos CI <70% → ≥70% (branch aislada) | `tests/unit/test_cov_70_*.py` | Sí (calidad) |
+| Unit E-SELL-CLIP | SELL paper residual ≤ position; no abortar por piso 20 | `tests/test_paper_sell_clip_residual.py` | Sí (L0) |
 
 ## Comando paper-safe (orientativo)
 

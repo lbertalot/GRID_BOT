@@ -69,6 +69,8 @@ def mgr(paper_env):
 
 @pytest.fixture(autouse=True)
 def _reset_ic():
+    from app.core.paper_equity_ledger import reset_paper_telemetry
+
     reset_inventory_control_guard(
         IcControlsConfig(
             enabled_ic1=True,
@@ -78,8 +80,10 @@ def _reset_ic():
             deployed_capital=Decimal("200"),
         )
     )
+    reset_paper_telemetry()
     yield
     reset_inventory_control_guard()
+    reset_paper_telemetry()
 
 
 # ── _record_paper_fill ──────────────────────────────────────────────────────
@@ -205,7 +209,37 @@ async def test_execute_trade_buy_ic_error_fail_closed_paper(mgr, paper_env):
 
 
 @pytest.mark.asyncio
-async def test_execute_trade_paper_happy_path(mgr, paper_env):
+async def test_execute_trade_buy_observe_passes_equity_when_series_available(
+    mgr, paper_env
+):
+    """P0-A: observe BUY recibe equity_mtm + peak si la serie paper ya está hidratada."""
+    from app.core.paper_equity_ledger import PaperEquitySeries
+    from app.core import paper_equity_ledger as pel
+
+    series = PaperEquitySeries()
+    series.record(Decimal("1000"))
+    series.record(Decimal("990"))
+    pel._series = series
+
+    captured: dict = {}
+
+    def _observe(**kwargs):
+        captured.update(kwargs)
+        return MagicMock(ic1_active=False, ic2_should_flatten=False, events=())
+
+    guard = reset_inventory_control_guard(
+        IcControlsConfig(range_floor=Decimal("1826.92"), deployed_capital=Decimal("200"))
+    )
+    with (
+        patch.object(guard, "observe", side_effect=_observe),
+        patch.object(mgr, "_place_order", AsyncMock(return_value=None)),
+    ):
+        await mgr._execute_trade("ETHUSDT", "BUY", 0.01, 1900.0)
+
+    assert captured.get("mid") == 1900.0
+    assert captured.get("equity_mtm") == Decimal("990")
+    assert captured.get("peak_equity") == Decimal("1000")
+    assert captured.get("enforce") is False
     reset_inventory_control_guard(
         IcControlsConfig(range_floor=Decimal("1826.92"), deployed_capital=Decimal("200"))
     )

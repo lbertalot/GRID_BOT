@@ -39,6 +39,14 @@ def test_window_day_number_anchor():
     assert window_day_number(when2, anchor_date="2026-08-06") == 2
 
 
+def test_window_day_number_t0_canonical_2026_08_15(monkeypatch):
+    monkeypatch.delenv("DESK_WINDOW_DAY0_ANCHOR", raising=False)
+    t0 = datetime(2026, 8, 15, 0, 0, tzinfo=timezone.utc)
+    assert window_day_number(t0) == 1
+    d2 = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    assert window_day_number(d2) == 2
+
+
 def test_merge_global_status_worst_wins():
     assert merge_global_status([STATUS_ON, "AT_RISK"]) == "AT_RISK"
     assert merge_global_status([STATUS_ON, STATUS_OFF, "AT_RISK"]) == STATUS_OFF
@@ -72,9 +80,9 @@ def test_collect_on_track_paper_fresh_sample():
     assert by["SEC"].status == STATUS_ON
     assert by["MM"].status == STATUS_ON
     assert by["BE"].status == STATUS_ON
-    assert "Pase a Live: ❌ NO" in d.ceo_digest_text()
-    assert "Reporte CEO" in d.full_telegram_payload()
-    assert "Equity Actual:" in d.ceo_digest_text()
+    assert "Dinero real" in d.ceo_digest_text()
+    assert "Cómo va la prueba" in d.full_telegram_payload()
+    assert "Balance (ensayo):" in d.ceo_digest_text()
 
 
 def test_ceo_message_at_risk_format():
@@ -98,17 +106,17 @@ def test_ceo_message_at_risk_format():
         expected_hash=HASH,
     )
     text = d.ceo_digest_text()
-    assert "Reporte CEO | Día 1/30 (11:05Z)" in text
-    assert "Modo: Paper Trading | Pase a Live: ❌ NO" in text
-    assert "Equity Actual: 1000" in text
-    assert "Variación: 0.00%" in text
-    assert "EN RIESGO (AT_RISK)" in text
-    assert "RISK" in text
-    assert "breakers" in text.lower() or "breaker" in text.lower()
-    assert "Resto de las áreas (ON TRACK)" in text or "ON TRACK" in text
-    assert "Backend registró" in text
-    assert "cierres diarios" in text
-    assert "PROMOTE_LIVE" not in text or "❌ NO" in text
+    assert "Cómo va la prueba" in text
+    assert "Día 1/30" in text
+    assert "11:05" in text
+    assert "Ensayo" in text
+    assert "Dinero real" in text
+    assert "Balance (ensayo): 1000" in text
+    assert "NARANJA" in text
+    assert "Freno de protección" in text
+    assert "AT_RISK" not in text
+    assert "Backend registró" not in text
+    assert "GET /api" not in text
 
 
 def test_collect_off_track_force_real():
@@ -237,7 +245,8 @@ def test_equity_dd_at_risk_triggers_mm_quant_and_actions():
     assert by["MM"].status == STATUS_AT
     assert by["QUANT"].status == STATUS_AT
     assert "ΔE0" in by["MM"].deviation or "E0" in by["MM"].deviation
-    assert "EN RIESGO (AT_RISK)" in d.ceo_digest_text()
+    assert "NARANJA" in d.ceo_digest_text()
+    assert "AT_RISK" not in d.ceo_digest_text()
     actions = plan_actions_for_areas(d.areas)
     codes = {a.code for a in actions}
     assert "MM" in codes and "QUANT" in codes
@@ -270,7 +279,8 @@ def test_equity_dd_off_track_at_minus_3_pct():
     assert d.global_status == STATUS_OFF
     assert by["MM"].status == STATUS_OFF
     assert by["QUANT"].status == STATUS_OFF
-    assert "FUERA DE CURSO (OFF_TRACK)" in d.ceo_digest_text()
+    assert "ROJO CAPITAL" in d.ceo_digest_text()
+    assert "OFF_TRACK" not in d.ceo_digest_text()
 
 
 def test_equity_dd_below_threshold_stays_on_track():
@@ -336,7 +346,7 @@ def test_equity_dd_pause_gate_at_minus_5_pct():
     assert "EMERGENCY_STOP" in by["MM"].next_60m
     actions = plan_actions_for_areas(d.areas)
     assert any("EMERGENCY_STOP" in a.action for a in actions)
-    assert "PROMOTE_LIVE: NO" in (format_actions_telegram(actions) or "")
+    assert format_actions_telegram(actions) is None
     # No auto-flip de flags live/emergency en el digest
     assert d.effective_mode == "paper"
 

@@ -61,6 +61,9 @@ conf_dict = {
     "task_acks_late": True,
     "task_reject_on_worker_lost": True,
     "worker_hijack_root_logger": False,
+    # Eventos para Flower (/metrics). El worker también debe arrancar con -E.
+    "worker_send_task_events": True,
+    "task_send_sent_event": True,
 }
 
 # Añadir opciones SSL si es necesario

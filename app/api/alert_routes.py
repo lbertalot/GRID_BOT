@@ -2,14 +2,22 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from datetime import datetime
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from app.services.telegram_alert import send_telegram_alert_async
 from app.db.session import SessionLocal
 from app.models.alerts import Alert
 from app.core.metrics import alerts_persisted_total, pipeline_persistence_failures_total
 from app.core.metrics import db_writes_total
+from app.core.pipeline_metrics_sidecar import record_db_write
+from app.core.telegram_ceo_copy import ceo_plain_enabled, desk_verbose_enabled, format_alertmanager_ceo
 
 router = APIRouter(prefix="/api/v1/alerts/telegram", tags=["Alerts"])
+
+
+def _ceo_telegram_message(payload: Dict[str, Any], severity: str) -> Optional[str]:
+    if ceo_plain_enabled() and not desk_verbose_enabled():
+        return format_alertmanager_ceo(payload, severity)
+    return _format_alertmanager_message(payload, severity)
 
 
 def _format_alertmanager_message(payload: Dict[str, Any], severity: str) -> str:
@@ -57,10 +65,12 @@ def _persist_alert(severity: str, message: str) -> None:
         db.commit()
         alerts_persisted_total.labels(severity=severity.lower(), status="ok").inc()
         db_writes_total.labels(table="alerts", operation="insert", status="ok").inc()
+        record_db_write(table="alerts", operation="insert", status="ok")
     except Exception:
         db.rollback()
         alerts_persisted_total.labels(severity=severity.lower(), status="error").inc()
         db_writes_total.labels(table="alerts", operation="insert", status="error").inc()
+        record_db_write(table="alerts", operation="insert", status="error")
         pipeline_persistence_failures_total.labels(
             table="alerts",
             reason="db_commit_error",
@@ -74,7 +84,16 @@ def _persist_alert(severity: str, message: str) -> None:
 async def telegram_critical_alert(request: Request) -> JSONResponse:
     try:
         payload = await request.json()
-        formatted = _format_alertmanager_message(payload, severity="crítica")
+        formatted = _ceo_telegram_message(payload, severity="crítica")
+        if formatted is None:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "accepted",
+                    "message": "CEO mute (ruido / debounce)",
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
         _persist_alert(severity="critical", message=formatted)
         asyncio.create_task(send_telegram_alert_async(formatted))
         return JSONResponse(
@@ -100,7 +119,16 @@ async def telegram_critical_alert(request: Request) -> JSONResponse:
 async def telegram_warning_alert(request: Request) -> JSONResponse:
     try:
         payload = await request.json()
-        formatted = _format_alertmanager_message(payload, severity="warning")
+        formatted = _ceo_telegram_message(payload, severity="warning")
+        if formatted is None:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "accepted",
+                    "message": "CEO mute (ruido / debounce)",
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
         _persist_alert(severity="warning", message=formatted)
         asyncio.create_task(send_telegram_alert_async(formatted))
         return JSONResponse(

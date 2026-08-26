@@ -16,6 +16,7 @@ from app.core.binance_proxy import get_binance_proxies
 from app.core.optimized_grid_manager import (
     OptimizedGridManager,
     create_optimized_grid_manager,
+    resolve_grid_config_file,
 )
 from app.services.telegram_alert import send_telegram_alert
 from app.services.min_qty_updater import (
@@ -39,8 +40,8 @@ class OptimizedGridScheduler:
     and integrating all created scripts
     """
 
-    def __init__(self, config_file: str = "grid_config_optimized.json"):
-        self.config_file = config_file
+    def __init__(self, config_file: Optional[str] = None):
+        self.config_file = config_file or resolve_grid_config_file()
         self.grid_manager: Optional[OptimizedGridManager] = None
         self.scheduler = AsyncIOScheduler()
         self.is_running = False
