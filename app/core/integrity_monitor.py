@@ -153,16 +153,28 @@ class IntegrityMonitor:
                 balance_integrity + operation_integrity + system_integrity
             ) / 3
 
-            # Publicar métricas por componente
+            # Publicar métricas por componente (Prometheus scrape /metrics)
             try:
-                integrity_score.labels(component="balance").set(balance_integrity)
-                integrity_score.labels(component="operation").set(operation_integrity)
-                integrity_score.labels(component="system").set(system_integrity)
-                integrity_score.labels(component="overall").set(
-                    self.overall_integrity_score
+                from app.core.metrics import publish_integrity_score_gauges
+
+                publish_integrity_score_gauges(
+                    overall=self.overall_integrity_score,
+                    balance=balance_integrity,
+                    operation=operation_integrity,
+                    system=system_integrity,
                 )
             except Exception:
-                pass
+                try:
+                    integrity_score.labels(component="balance").set(balance_integrity)
+                    integrity_score.labels(component="operation").set(
+                        operation_integrity
+                    )
+                    integrity_score.labels(component="system").set(system_integrity)
+                    integrity_score.labels(component="overall").set(
+                        self.overall_integrity_score
+                    )
+                except Exception:
+                    pass
 
             # 5. Actualizar métricas
             await self.update_integrity_metrics()

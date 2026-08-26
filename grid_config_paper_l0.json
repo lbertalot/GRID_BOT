@@ -19,7 +19,7 @@
     },
     "freeze_instructions": "Antes de arrancar la ventana: (1) fijar mid de ETHUSDT al precio spot del momento, (2) correr scripts/freeze_paper_l0_config.py --mid <precio>, (3) registrar config_hash en el ledger S10, (4) no editar este archivo durante la ventana.",
     "rejects": "Cualquier spacing < 40 bps o notional/nivel < 15 USD se rechaza sin correr.",
-    "frozen_at_mid": "1923.08000000"
+    "frozen_at_mid": "2459.72"
   },
   "system_config": {
     "system_ready": true,
@@ -40,11 +40,11 @@
   "ETHUSDT": {
     "symbol": "ETHUSDT",
     "is_active": true,
-    "mid_price_at_freeze": "1923.08000000",
-    "min_price": 1826.92,
-    "max_price": 2019.23,
+    "mid_price_at_freeze": "2459.72",
+    "min_price": 2336.73,
+    "max_price": 2582.7,
     "grids": 10,
-    "quantity": 0.010399,
+    "quantity": 0.0082,
     "investment_amount": 200.0,
     "notional_per_level_usd": 20.0,
     "spacing_bps": 100,

@@ -1,5 +1,9 @@
 # L0 — Parámetros freeze paper + DoD primer tick
 
+> ⚠️ **Advisory de gobernanza (2026-08-26):** se confirmó que la ejecución real de la ventana L0-A no usó estos parámetros (§1.1) desde el día 0 — ver `Docs/ops/GOVERNANCE-ADVISORY-2026-08-26-l0-freeze-not-enforced.md` y `Docs/ops/rca-pnl-dd-2026-08-20.md` §12-14. Mitigación de código ya aplicada (flag `ENABLE_DYNAMIC_GRID_RECENTER=false`). Los tear sheets de la ventana L0-A (2026-08-05/06 → 2026-08-26) **no son evidencia válida** de §1.1.
+>
+> ✅ **N10 declarado (2026-08-26 ~12:20 UTC):** nueva ventana con `mid_price_at_freeze=2459.72`, banda ±5% (min=2336.73 / max=2582.70), 100 bps / 10 niveles explícitos, `config_hash=ff6a35fc…7f5c4`. **Nuevo día 0 = 2026-08-26.** Ledger anterior archivado en `paper_telemetry/archive/n10-fix-qty-2026-08-26T1220Z/`. Detalle, evidencia de primer fill y go/no-go: `Docs/ops/rca-pnl-dd-2026-08-20.md` §16. De paso se corrigió un bug de redondeo en `scripts/freeze_paper_l0_config.py` (quantity truncaba por debajo del piso de USD 20 al aplicar el lot-step real de Binance) — ver mismo §16.2.
+
 | Campo | Valor |
 |-------|--------|
 | **Owner** | `trader-market-maker` (book `core_grid`) |

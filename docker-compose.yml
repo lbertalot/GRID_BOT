@@ -18,6 +18,16 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=5000
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U griduser -d gridbot"]
       interval: 30s
@@ -205,7 +215,7 @@ services:
       - ./monitoring_data:/app/monitoring_data
       - ./reports:/app/reports
       - ./.venv:/app/.venv
-    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2 -E
     # Celery env vars añadidas en bloque superior de environment (evitar claves duplicadas)
     healthcheck:
       test: ["CMD", "celery", "-A", "app.core.celery_app", "inspect", "ping"]
@@ -418,6 +428,7 @@ services:
     restart: always
     environment:
       - REDIS_ADDR=redis:6379
+      - REDIS_EXPORTER_CHECK_KEYS=celery,low
     depends_on:
       - redis
     networks:

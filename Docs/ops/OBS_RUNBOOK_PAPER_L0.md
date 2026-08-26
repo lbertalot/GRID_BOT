@@ -30,7 +30,9 @@ curl -sS 'http://localhost:9090/api/v1/targets' | jq '.data.activeTargets[]|{job
 curl -sS -u admin:gridbot123 'http://localhost:3000/api/search?type=dash-db' | jq '.[].title'
 ```
 
-Dashboards desk: **GridBot Health SRE (paper)** · **GridBot Paper L0** · Prometheus targets.
+Dashboards desk: **GRID_BOT · Cómo va la prueba (CEO)** `/d/gridbot-ceo-auto` · **GridBot Health SRE (paper)** · **GridBot Paper L0** · Prometheus targets.
+
+El CEO usa **Vista CEO** para seguir la prueba. Health SRE = ¿está vivo? **No** usar Rentabilidad. Ver `DASHBOARD_CEO_AUTO.md`.
 
 ---
 

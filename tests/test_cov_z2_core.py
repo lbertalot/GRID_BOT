@@ -806,7 +806,7 @@ def test_paper_trading_ledger_adapter(tmp_path, monkeypatch):
 
     ledger = PaperEquityLedger(
         initial_cash=to_money("1000"),
-        deployed_capital=to_money("200"),
+        deployed_capital=to_money("1000"),
         storage_path=tmp_path / "ledger.json",
     )
     series = PaperEquitySeries(
@@ -888,7 +888,7 @@ def test_paper_trading_ledger_adapter(tmp_path, monkeypatch):
     # missing mark for open inventory
     pts2_ledger = PaperEquityLedger(
         initial_cash=to_money("1000"),
-        deployed_capital=to_money("200"),
+        deployed_capital=to_money("1000"),
         storage_path=tmp_path / "l2.json",
     )
     pts2 = PaperTradingSystem(

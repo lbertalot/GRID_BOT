@@ -13,7 +13,7 @@ from binance.exceptions import BinanceAPIException
 import ccxt  # Fallback para validación privada
 from dotenv import load_dotenv
 
-from app.core.binance_proxy import get_binance_proxies
+from app.core.binance_proxy import get_binance_proxies, get_binance_proxy_url
 from app.core.secret_redaction import format_credential_for_log
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,29 @@ def _rate_limited_debug_skip_earn(owner: object, symbol: str) -> None:
         owner._last_invalid_symbol_ts[_key] = now_ts
 
 
+def _is_binance_ip_error(exc: BaseException) -> bool:
+    """True si Binance rechazó por IP / API-key (−2015, 451, Eligibility)."""
+    code = getattr(exc, "code", None)
+    error_str = str(exc)
+    return (
+        code == -2015
+        or code == 451
+        or "Invalid API-key, IP" in error_str
+        or "restricted location" in error_str.lower()
+        or "Eligibility" in error_str
+    )
+
+
+def _set_binance_ip_rejected(rejected: bool) -> None:
+    """Publica el gauge de estado actual. Nunca debe romper el caller."""
+    try:
+        from app.core.metrics import binance_ip_rejected
+
+        binance_ip_rejected.set(1 if rejected else 0)
+    except Exception:
+        pass
+
+
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
     """Notifica por Telegram cuando hay un problema de IP con Binance"""
     global _last_ip_alert_ts
@@ -140,30 +163,38 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
     )
 
     try:
+        from app.core.telegram_ceo_copy import ceo_plain_enabled, render_invalid_ip_telegram
         from app.services.telegram_alert import send_telegram_alert
 
-        msg = (
-            f"⚠️ Binance {error_type}\n\n"
-            f"📋 Motivo: {reason}\n"
-            f"🌐 IP pública actual: {public_ip}\n\n"
-            f"🔧 Acción requerida:\n"
-        )
-        if is_451_error:
-            msg += (
-                "• Binance bloquea conexiones desde esta región del servidor\n"
-                "• Opciones:\n"
-                "  1. Usar un servidor/VPS en región permitida\n"
-                "  2. Configurar Fixie addon en Heroku para IP estática\n"
-                "  3. Contactar a Binance para verificar elegibilidad\n"
-                f"• IP actual: {public_ip}\n"
+        if ceo_plain_enabled():
+            send_telegram_alert(
+                render_invalid_ip_telegram(
+                    public_ip, location_restricted=is_451_error
+                )
             )
         else:
-            msg += (
-                f"• Agrega la IP {public_ip} en la whitelist de Binance\n"
-                "• O desactiva la restricción de IP en la configuración de la API Key\n"
+            msg = (
+                f"⚠️ Binance {error_type}\n\n"
+                f"📋 Motivo: {reason}\n"
+                f"🌐 IP pública actual: {public_ip}\n\n"
+                f"🔧 Acción requerida:\n"
             )
-        msg += "\n📡 Endpoint para consultar IP: /ip"
-        send_telegram_alert(msg)
+            if is_451_error:
+                msg += (
+                    "• Binance bloquea conexiones desde esta región del servidor\n"
+                    "• Opciones:\n"
+                    "  1. Usar un servidor/VPS en región permitida\n"
+                    "  2. Configurar Fixie addon en Heroku para IP estática\n"
+                    "  3. Contactar a Binance para verificar elegibilidad\n"
+                    f"• IP actual: {public_ip}\n"
+                )
+            else:
+                msg += (
+                    f"• Agrega la IP {public_ip} en la whitelist de Binance\n"
+                    "• O desactiva la restricción de IP en la configuración de la API Key\n"
+                )
+            msg += "\n📡 Endpoint para consultar IP: /ip"
+            send_telegram_alert(msg)
     except Exception as e:
         logger.warning(f"No se pudo enviar alerta Telegram: {e}")
     # Registrar métrica si es posible
@@ -174,6 +205,31 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
         external_auth_failures.labels(provider="binance", reason=reason_label).inc()
     except Exception:
         pass
+
+
+def _public_binance_ping_ok() -> bool:
+    """Ping público corto. Fallback si ``Client.ping()`` está stale (sesión Celery)."""
+    try:
+        testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+        url = (
+            "https://testnet.binance.vision/api/v3/ping"
+            if testnet
+            else "https://api.binance.com/api/v3/ping"
+        )
+        kwargs: Dict = {"timeout": 4.0}
+        proxy = get_binance_proxy_url()
+        if proxy:
+            kwargs["proxy"] = proxy
+        r = httpx.get(url, **kwargs)
+        return int(getattr(r, "status_code", 0) or 0) == 200
+    except TypeError:
+        try:
+            r = httpx.get(url, timeout=4.0)
+            return int(getattr(r, "status_code", 0) or 0) == 200
+        except Exception:
+            return False
+    except Exception:
+        return False
 
 
 class BinanceClientSingleton:
@@ -244,19 +300,15 @@ class BinanceClientSingleton:
             # Verificar conexión (privado) y fallback a ping público si falla
             try:
                 account_info = self._client.get_account()
+                _set_binance_ip_rejected(False)
                 logger.info(
                     f"✅ Conexión verificada - Balances disponibles: {len(account_info['balances'])}"
                 )
             except BinanceAPIException as auth_err:
                 auth_err_str = str(auth_err)
-                is_ip_error = (
-                    getattr(auth_err, "code", None) == -2015
-                    or getattr(auth_err, "code", None) == 451
-                    or "Invalid API-key, IP" in auth_err_str
-                    or "restricted location" in auth_err_str.lower()
-                    or "Eligibility" in auth_err_str
-                )
+                is_ip_error = _is_binance_ip_error(auth_err)
                 if is_ip_error:
+                    _set_binance_ip_rejected(True)
                     _notify_invalid_ip(auth_err_str)
                 try:
                     from app.core.metrics import binance_api_errors_total
@@ -308,26 +360,35 @@ class BinanceClientSingleton:
         client = self.client
         if client is None:
             return result
-        # Check público
+        # Check público (sesión python-binance puede estar stale en Celery)
         try:
+            session = getattr(client, "session", None)
+            if session is not None and getattr(session, "timeout", None) in (None, 0):
+                try:
+                    session.timeout = 4
+                except Exception:
+                    pass
             client.ping()
             result["net_ok"] = True
-        except Exception as _:
-            result["net_ok"] = False
+        except Exception as ping_exc:
+            result["net_ok"] = _public_binance_ping_ok()
+            if result["net_ok"]:
+                logger.warning(
+                    "Client.ping() falló (%s); ping público /api/v3/ping OK",
+                    ping_exc,
+                )
+            else:
+                logger.warning("Binance net check failed: %s", ping_exc)
         # Check privado
+        ip_rejected = False
         try:
             client.get_account()
             result["auth_ok"] = True
         except BinanceAPIException as e:
             error_str = str(e)
-            is_ip_error = (
-                getattr(e, "code", None) == -2015
-                or "Invalid API-key, IP" in error_str
-                or getattr(e, "code", None) == 451
-                or "restricted location" in error_str.lower()
-                or "Eligibility" in error_str
-            )
+            is_ip_error = _is_binance_ip_error(e)
             if is_ip_error:
+                ip_rejected = True
                 _notify_invalid_ip(error_str)
             try:
                 from app.core.metrics import binance_api_errors_total
@@ -361,6 +422,10 @@ class BinanceClientSingleton:
             except Exception:
                 result["auth_ok"] = False
         result["ok"] = result["net_ok"] and result["auth_ok"]
+        if result["auth_ok"]:
+            _set_binance_ip_rejected(False)
+        elif ip_rejected:
+            _set_binance_ip_rejected(True)
         return result
 
     def get_account_info(self):
@@ -379,19 +444,16 @@ class BinanceClientSingleton:
                     "Circuito privado abierto para Binance: omitiendo get_account_info"
                 )
                 return {"balances": []}
-            return client.get_account()
+            account = client.get_account()
+            _set_binance_ip_rejected(False)
+            return account
         except BinanceAPIException as e:
             # Declaración global ya realizada arriba de este bloque
             _private_fail_count += 1
             e_str = str(e)
-            is_ip_error = (
-                getattr(e, "code", None) == -2015
-                or getattr(e, "code", None) == 451
-                or "Invalid API-key, IP" in e_str
-                or "restricted location" in e_str.lower()
-                or "Eligibility" in e_str
-            )
+            is_ip_error = _is_binance_ip_error(e)
             if is_ip_error:
+                _set_binance_ip_rejected(True)
                 _notify_invalid_ip(e_str)
             if _private_fail_count >= _fail_threshold:
                 _circuit_open_until_ts = time.time() + _circuit_open_seconds

@@ -85,6 +85,42 @@ class GridManagerConfig(BaseModel):
     max_concurrent_orders: int = Field(default=3, ge=1, le=10)
 
 
+DEFAULT_GRID_CONFIG_FILE = "grid_config_optimized.json"
+
+
+def resolve_grid_config_file() -> str:
+    """Path de config del grid: env GRID_CONFIG_FILE o optimized.json (legacy)."""
+    raw = (os.getenv("GRID_CONFIG_FILE") or DEFAULT_GRID_CONFIG_FILE).strip()
+    return raw or DEFAULT_GRID_CONFIG_FILE
+
+
+def _positive_float(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return parsed if parsed > 0 else 0.0
+
+
+def resolve_min_notional_threshold(config_data: Dict[str, Any]) -> float:
+    """Piso L0 = max(floor metadata, notional/nivel, threshold top-level). Default 10.
+
+    Freeze paper: floor 15 + nivel 20 → 20. JSON optimized sin metadata → 10.
+    """
+    meta = config_data.get("_config_metadata")
+    if not isinstance(meta, dict):
+        meta = {}
+    floor = _positive_float(meta.get("min_notional_floor_usd"))
+    level = _positive_float(meta.get("notional_per_level_usd"))
+    for _key, data in config_data.items():
+        if not isinstance(data, dict):
+            continue
+        level = max(level, _positive_float(data.get("notional_per_level_usd")))
+    top = _positive_float(config_data.get("min_notional_threshold"))
+    candidates = [x for x in (floor, level, top) if x > 0]
+    return max(candidates) if candidates else 10.0
+
+
 @dataclass
 class TradingResult:
     timestamp: datetime
@@ -579,6 +615,44 @@ class OptimizedGridManager:
 
                     # Usar la cantidad calculada (que ya incluye validaciones)
                     quantity_to_use = quantity
+                    side = str(action.get("action") or "").upper()
+                    paper_sot = False
+                    try:
+                        from app.core.paper_equity_ledger import (
+                            paper_equity_is_source_of_truth as _paper_sot,
+                        )
+
+                        paper_sot = bool(_paper_sot())
+                    except Exception:
+                        paper_sot = False
+
+                    # Paper SELL residual: clip a ledger.position antes del fund_manager.
+                    if side == "SELL":
+                        from app.core.paper_cycle_liquidity import (
+                            clip_paper_sell_quantity,
+                        )
+
+                        limits = self.asset_limits.get(symbol)
+                        step_raw = (
+                            getattr(limits, "step_size", None) if limits else None
+                        )
+                        step_dec = (
+                            Decimal(str(step_raw))
+                            if step_raw is not None and float(step_raw) > 0
+                            else None
+                        )
+                        clipped = clip_paper_sell_quantity(
+                            symbol=symbol,
+                            sizer_qty=Decimal(str(quantity_to_use)),
+                            step_size=step_dec,
+                        )
+                        quantity_to_use = float(clipped)
+                        if clipped <= 0:
+                            logger.info(
+                                "📄 %s: SELL clip qty=0 — nada que vender, skip",
+                                symbol,
+                            )
+                            continue
 
                     # Validar saldo
                     base_asset = symbol.replace("USDT", "")
@@ -586,6 +660,9 @@ class OptimizedGridManager:
 
                     # Validar requisitos de fondos usando FundManager
                     from app.services.fund_manager import fund_manager
+                    from app.core.paper_cycle_liquidity import (
+                        should_enforce_level_notional_on_sell,
+                    )
 
                     (
                         is_valid,
@@ -606,7 +683,21 @@ class OptimizedGridManager:
 
                         # Subir a min_quantity_required (min_notional) si el fund_manager lo pide
                         min_qty_req = details.get("min_quantity_required")
-                        if min_qty_req and float(min_qty_req) > quantity_to_use:
+                        skip_sell_bump = (
+                            side == "SELL"
+                            and paper_sot
+                            and min_qty_req is not None
+                            and float(min_qty_req) > quantity_to_use
+                        )
+                        if skip_sell_bump:
+                            logger.info(
+                                "📄 %s: no bump SELL a min_quantity_required=%s "
+                                "(supera clip/position %s)",
+                                symbol,
+                                min_qty_req,
+                                quantity_to_use,
+                            )
+                        elif min_qty_req and float(min_qty_req) > quantity_to_use:
                             adjusted_quantity = float(min_qty_req)
                             logger.info(
                                 f"🔄 {symbol}: Reintento con min_quantity_required={adjusted_quantity}"
@@ -632,6 +723,31 @@ class OptimizedGridManager:
                                     f"⛔ {symbol}: Sigue inválido tras bump - {message}"
                                 )
                                 logger.info(f"   📊 Detalles: {details}")
+
+                        # Cierre residual paper: piso L0 15/20 o shortage post-clip
+                        # no deben abortar el SELL de inventario ya comprado.
+                        residual_reject = (
+                            "min_notional" in details
+                            or "min_quantity_required" in details
+                            or "shortage" in details
+                        )
+                        if (
+                            not is_valid
+                            and side == "SELL"
+                            and paper_sot
+                            and quantity_to_use > 0
+                            and residual_reject
+                            and not should_enforce_level_notional_on_sell(paper=True)
+                        ):
+                            logger.info(
+                                "📄 %s: SELL residual paper — se permite cierre "
+                                "qty=%s notional≈%s (rechazo fund_manager: %s)",
+                                symbol,
+                                quantity_to_use,
+                                quantity_to_use * current_price,
+                                message,
+                            )
+                            is_valid = True
 
                         # Intentar con cantidad reducida si es posible
                         if not is_valid and "shortage" in details:
@@ -677,20 +793,46 @@ class OptimizedGridManager:
                     # Usar cantidad ajustada si es necesario
                     adjusted_quantity = details.get("quantity", quantity_to_use)
                     if adjusted_quantity and adjusted_quantity != quantity_to_use:
-                        logger.info(
-                            f"🔄 {symbol}: Ajustando cantidad de {quantity_to_use} a {adjusted_quantity}"
-                        )
-                        quantity_to_use = adjusted_quantity
-
-                        # Verificar min_notional
-                        notional_value = quantity_to_use * current_price
-                        min_notional = self.config.min_notional_threshold
-
-                        if notional_value < min_notional:
-                            logger.warning(
-                                f"⛔ {symbol}: Valor nocional insuficiente. Valor: ${notional_value:.4f}, Mínimo: ${min_notional}"
+                        if (
+                            side == "SELL"
+                            and paper_sot
+                            and float(adjusted_quantity) > quantity_to_use
+                        ):
+                            logger.info(
+                                "📄 %s: skip raise SELL qty %s → %s (no superar position)",
+                                symbol,
+                                quantity_to_use,
+                                adjusted_quantity,
                             )
-                            continue
+                        else:
+                            logger.info(
+                                f"🔄 {symbol}: Ajustando cantidad de {quantity_to_use} a {adjusted_quantity}"
+                            )
+                            quantity_to_use = adjusted_quantity
+
+                            # Verificar min_notional (piso de nivel: BUY/nuevos, no SELL paper residual)
+                            notional_value = quantity_to_use * current_price
+                            min_notional = self.config.min_notional_threshold
+
+                            if notional_value < min_notional:
+                                sell_residual_ok = (
+                                    side == "SELL"
+                                    and not should_enforce_level_notional_on_sell(
+                                        paper=paper_sot
+                                    )
+                                )
+                                if sell_residual_ok:
+                                    logger.info(
+                                        "📄 %s: SELL residual notional $%.4f < piso nivel $%s — permitiendo cierre",
+                                        symbol,
+                                        notional_value,
+                                        min_notional,
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"⛔ {symbol}: Valor nocional insuficiente. Valor: ${notional_value:.4f}, Mínimo: ${min_notional}"
+                                    )
+                                    continue
 
                     logger.info(
                         f"🚀 {symbol}: Ejecutando {action['action']} de {quantity_to_use} @ ${current_price}"
@@ -1249,9 +1391,43 @@ class OptimizedGridManager:
                     from app.core.inventory_controls import get_inventory_control_guard
 
                     guard = get_inventory_control_guard()
-                    # Actualiza IC-1 con el precio de la señal antes del gate.
+                    # Actualiza IC-1/IC-2 con el precio de la señal antes del gate.
                     if price and guard.config.range_floor is not None:
-                        guard.observe(mid=price, enforce=False)
+                        observe_kw: Dict[str, Any] = {"mid": price, "enforce": False}
+                        try:
+                            from app.core import paper_equity_ledger as pel
+                            from app.core.paper_equity_ledger import to_money
+
+                            # Solo si ya están hidratados en el proceso (no leer
+                            # paper_telemetry/ acá: el path ticker IC-2 es el snapshot).
+                            series = getattr(pel, "_series", None)
+                            ledger = getattr(pel, "_ledger", None)
+                            if series is not None:
+                                peak = series.peak_equity_usdt()
+                                if peak is not None:
+                                    observe_kw["peak_equity"] = peak
+                                if series.samples:
+                                    observe_kw["equity_mtm"] = to_money(
+                                        series.samples[-1]["equity"],
+                                        field_name="equity_mtm",
+                                    )
+                            if (
+                                "equity_mtm" not in observe_kw
+                                and ledger is not None
+                            ):
+                                symbols = ledger.symbols()
+                                sym_u = str(symbol).upper()
+                                if symbols == [sym_u]:
+                                    observe_kw["equity_mtm"] = ledger.mark_to_market(
+                                        {
+                                            sym_u: to_money(
+                                                str(price), field_name="mid"
+                                            )
+                                        }
+                                    )
+                        except Exception:
+                            pass
+                        guard.observe(**observe_kw)
                     if not guard.allows_core_buy():
                         logger.warning(
                             "[IC-WIRE] BUY bloqueado (%s %s @ %s) ic1=%s ic2=%s armed=%s",
@@ -1513,9 +1689,7 @@ async def create_optimized_grid_manager(
         grid_config = GridManagerConfig(
             assets=assets,
             update_interval=config_data.get("update_interval", 60),
-            min_notional_threshold=config_data.get(
-                "min_notional_threshold", 10.0
-            ),  # Usar 10.0 por defecto
+            min_notional_threshold=resolve_min_notional_threshold(config_data),
         )
 
         manager = OptimizedGridManager(grid_config)

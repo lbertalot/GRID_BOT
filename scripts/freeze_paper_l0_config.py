@@ -17,7 +17,7 @@ import argparse
 import hashlib
 import json
 import sys
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,7 +51,13 @@ def freeze(mid: Decimal, *, write: bool) -> dict:
     half = range_pct
     min_price = (mid * (Decimal("1") - half)).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
     max_price = (mid * (Decimal("1") + half)).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-    quantity = (per_level / mid).quantize(Decimal("0.000001"), rounding=ROUND_DOWN)
+    # Redondear HACIA ARRIBA al lot step real del exchange (ETHUSDT stepSize=0.0001,
+    # confirmado vía /api/v3/exchangeInfo). Si se redondea hacia abajo a 6 decimales
+    # (comportamiento previo), el motor vuelve a truncar al lot step en ejecución y el
+    # nocional resultante cae por debajo del piso L0 (USD 20) — bloqueando todo fill
+    # cerca del mid (ver Docs/ops/rca-pnl-dd-2026-08-20.md, hallazgo N10 2026-08-26).
+    lot_step = Decimal("0.0001")
+    quantity = (per_level / mid).quantize(lot_step, rounding=ROUND_UP)
 
     eth["mid_price_at_freeze"] = str(mid)
     eth["min_price"] = float(min_price)

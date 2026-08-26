@@ -50,6 +50,14 @@ def collect_tear_snapshot(
     """Recolecta hechos del SoT paper (sin inventar edge)."""
     root = telemetry_dir or _telemetry_dir()
     when = when or datetime.now(timezone.utc)
+    # SoT = JSON en disco. Invalidar cache in-process para no reportar A8=0
+    # fills si el worker tenía un ledger vacío en memoria (race EOD 00:45Z).
+    try:
+        from app.core.paper_equity_ledger import reset_paper_telemetry
+
+        reset_paper_telemetry()
+    except Exception:
+        pass
     led = _load_json(root / "paper_equity_ledger.json") or {}
     series = _load_json(root / "paper_equity_series.json") or {}
     samples: List[Dict[str, Any]] = list(series.get("samples") or [])

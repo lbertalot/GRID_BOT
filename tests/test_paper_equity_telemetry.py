@@ -68,7 +68,9 @@ class FakeMarkPriceFeed:
 
 @pytest.fixture
 def ledger() -> PaperEquityLedger:
-    return PaperEquityLedger(initial_cash=D("1000"), deployed_capital=D("200"))
+    # Wallet de tests de contabilidad (notional 500–1000). El cap L0-A=200
+    # vive en tests/test_paper_deployed_notional_cap.py.
+    return PaperEquityLedger(initial_cash=D("1000"), deployed_capital=D("1000"))
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +398,8 @@ def test_maxdd_relativo_al_pico_sigue_disponible():
     assert series.max_drawdown() == D("0.1")  # 990/1100 − 1
 
 
-def test_deployed_capital_viaja_en_el_snapshot(ledger):
+def test_deployed_capital_viaja_en_el_snapshot():
+    ledger = PaperEquityLedger(initial_cash=D("1000"), deployed_capital=D("200"))
     feed = FakeMarkPriceFeed({BTC: "50000"})
     series = PaperEquitySeries()
     ledger.record_buy(BTC, quantity=D("0.001"), price=D("50000"), grid_level=0)

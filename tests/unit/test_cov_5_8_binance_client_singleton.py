@@ -149,7 +149,8 @@ def test_validate_credentials_paths(monkeypatch, creds):
     s = BinanceClientSingleton.__new__(BinanceClientSingleton)
     s._initialized = True
     s._client = None
-    assert s.validate_credentials_and_connectivity()["ok"] is False
+    with patch.object(s, "_initialize_client", side_effect=RuntimeError("no-init")):
+        assert s.validate_credentials_and_connectivity()["ok"] is False
 
     fake = _fake_client()
     s._client = fake
@@ -299,6 +300,10 @@ def test_notify_invalid_ip_cooldown_and_alert(monkeypatch, creds):
         mod._notify_invalid_ip("Invalid API-key, IP")
         mod._notify_invalid_ip("Invalid API-key, IP")  # cooldown
     assert send.call_count == 1
+    body = send.call_args[0][0]
+    assert "1.2.3.4" in body
+    assert "/ip" not in body
+    assert "Dinero real: NO" in body
     assert mod._last_ip_alert_ts > 0
 
     mod._last_ip_alert_ts = 0.0
@@ -318,3 +323,28 @@ def test_get_binance_client_singleton_dummy_on_fail(monkeypatch, creds):
     assert s is not None
     assert s._client is None
     assert s.is_ready() is False
+
+
+def test_validate_net_ok_fallback_public_ping_when_client_stale(creds):
+    s = BinanceClientSingleton.__new__(BinanceClientSingleton)
+    s._initialized = True
+    fake = _fake_client()
+    fake.ping.side_effect = TimeoutError("stale-session")
+    s._client = fake
+    with patch.object(mod, "_public_binance_ping_ok", return_value=True):
+        out = s.validate_credentials_and_connectivity()
+    assert out["net_ok"] is True
+    assert out["auth_ok"] is True
+    assert out["ok"] is True
+
+
+def test_validate_net_fail_if_client_and_public_ping_down(creds):
+    s = BinanceClientSingleton.__new__(BinanceClientSingleton)
+    s._initialized = True
+    fake = _fake_client()
+    fake.ping.side_effect = TimeoutError("stale-session")
+    s._client = fake
+    with patch.object(mod, "_public_binance_ping_ok", return_value=False):
+        out = s.validate_credentials_and_connectivity()
+    assert out["net_ok"] is False
+    assert out["ok"] is False

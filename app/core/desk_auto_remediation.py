@@ -22,6 +22,11 @@ STALE_INTEGRITY_REASONS = frozenset(
 )
 
 
+def is_stale_net_auth_integrity_reason(reason: Any) -> bool:
+    """True sólo para razones net/auth stale. PnL / IC-2 / vacío → False."""
+    return str(reason or "").strip().lower() in STALE_INTEGRITY_REASONS
+
+
 def auto_remediate_enabled() -> bool:
     return os.getenv(AUTO_REMEDIATE_ENV, "true").strip().lower() in (
         "1",
@@ -110,8 +115,7 @@ def maybe_remediate_stale_system_integrity(
     # Solo auto-clear razones de net/auth conocidas (stale post-allowlist).
     # Nunca resetear breakers de trading/PnL (p.ej. pérdidas consecutivas, IC-2):
     # validate auth/net OK no implica que el riesgo de mercado haya desaparecido.
-    reason_key = si_reason.strip().lower()
-    if reason_key not in STALE_INTEGRITY_REASONS:
+    if not is_stale_net_auth_integrity_reason(si_reason):
         logger.info(
             "desk auto-remediate: refuse reason=%r (solo net/auth stale)",
             si_reason,
@@ -168,8 +172,17 @@ def maybe_remediate_stale_system_integrity(
 
 def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
     """Mensaje corto post-acción (None si no hay que avisar)."""
+    from app.core.telegram_ceo_copy import (
+        ceo_plain_enabled,
+        render_hold_auth_telegram,
+        render_hold_pnl_telegram,
+        render_remediated_telegram,
+    )
+
     if not result.get("acted"):
         if result.get("action") == "hold":
+            if ceo_plain_enabled():
+                return render_hold_auth_telegram()
             return (
                 "🛠️ DESK AUTO · HOLD\n"
                 f"system_integrity abierto; validate no OK "
@@ -178,6 +191,8 @@ def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
                 "Revisar IP allowlist Binance. PROMOTE_LIVE: NO"
             )
         if result.get("action") == "hold_trading_reason":
+            if ceo_plain_enabled():
+                return render_hold_pnl_telegram(result.get("breaker_reason"))
             return (
                 "🛠️ DESK AUTO · HOLD (no auto-clear)\n"
                 f"system_integrity por razón de trading/PnL: "
@@ -186,6 +201,8 @@ def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
                 "Owner: RISK + MM (RCA). PROMOTE_LIVE: NO · paper-only"
             )
         return None
+    if ceo_plain_enabled():
+        return render_remediated_telegram()
     return (
         "🛠️ DESK AUTO · REMEDIADO\n"
         "Reset paper-safe `system_integrity` "

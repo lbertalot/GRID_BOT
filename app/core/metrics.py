@@ -4,7 +4,7 @@ Orientado a usuarios no técnicos
 """
 
 from prometheus_client import Counter, Gauge, Histogram
-from typing import Dict
+from typing import Dict, Optional
 import time
 
 # ============================================================================
@@ -83,6 +83,31 @@ emergency_stop_active = Gauge(
 integrity_score = Gauge(
     "integrity_score", "Score de integridad (0-100) por componente", ["component"]
 )
+
+_INTEGRITY_COMPONENTS = ("overall", "balance", "operation", "system")
+
+
+def publish_integrity_score_gauges(
+    *,
+    overall: Optional[float] = None,
+    balance: Optional[float] = None,
+    operation: Optional[float] = None,
+    system: Optional[float] = None,
+    default: float = 100.0,
+) -> None:
+    """Publica gauges de integridad para scrape de Prometheus (evita paneles No data).
+
+    Paper-safe: no I/O. Si un componente no viene, usa ``default`` (arranque)
+    o el valor ya conocido en memoria del monitor.
+    """
+    values = {
+        "overall": default if overall is None else float(overall),
+        "balance": default if balance is None else float(balance),
+        "operation": default if operation is None else float(operation),
+        "system": default if system is None else float(system),
+    }
+    for component in _INTEGRITY_COMPONENTS:
+        integrity_score.labels(component=component).set(values[component])
 
 # =========================================================================
 # MÉTRICAS DE POLVO (DUST)
@@ -234,6 +259,12 @@ commission_update_failures = Counter(
 # Errores de API de Binance (códigos y fase)
 binance_api_errors_total = Counter(
     "binance_api_errors_total", "Total de errores de API de Binance", ["code", "phase"]
+)
+
+# Estado actual IP no autorizada (−2015). Gauge 0/1: no usar increase() en Grafana.
+binance_ip_rejected = Gauge(
+    "binance_ip_rejected",
+    "1 si el último validate/get_account de Binance falló por IP no autorizada (−2015), 0 si auth OK",
 )
 
 # ============================================================================
@@ -853,6 +884,25 @@ pipeline_errors_total = Counter(
     "pipeline_errors_total",
     "Total de errores por etapa y tipo",
     ["stage", "error_type"],
+)
+
+# Alias dashboard E-OBS-PIPELINE (sidecar worker → hydrate en API scrape)
+gridbot_items_processed_total = Counter(
+    "gridbot_items_processed_total",
+    "Ítems procesados por el pipeline de ingesta",
+    ["stage"],
+)
+
+gridbot_items_dropped_total = Counter(
+    "gridbot_items_dropped_total",
+    "Ítems descartados por el pipeline de ingesta",
+    ["stage", "reason"],
+)
+
+gridbot_pipeline_errors_total = Counter(
+    "gridbot_pipeline_errors_total",
+    "Errores del pipeline de ingesta por tipo",
+    ["error_type"],
 )
 
 # ============================================================================

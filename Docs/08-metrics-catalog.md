@@ -104,6 +104,7 @@
 | Métrica | Tipo | Labels | Descripción |
 |---|---|---|---|
 | `binance_api_errors_total` | Counter | `code`, `phase` | Total de errores de API de Binance |
+| `binance_ip_rejected` | Gauge | — | 1 si el último validate/get_account falló por IP no autorizada (−2015); 0 si auth OK. Semáforo CEO: no usar `increase()` |
 | `external_auth_failures_total` | Counter | `provider`, `reason` | Total de fallos de autenticación/permiso con proveedores externos |
 | `commission_update_failures_total` | Counter | `provider`, `reason` | Total de fallos al actualizar comisiones externas |
 

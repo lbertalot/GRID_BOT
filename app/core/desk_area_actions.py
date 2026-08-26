@@ -116,6 +116,10 @@ def plan_actions_for_areas(
 def format_actions_telegram(actions: List[AreaAction]) -> Optional[str]:
     if not actions:
         return None
+    from app.core.telegram_ceo_copy import ceo_plain_enabled, desk_verbose_enabled
+
+    if ceo_plain_enabled() and not desk_verbose_enabled():
+        return None
     lines = ["🛠️ DESK AUTO · ACCIONES (sin CEO)", "PROMOTE_LIVE: NO"]
     for a in actions:
         tag = "AUTO" if a.auto else "HUMANO"

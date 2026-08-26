@@ -20,6 +20,18 @@ async def prometheus_metrics():
             publish_obs_gauges()
         except Exception:
             pass
+        try:
+            from app.core.pipeline_metrics_sidecar import hydrate_pipeline_counters
+
+            hydrate_pipeline_counters()
+        except Exception:
+            pass
+        try:
+            from app.core.breaker_visibility import get_breaker_visibility_snapshot
+
+            get_breaker_visibility_snapshot()
+        except Exception:
+            pass
         # Generar métricas de Prometheus directamente
         metrics_content = generate_latest()
 

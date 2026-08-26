@@ -83,7 +83,7 @@ def test_plan_actions_risk_auto_after_remediate():
     assert len(acts) == 1
     assert acts[0].code == "RISK" and acts[0].auto is True
     msg = format_actions_telegram(acts)
-    assert msg and "DESK AUTO" in msg and "PROMOTE_LIVE: NO" in msg
+    assert msg is None
 
 
 def test_collect_snap_empty(tmp_path: Path):
@@ -94,3 +94,43 @@ def test_collect_snap_empty(tmp_path: Path):
     assert snap["n_fills"] == 0
     md = render_tear_markdown(snap)
     assert "PROMOTE_LIVE: NO" in md
+
+
+def test_a8_pass_lee_fills_de_disco_no_cache(tmp_path: Path):
+    """A8 no puede quedar FAIL si el JSON ya tiene fills (anti-race EOD)."""
+    led = {
+        "initial_cash": "1000",
+        "cash": "989.99",
+        "deployed_capital": "200",
+        "fees_total_usdt": "0.01000004",
+        "slippage_total_usdt": "0.002",
+        "realized_gross_pnl_usdt": "0",
+        "realized_net_pnl_usdt": "0",
+        "fills": [{"side": "BUY", "quantity": "0.0053"}],
+        "cycles": [{"state": "open"}],
+    }
+    series = {
+        "config_hash": "630abf63e4ff9e3a",
+        "samples": [
+            {
+                "at": "2026-08-14T18:00:00+00:00",
+                "equity": "999.94",
+                "cash": "989.99",
+                "inventory_value": "9.95",
+                "config_hash": "630abf63e4ff9e3a",
+                "daily_close_at": None,
+            }
+        ],
+    }
+    (tmp_path / "paper_equity_ledger.json").write_text(json.dumps(led), encoding="utf-8")
+    (tmp_path / "paper_equity_series.json").write_text(
+        json.dumps(series), encoding="utf-8"
+    )
+    snap = collect_tear_snapshot(
+        telemetry_dir=tmp_path,
+        when=datetime(2026, 8, 14, 18, 15, tzinfo=timezone.utc),
+    )
+    assert snap["n_fills"] == 1
+    md = render_tear_markdown(snap)
+    assert "| **A8** | PASS |" in md
+    assert "sin fills/fees" not in md

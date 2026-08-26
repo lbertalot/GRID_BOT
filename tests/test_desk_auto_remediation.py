@@ -140,7 +140,8 @@ def test_refuse_unknown_or_pnl_reason_even_if_validate_ok(paper_env, monkeypatch
     assert "consecutivas" in (r.get("breaker_reason") or "").lower()
     mock_ck.deactivate_breaker.assert_not_called()
     msg = format_remediation_telegram(r)
-    assert msg and "no auto-clear" in msg and "PROMOTE_LIVE: NO" in msg
+    assert msg and "No tenés que resetear" in msg and "Dinero real: NO" in msg
+    assert "estabilice" not in msg.lower()
 
 
 def test_refuse_empty_reason(paper_env, monkeypatch):
@@ -256,7 +257,7 @@ def test_validate_and_breaker_snapshot_helpers(paper_env, monkeypatch, mock_bina
                 "breaker_reason_before": "binance_net_fail",
                 "active_breakers_after": [],
             },
-            "REMEDIADO",
+            "Freno de conexión",
         ),
         (
             {
@@ -264,7 +265,7 @@ def test_validate_and_breaker_snapshot_helpers(paper_env, monkeypatch, mock_bina
                 "action": "hold",
                 "validate": {"auth_ok": False, "net_ok": True},
             },
-            "HOLD",
+            "Freno: no valida",
         ),
         ({"acted": False, "action": "none"}, None),
     ],
@@ -276,4 +277,4 @@ def test_format_remediation_telegram(payload, needle):
     if needle is None:
         assert msg is None
     else:
-        assert msg and needle in msg and "PROMOTE_LIVE: NO" in msg
+        assert msg and needle in msg and "Dinero real: NO" in msg

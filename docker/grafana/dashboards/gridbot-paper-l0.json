@@ -4,7 +4,30 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Vista CEO",
+      "type": "link",
+      "url": "/d/gridbot-ceo-auto"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Health SRE",
+      "type": "link",
+      "url": "/d/gridbot-health-sre"
+    }
+  ],
   "liveNow": true,
   "panels": [
     {

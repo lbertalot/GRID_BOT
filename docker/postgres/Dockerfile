@@ -21,3 +21,4 @@ COPY 01b-grafana-schema.sql   /docker-entrypoint-initdb.d/01b-grafana-schema.sql
 COPY init.sql                 /docker-entrypoint-initdb.d/02-init-gridbot.sql
 COPY 02b-gridbot-grants.sql   /docker-entrypoint-initdb.d/02b-gridbot-grants.sql
 COPY 03-gridbot-login-alias.sql /docker-entrypoint-initdb.d/03-gridbot-login-alias.sql
+COPY 04-pg-stat-statements.sql /docker-entrypoint-initdb.d/04-pg-stat-statements.sql

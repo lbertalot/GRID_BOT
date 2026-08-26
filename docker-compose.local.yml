@@ -86,7 +86,7 @@ x-app-env: &app-env
   DESK_HOURLY_STATUS_ENABLED: "true"
   # Auto-reset paper de system_integrity stale antes del digest (kill: false).
   DESK_AUTO_REMEDIATE_BREAKERS: "true"
-  DESK_WINDOW_DAY0_ANCHOR: "2026-08-06"
+  DESK_WINDOW_DAY0_ANCHOR: "2026-08-15"
   DESK_OPS_DOC_DIR: /app/Docs/ops
 
 x-app-volumes: &app-volumes
@@ -129,6 +129,18 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "${DB_PORT:-5432}:5432"
+    # E-OBS-PG-SRE: override CLI (el postgresql.conf del volumen no se regenera).
+    # Paper-only. Restart breve; no toca freeze L0 ni live.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=5000
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U griduser -d gridbot"]
       interval: 10s
@@ -242,11 +254,13 @@ services:
       <<: *app-env
       CELERYD_HIJACK_ROOT_LOGGER: "false"
     volumes: *app-volumes
+    # -E: eventos Celery para Flower (runtime / succeeded / failed).
     command: >
       celery -A app.core.celery_app worker
       --loglevel=info
       --concurrency=2
       --queues=celery,low
+      -E
     # Sin -d: el nombre del nodo Celery no siempre coincide con celery@$HOSTNAME
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping --timeout=8 || exit 1"]
@@ -420,6 +434,8 @@ services:
     restart: unless-stopped
     environment:
       REDIS_ADDR: redis://redis:6379
+      # LLEN de colas Celery (listas Redis). Flower no expone queue depth fiable.
+      REDIS_EXPORTER_CHECK_KEYS: "celery,low"
     ports:
       - "${REDIS_EXPORTER_PORT:-9121}:9121"
     depends_on:

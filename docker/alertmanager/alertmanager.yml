@@ -9,6 +9,15 @@ route:
   repeat_interval: 1h
   receiver: 'web.hook'
   routes:
+    # E-OBS-PG-SRE: DBA/ops, no Telegram CEO (ADR-005).
+    - match:
+        component: postgres
+      receiver: 'web.hook'
+      continue: false
+    - match:
+        component: celery
+      receiver: 'web.hook'
+      continue: false
     - match:
         severity: critical
       receiver: 'telegram.critical'
@@ -16,6 +25,7 @@ route:
     - match:
         severity: warning
       receiver: 'telegram.warning'
+      repeat_interval: 12h
 
 receivers:
   - name: 'web.hook'

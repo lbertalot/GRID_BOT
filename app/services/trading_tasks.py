@@ -13,7 +13,10 @@ from celery import shared_task
 from app.core.celery_app import celery_app
 import os
 
-from app.core.optimized_grid_manager import create_optimized_grid_manager
+from app.core.optimized_grid_manager import (
+    create_optimized_grid_manager,
+    resolve_grid_config_file,
+)
 from app.services.metrics_service import MetricsService
 from app.services.fund_manager import fund_manager
 from app.services.telegram_alert import send_telegram_alert
@@ -514,7 +517,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                 total_exposure = 0.0
                 try:
                     mgr = await create_optimized_grid_manager(
-                        "grid_config_optimized.json"
+                        resolve_grid_config_file()
                     )
                     balances = await _fetch_balances_with_retry(
                         mgr, retries=3, delay_seconds=1.5
@@ -559,9 +562,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                             )
                         else:
                             logger.info("[Cycle] Circuit breakers activos: []")
-                    if breakers.get("critical_mode") or (
-                        "system_integrity" in active
-                    ):
+                    if execution_blocked_by_breakers(breakers):
                         breakers_block = True
                         if newly:
                             logger.warning(f"[Cycle] Razones: {(activation_results or {}).get('reasons', [])}")
@@ -816,9 +817,7 @@ def trading_cycle_tick() -> Dict[str, Any]:
                         if hasattr(ck, "get_all_breakers_status")
                         else {}
                     )
-                    if breakers.get("critical_mode") or (
-                        "system_integrity" in breakers.get("active_breakers", [])
-                    ):
+                    if execution_blocked_by_breakers(breakers):
                         logger.warning(
                             "[Cycle] Ciclo protegido por breakers activos; sin ejecución"
                         )
@@ -851,6 +850,61 @@ def trading_cycle_tick() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[EMOJI] trading_cycle_tick error: {e}")
         return {"status": "error", "message": str(e)}
+
+
+def execution_blocked_by_breakers(breakers: Dict[str, Any]) -> bool:
+    """True si el tick no debe enviar execute_trading_cycle.
+
+    SI abierto por net/auth stale (AS-10) no bloquea: el ciclo tiene que
+    correr el ping para auto-clearear. PnL / IC-2 / critical_mode sí bloquean.
+    Paper-only. PROMOTE_LIVE: NO.
+    """
+    from app.core.desk_auto_remediation import is_stale_net_auth_integrity_reason
+
+    if breakers.get("critical_mode"):
+        return True
+    if "system_integrity" not in (breakers.get("active_breakers") or []):
+        return False
+    detail = (breakers.get("breakers") or {}).get("system_integrity") or {}
+    if is_stale_net_auth_integrity_reason(detail.get("reason")):
+        return False
+    return True
+
+
+def maybe_deactivate_stale_system_integrity(ck: Any) -> bool:
+    """AS-10: auto-clear SI sólo si la razón es net/auth stale.
+
+    Pérdidas consecutivas, IC-2 u otra razón de PnL no se tocan aunque
+    validate Binance haya pasado. Paper-only; no habilita live.
+    """
+    from app.core.desk_auto_remediation import is_stale_net_auth_integrity_reason
+
+    status = (
+        ck.get_all_breakers_status()
+        if hasattr(ck, "get_all_breakers_status")
+        else {}
+    )
+    detail = (status.get("breakers") or {}).get("system_integrity") or {}
+    active_list = status.get("active_breakers") or []
+    si_active = bool(detail.get("active")) or ("system_integrity" in active_list)
+    if not si_active:
+        return False
+    if not is_stale_net_auth_integrity_reason(detail.get("reason")):
+        logger.info(
+            "[Cycle] AS-10: no auto-clear SI reason=%r (solo net/auth stale)",
+            detail.get("reason"),
+        )
+        return False
+    deactivate = getattr(ck, "deactivate_breaker", None)
+    if deactivate is None:
+        return False
+    if asyncio.iscoroutinefunction(deactivate):
+        asyncio.run(deactivate("system_integrity"))
+    else:
+        result = deactivate("system_integrity")
+        if asyncio.isfuture(result) or asyncio.iscoroutine(result):
+            asyncio.run(result)
+    return True
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
@@ -899,9 +953,9 @@ def execute_trading_cycle() -> Dict[str, Any]:
                 except Exception:
                     pass
                 return {"status": "error", "message": "Binance auth check failed"}
-            # Auto-recovery: si pasó el check, intentar desactivar breaker de integridad de red
+            # AS-10: auto-recovery sólo si SI está stale por net/auth, nunca PnL/IC-2
             try:
-                asyncio.run(get_shared_breakers().deactivate_breaker("system_integrity"))
+                maybe_deactivate_stale_system_integrity(get_shared_breakers())
             except Exception:
                 pass
         except Exception as e:
@@ -913,7 +967,7 @@ def execute_trading_cycle() -> Dict[str, Any]:
         try:
             asyncio.set_event_loop(loop)
             manager = loop.run_until_complete(
-                create_optimized_grid_manager("grid_config_optimized.json")
+                create_optimized_grid_manager(resolve_grid_config_file())
             )
         finally:
             asyncio.set_event_loop(None)
@@ -1093,41 +1147,65 @@ def execute_trading_cycle() -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"[Cycle] No se pudo evaluar guardas previas: {e}")
 
-        # Limitar universo a ETHUSDT temporalmente y ajustar grilla a entorno actual
+        # Limitar universo a ETHUSDT temporalmente.
+        #
+        # RCA `Docs/ops/rca-pnl-dd-2026-08-20.md` (§12/§13/§14, 2026-08-26):
+        # el re-centrado dinámico de abajo (±1% del spot, 3 niveles) predata
+        # el freeze L0 (`Docs/L0_PAPER_FREEZE_PARAMS.md`, ±5%, 10 niveles,
+        # 100 bps) y lo sobreescribía en cada tick sin que el freeze lo
+        # contemplara — spacing efectivo insuficiente para cubrir el costo
+        # de 24 bps round-trip, causa raíz confirmada de dos rachas de
+        # pérdidas consecutivas (08-20, 08-26). Deshabilitado por defecto
+        # (Paso 1 de la nota de gobernanza M1); reactivar solo con decisión
+        # explícita y documentada (`ENABLE_DYNAMIC_GRID_RECENTER=true`).
         try:
             for sym, asset in manager.config.assets.items():
                 asset.is_active = sym == "ETHUSDT"
-            # Ajuste dinámico de grilla basado en precio actual (±1% del spot)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                spot = loop.run_until_complete(
-                    AsyncBinanceWrapper().get_price("ETHUSDT")
+
+            dynamic_recenter_enabled = (
+                os.getenv("ENABLE_DYNAMIC_GRID_RECENTER", "false").lower() == "true"
+            )
+            if not dynamic_recenter_enabled:
+                logger.info(
+                    "[Cycle] Grilla dinámica deshabilitada (ENABLE_DYNAMIC_GRID_RECENTER=false) "
+                    "— se usa la banda congelada del freeze (min_price/max_price/grid_levels tal "
+                    "como los carga grid_config_paper_l0.json)"
                 )
-            finally:
-                asyncio.set_event_loop(None)
-                loop.close()
-            if spot and spot > 0:
-                asset = manager.config.assets.get("ETHUSDT")
-                if asset:
-                    spot_d = Decimal(str(spot))
-                    low = float(spot_d * Decimal("0.99"))
-                    high = float(spot_d * Decimal("1.01"))
-                    asset.min_price = low
-                    asset.max_price = high
-                    # grids = int (count); grid_levels = precios de cruce
-                    n_levels = 3
-                    if not isinstance(getattr(asset, "grids", None), int) or asset.grids < 2:
-                        asset.grids = n_levels
-                    step = (high - low) / float(n_levels + 1)
-                    asset.grid_levels = [
-                        round(low + step * i, 8) for i in range(1, n_levels + 1)
-                    ]
-                    logger.info(
-                        "[Cycle] Grilla dinámica ETHUSDT spot=%s levels=%s",
-                        spot,
-                        asset.grid_levels,
+            else:
+                # Ajuste dinámico de grilla basado en precio actual (±1% del spot)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    spot = loop.run_until_complete(
+                        AsyncBinanceWrapper().get_price("ETHUSDT")
                     )
+                finally:
+                    asyncio.set_event_loop(None)
+                    loop.close()
+                if spot and spot > 0:
+                    asset = manager.config.assets.get("ETHUSDT")
+                    if asset:
+                        spot_d = Decimal(str(spot))
+                        low = float(spot_d * Decimal("0.99"))
+                        high = float(spot_d * Decimal("1.01"))
+                        asset.min_price = low
+                        asset.max_price = high
+                        # grids = int (count); grid_levels = precios de cruce
+                        n_levels = 3
+                        if (
+                            not isinstance(getattr(asset, "grids", None), int)
+                            or asset.grids < 2
+                        ):
+                            asset.grids = n_levels
+                        step = (high - low) / float(n_levels + 1)
+                        asset.grid_levels = [
+                            round(low + step * i, 8) for i in range(1, n_levels + 1)
+                        ]
+                        logger.info(
+                            "[Cycle] Grilla dinámica ETHUSDT spot=%s levels=%s",
+                            spot,
+                            asset.grid_levels,
+                        )
         except Exception as e:
             logger.warning(f"[Cycle] No se pudo ajustar universo/grilla dinámica: {e}")
 
@@ -1240,7 +1318,7 @@ def assess_risk() -> Dict[str, Any]:
         try:
             asyncio.set_event_loop(loop)
             manager = loop.run_until_complete(
-                create_optimized_grid_manager("grid_config_optimized.json")
+                create_optimized_grid_manager(resolve_grid_config_file())
             )
         finally:
             asyncio.set_event_loop(None)
@@ -1339,7 +1417,7 @@ def health_check() -> Dict[str, Any]:
         try:
             asyncio.set_event_loop(loop)
             manager = loop.run_until_complete(
-                create_optimized_grid_manager("grid_config_optimized.json")
+                create_optimized_grid_manager(resolve_grid_config_file())
             )
         finally:
             asyncio.set_event_loop(None)

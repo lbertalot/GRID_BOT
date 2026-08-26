@@ -32,6 +32,12 @@ from app.core.metrics import (
     pipeline_persistence_failures_total,
     portfolio_asset_valuation_failures_total,
 )
+from app.core.pipeline_metrics_sidecar import (
+    record_db_write,
+    record_items_dropped,
+    record_items_processed,
+    record_pipeline_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +118,7 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
             reason="binance_client_not_ready",
             table="portfolio_snapshots",
         ).inc()
+        record_items_dropped("portfolio_snapshot", "binance_client_not_ready")
         return None
 
     binance = singleton.client
@@ -126,6 +133,7 @@ def _compute_portfolio_value_sync() -> Optional[Dict]:
             reason="account_info_error",
             table="portfolio_snapshots",
         ).inc()
+        record_items_dropped("portfolio_snapshot", "account_info_error")
         return None
 
     balances = account_info.get("balances", [])
@@ -241,6 +249,10 @@ def save_portfolio_snapshot() -> Optional[PortfolioSnapshot]:
                 publish_obs_gauges(snapshot_unixtime=ts.timestamp())
         except Exception:
             pass
+        record_items_processed("portfolio_snapshot")
+        record_db_write(
+            table="portfolio_snapshots", operation="insert", status="ok"
+        )
         return snapshot
     except Exception as exc:
         db.rollback()
@@ -249,6 +261,10 @@ def save_portfolio_snapshot() -> Optional[PortfolioSnapshot]:
             table="portfolio_snapshots",
             reason="db_commit_error",
         ).inc()
+        record_pipeline_error("portfolio_snapshot", "db_commit_error")
+        record_db_write(
+            table="portfolio_snapshots", operation="insert", status="error"
+        )
         return None
     finally:
         db.close()

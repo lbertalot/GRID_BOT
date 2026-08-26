@@ -78,7 +78,15 @@ class DeskDigest:
         return "\n---\n".join(parts)
 
     def ceo_digest_text(self) -> str:
-        """Mensaje Telegram CEO (formato compacto, paper-only)."""
+        """Mensaje Telegram CEO (español llano por defecto)."""
+        from app.core.telegram_ceo_copy import ceo_plain_enabled, render_ceo_digest
+
+        if ceo_plain_enabled():
+            return render_ceo_digest(self)
+        return self._ceo_digest_text_desk()
+
+    def _ceo_digest_text_desk(self) -> str:
+        """Formato desk técnico (opt-out TELEGRAM_CEO_PLAIN=false)."""
         hhmm = self.when.astimezone(timezone.utc).strftime("%H:%M")
         eq = self.equity_last if self.equity_last is not None else "UNAVAILABLE"
         if self.equity_delta_pct is not None:
@@ -214,14 +222,14 @@ def window_day_number(
     *,
     anchor_date: Optional[str] = None,
 ) -> int:
-    """Día N/30 desde ancla UTC (default env o 2026-08-06)."""
+    """Día N/30 desde ancla UTC (default env o 2026-08-15)."""
     moment = when or _utcnow()
-    anchor = anchor_date or os.getenv(WINDOW_ANCHOR_ENV) or "2026-08-06"
+    anchor = anchor_date or os.getenv(WINDOW_ANCHOR_ENV) or "2026-08-15"
     try:
         y, m, d = (int(x) for x in anchor.split("-")[:3])
         start = datetime(y, m, d, tzinfo=timezone.utc)
     except Exception:
-        start = datetime(2026, 8, 6, tzinfo=timezone.utc)
+        start = datetime(2026, 8, 15, tzinfo=timezone.utc)
     delta = (moment.date() - start.date()).days + 1
     return max(1, min(30, delta))
 

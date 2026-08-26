@@ -24,22 +24,20 @@ groups:
 
       - alert: PaperSnapshotStale20m
         expr: |
-          (time() - portfolio_snapshot_last_unixtime) > 1200
+          (time() - max(portfolio_snapshot_last_unixtime{job="gridbot-api"} > 1000000000)) > 1200
           and on() (
-            count(portfolio_snapshot_last_unixtime) > 0
+            count(portfolio_snapshot_last_unixtime{job="gridbot-api"} > 1000000000) > 0
           )
         for: 5m
         labels:
           severity: warning
           surface: paper-l0
         annotations:
-          summary: "Snapshot portfolio >20m sin refresh"
+          summary: "Chequeo de estado de la cuenta de ensayo >20m sin actualizar"
           description: >-
-            portfolio_snapshot_last_unixtime stale. El gauge lo hidrata el
-            scrape de API (sidecar PAPER_TELEMETRY_DIR/last_portfolio_snapshot.json
-            o MAX(captured_at) en DB); si el worker persiste bien y sigue
-            firing, revisar volumen compartido / DB / SnapshotAgent Celery.
-            Equity SoT puede quedar desfasada vs ledger.
+            Solo el sistema principal (API). Flower publica unixtime=0 y no cuenta.
+            Si dispara de verdad, el valor de ensayo puede estar desfasado; el
+            equipo revisa. No resetear frenos. Dinero real: NO.
 
       - alert: PipelineHealthDegraded
         expr: |

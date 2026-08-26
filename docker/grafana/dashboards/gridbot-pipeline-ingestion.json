@@ -1,30 +1,47 @@
 {
   "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
+    "list": []
   },
+  "description": "E-OBS-PIPELINE — ingesta FastAPI + contadores gridbot_* (sidecar worker→API). job=gridbot-api. Paper-only.",
   "editable": true,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "dashboard",
+      "keepTime": true,
+      "title": "Health SRE",
+      "type": "link",
+      "url": "/d/gridbot-health-sre"
+    }
+  ],
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "API FastAPI (middleware PrometheusHTTPMiddleware)",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Rate HTTP por código. success=2xx · failure=4xx|5xx.",
       "fieldConfig": {
         "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
           "unit": "reqps"
         },
         "overrides": []
@@ -33,24 +50,36 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 1,
       "options": {
         "legend": {
           "displayMode": "table",
           "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
         {
-          "expr": "sum(rate(pipeline_api_requests_total{status=\"success\"}[5m]))",
-          "legendFormat": "api_success",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(http_requests_total{job=\"gridbot-api\", status=~\"2..\"}[5m]))",
+          "legendFormat": "success (2xx)",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(pipeline_api_requests_total{status=\"failure\"}[5m]))",
-          "legendFormat": "api_failure",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(http_requests_total{job=\"gridbot-api\", status=~\"4..|5..\"}[5m])) or vector(0)",
+          "legendFormat": "failure (4xx/5xx)",
           "refId": "B"
         }
       ],
@@ -62,8 +91,15 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "p95 global latencia HTTP FastAPI.",
       "fieldConfig": {
         "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
           "unit": "s"
         },
         "overrides": []
@@ -72,12 +108,25 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 1
       },
       "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(pipeline_api_request_latency_seconds_bucket[5m])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"gridbot-api\"}[5m])))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -86,13 +135,33 @@
       "type": "timeseries"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 101,
+      "title": "Pipeline ingesta (contadores gridbot_* vía sidecar worker)",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Ítems procesados vs descartados (ventana 15m, enteros).",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
+          "decimals": 0,
+          "unit": "short"
         },
         "overrides": []
       },
@@ -100,17 +169,34 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 10
       },
       "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
       "targets": [
         {
-          "expr": "sum(increase(pipeline_events_processed_total[15m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(gridbot_items_processed_total{job=\"gridbot-api\"}[15m])) or on() vector(0))",
           "legendFormat": "processed",
           "refId": "A"
         },
         {
-          "expr": "sum(increase(pipeline_events_dropped_total[15m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(gridbot_items_dropped_total{job=\"gridbot-api\"}[15m])) or on() vector(0))",
           "legendFormat": "dropped",
           "refId": "B"
         }
@@ -123,9 +209,17 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Escrituras DB emitidas por la app (sidecar). portfolio_snapshots cada ~15m.",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
+          "decimals": 0,
+          "unit": "short"
         },
         "overrides": []
       },
@@ -133,12 +227,25 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 10
       },
       "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
       "targets": [
         {
-          "expr": "sum(increase(db_writes_total{status=\"ok\"}[15m])) by (table)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum by (table) (increase(db_writes_total{job=\"gridbot-api\", status=\"ok\"}[15m])) or on() vector(0))",
           "legendFormat": "{{table}}",
           "refId": "A"
         }
@@ -151,37 +258,90 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Errores pipeline por tipo (15m).",
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "count (15m)"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 18
       },
       "id": 5,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "count (15m)"
+          }
+        ]
+      },
       "targets": [
         {
-          "expr": "sum(increase(pipeline_errors_total[15m])) by (error_type)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round((sum by (error_type) (increase(gridbot_pipeline_errors_total{job=\"gridbot-api\"}[15m])) or on() label_replace(vector(0), \"error_type\", \"none\", \"\", \"\")))",
+          "format": "table",
+          "instant": true,
           "legendFormat": "{{error_type}}",
           "refId": "A"
         }
       ],
       "title": "Pipeline Errors by Type (15m)",
-      "type": "timeseries"
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {
+              "Value": "count (15m)"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "style": "dark",
   "tags": [
     "gridbot",
     "pipeline",
-    "ingestion"
+    "ingestion",
+    "paper"
   ],
-  "uid": "gridbot-pipeline-ingestion",
   "templating": {
     "list": []
   },
@@ -189,7 +349,8 @@
     "from": "now-6h",
     "to": "now"
   },
-  "timezone": "",
+  "timezone": "browser",
   "title": "GridBot Pipeline Ingestion",
-  "version": 1
+  "uid": "gridbot-pipeline-ingestion",
+  "version": 2
 }

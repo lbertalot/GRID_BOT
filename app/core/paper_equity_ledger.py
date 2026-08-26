@@ -95,6 +95,10 @@ class InsufficientPaperInventory(PaperLedgerError):
     """Se intentó vender más inventario del que el ledger tiene abierto."""
 
 
+class PaperDeployedCapitalExceeded(PaperLedgerError):
+    """El notional de inventario paper superaría `deployed_capital` (mandato L0-A)."""
+
+
 # ---------------------------------------------------------------------------
 # Utilidades de dinero — Decimal obligatorio
 # ---------------------------------------------------------------------------
@@ -478,8 +482,14 @@ class PaperEquityLedger:
 
     @property
     def deployed_capital(self) -> Decimal:
-        """Denominador maestro del MaxDD (desk-policy-l0 §3.3)."""
+        """Tope de notional de inventario paper y denominador MaxDD (L0-A / desk §3.3)."""
         return self._deployed_capital
+
+    def open_inventory_notional(self) -> Decimal:
+        """Notional abierto Σ qty × buy_price (sin fees). Gate vs `deployed_capital`."""
+        return _normalize(
+            sum((c.buy_price * c.open_quantity for c in self.open_cycles()), ZERO)
+        )
 
     @property
     def fills(self) -> Tuple[PaperFill, ...]:
@@ -549,7 +559,11 @@ class PaperEquityLedger:
         executed_at: Optional[datetime] = None,
         cycle_id: Optional[str] = None,
     ) -> PaperFill:
-        """Abre un ciclo de grid y descuenta notional + fee + slippage del cash."""
+        """Abre un ciclo de grid y descuenta notional + fee + slippage del cash.
+
+        Gate L0-A: el notional de inventario abierto + el de esta compra no puede
+        superar `deployed_capital` (paper; no toca live).
+        """
         symbol = symbol.upper()
         qty = to_money(quantity, field_name="quantity")
         px = to_money(price, field_name="price")
@@ -557,6 +571,13 @@ class PaperEquityLedger:
             raise ValueError("quantity y price deben ser positivos")
 
         notional = _normalize(qty * px)
+        projected = _normalize(self.open_inventory_notional() + notional)
+        if projected > self._deployed_capital:
+            raise PaperDeployedCapitalExceeded(
+                f"inventario paper {self.open_inventory_notional()} + notional "
+                f"{notional} = {projected} supera deployed_capital "
+                f"{self._deployed_capital}"
+            )
         fee = self.cost_model.fee_usdt(notional, order_type)
         slippage = self.cost_model.slippage_usdt(notional)
         total = _normalize(notional + fee + slippage)
@@ -1241,6 +1262,68 @@ def reset_paper_telemetry() -> None:
     _series = None
 
 
+def _apply_ic_wire_on_paper_snapshot(
+    *,
+    ledger: PaperEquityLedger,
+    series: PaperEquitySeries,
+    marks: Dict[str, Decimal],
+    breakdown: Dict[str, Any],
+) -> Dict[str, Any]:
+    """IC-1/IC-2 en el path ticker real. Fail-soft: no rompe el snapshot.
+
+    Si IC-2 flatten asienta SELL, recalcula el breakdown para que A3 cierre.
+    Solo observa cuando el símbolo Core está en `marks` (el book IC es ETH L0);
+    snapshots BTC-only de telemetría no disparan flatten.
+    """
+    if not marks:
+        return breakdown
+    try:
+        from app.core.inventory_controls import (
+            evaluate_and_enforce_from_paper,
+            get_inventory_control_guard,
+            maybe_flatten_open_inventory_paper,
+        )
+
+        guard = get_inventory_control_guard()
+        core = str(guard.config.symbol or "").upper()
+        if core and core not in marks:
+            return breakdown
+
+        mid = marks.get(core) or next(iter(marks.values()))
+        equity = breakdown["equity"]
+        peak = series.peak_equity_usdt()
+        evaluate_and_enforce_from_paper(
+            mid=mid,
+            equity_mtm=equity,
+            peak_equity=peak if peak is not None else equity,
+            enforce=True,
+            guard=guard,
+        )
+        if not guard.state.flatten_pending:
+            return breakdown
+
+        def _sell(*, symbol: str, quantity, price):
+            return ledger.record_sell(
+                symbol,
+                quantity,
+                price,
+                order_type="MARKET",
+            )
+
+        positions = {sym: ledger.position(sym) for sym in ledger.symbols()}
+        fills = maybe_flatten_open_inventory_paper(
+            positions=positions,
+            marks=marks,
+            sell=_sell,
+            guard=guard,
+        )
+        if fills:
+            return ledger.equity_breakdown(marks)
+    except Exception as ic_exc:  # noqa: BLE001 — marca no debe fallar por IC
+        logger.warning("[PaperLedger] IC-WIRE observe skip: %s", ic_exc)
+    return breakdown
+
+
 def compute_paper_portfolio_value(
     *,
     ledger: Optional[PaperEquityLedger] = None,
@@ -1255,6 +1338,9 @@ def compute_paper_portfolio_value(
     la serie (detectable por el gate A2) a un equity fabricado (gate A6). Como
     efecto deseado, registra la marca en la serie de equity con su `config_hash` y
     su `deployed_capital`.
+
+    Tras la marca, observa IC-1/IC-2 (path ops ticker real). Si IC-2 flatten
+    asienta SELL, re-marca y graba la serie post-flatten (gate A3).
 
     Los `float` del payload existen sólo porque las columnas del ORM son `Float`
     (deuda técnica I-21); la contabilidad interna es íntegramente `Decimal`.
@@ -1274,6 +1360,14 @@ def compute_paper_portfolio_value(
             return None
 
     breakdown = ledger.equity_breakdown(marks)
+    if marks:
+        breakdown = _apply_ic_wire_on_paper_snapshot(
+            ledger=ledger,
+            series=target_series,
+            marks=marks,
+            breakdown=breakdown,
+        )
+
     btc_value = ZERO
     other_value = ZERO
     btc_price: Optional[Decimal] = None
@@ -1320,6 +1414,7 @@ __all__ = [
     "GridCycle",
     "InsufficientPaperBalance",
     "InsufficientPaperInventory",
+    "PaperDeployedCapitalExceeded",
     "MarkPriceFeed",
     "MarkPriceUnavailable",
     "PaperCostModel",

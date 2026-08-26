@@ -5,7 +5,7 @@ GridBot v2.5 - Sistema de protección automática
 
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -15,6 +15,74 @@ from app.core.circuit_breakers import CircuitBreakers, get_shared_breakers
 from app.core.capital_risk import daily_loss_limit_fraction
 
 logger = logging.getLogger(__name__)
+
+
+def consecutive_losses_from_closed_cycles(cycles) -> int:
+    """Racha de net_pnl < 0 desde el cierre más reciente. Paper SoT (L0)."""
+    closed = [
+        c
+        for c in cycles
+        if getattr(c, "state", None) == "closed" and getattr(c, "closed_at", None)
+    ]
+    closed.sort(key=lambda c: c.closed_at, reverse=True)
+    n = 0
+    for cycle in closed:
+        pnl = cycle.net_pnl_usdt
+        if pnl is None:
+            break
+        if pnl < 0:
+            n += 1
+            continue
+        break
+    return n
+
+
+def paper_window_loss_metrics(
+    cycles,
+    *,
+    now: datetime,
+    initial_cash,
+) -> Dict[str, float]:
+    """Pérdidas de *esta* ventana paper (ciclos cerrados), no la tabla Trade.
+
+    Baseline = initial_cash del ledger (L0-A E0=1000). Vacío → 0. Decimal hasta el float del dict legado.
+    """
+    from decimal import Decimal
+
+    baseline = Decimal(str(initial_cash))
+    if baseline <= 0:
+        baseline = Decimal("1")
+    closed = [
+        c
+        for c in cycles
+        if getattr(c, "state", None) == "closed"
+        and getattr(c, "closed_at", None)
+        and getattr(c, "net_pnl_usdt", None) is not None
+        and c.net_pnl_usdt < 0
+    ]
+
+    def _sum_since(since: Optional[datetime]):
+        total = Decimal("0")
+        for cycle in closed:
+            closed_at = cycle.closed_at
+            if closed_at.tzinfo is None and since is not None and since.tzinfo is not None:
+                closed_at = closed_at.replace(tzinfo=since.tzinfo)
+            if since is not None and closed_at < since:
+                continue
+            total += Decimal(str(cycle.net_pnl_usdt))
+        return total
+
+    total_loss = _sum_since(None)
+    daily_loss = _sum_since(now - timedelta(days=1))
+    hourly_loss = _sum_since(now - timedelta(hours=1))
+    return {
+        "total_loss_pct": float(abs(total_loss) / baseline),
+        "daily_loss_pct": float(abs(daily_loss) / baseline),
+        "hourly_loss_pct": float(abs(hourly_loss) / baseline),
+        "total_loss_usd": float(abs(total_loss)),
+        "daily_loss_usd": float(abs(daily_loss)),
+        "hourly_loss_usd": float(abs(hourly_loss)),
+    }
 
 
 class AutoCircuitBreaker:
@@ -93,6 +161,22 @@ class AutoCircuitBreaker:
     async def _calculate_loss_metrics(self, db: Session) -> Dict[str, float]:
         """Calcular métricas de pérdida desde la base de datos"""
         try:
+            try:
+                from app.core.paper_equity_ledger import (
+                    get_paper_ledger,
+                    paper_equity_is_source_of_truth,
+                )
+
+                if paper_equity_is_source_of_truth():
+                    ledger = get_paper_ledger()
+                    return paper_window_loss_metrics(
+                        ledger.closed_cycles(),
+                        now=datetime.now(timezone.utc),
+                        initial_cash=ledger.initial_cash,
+                    )
+            except Exception as paper_exc:
+                self.logger.debug("loss metrics paper SoT skip: %s", paper_exc)
+
             # Obtener baseline del portafolio
             baseline_value = 347.93  # Valor inicial del análisis
 
@@ -185,24 +269,80 @@ class AutoCircuitBreaker:
     async def _check_consecutive_losses(self, db: Session, results: Dict[str, Any]):
         """Verificar pérdidas consecutivas"""
         try:
-            # Obtener últimos trades ordenados por timestamp
-            recent_trades = (
-                db.query(Trade)
-                .filter(Trade.profit_loss.isnot(None))
-                .order_by(Trade.timestamp.desc())
-                .limit(10)
-                .all()
-            )
+            consecutive_losses = None
+            latest_closed_at = None
+            try:
+                from app.core.paper_equity_ledger import (
+                    get_paper_ledger,
+                    paper_equity_is_source_of_truth,
+                )
 
-            consecutive_losses = 0
-            for trade in recent_trades:
-                if trade.profit_loss < 0:
-                    consecutive_losses += 1
-                else:
-                    break
+                if paper_equity_is_source_of_truth():
+                    closed = get_paper_ledger().closed_cycles()
+                    consecutive_losses = consecutive_losses_from_closed_cycles(closed)
+                    closed_ats = [c.closed_at for c in closed if c.closed_at]
+                    if closed_ats:
+                        latest_closed_at = max(closed_ats)
+            except Exception as paper_exc:
+                self.logger.debug(
+                    "consecutive losses paper SoT skip: %s", paper_exc
+                )
+
+            if consecutive_losses is None:
+                recent_trades = (
+                    db.query(Trade)
+                    .filter(Trade.profit_loss.isnot(None))
+                    .order_by(Trade.timestamp.desc())
+                    .limit(10)
+                    .all()
+                )
+
+                consecutive_losses = 0
+                for trade in recent_trades:
+                    if trade.profit_loss < 0:
+                        consecutive_losses += 1
+                    else:
+                        break
+
+            if consecutive_losses < self.thresholds["max_consecutive_losses"]:
+                # Racha rota con datos frescos: cualquier override RCA vigente ya
+                # cumplió su propósito. Se limpia proactivamente para que no quede
+                # "vivo" y termine enmascarando un trip futuro no relacionado.
+                try:
+                    from app.core.breaker_override import (
+                        clear_override,
+                        get_override,
+                    )
+
+                    if get_override("system_integrity") is not None:
+                        clear_override("system_integrity")
+                        self.logger.info(
+                            "🔓 Override RCA para 'system_integrity' liberado: racha de pérdidas ya en %s (< umbral)",
+                            consecutive_losses,
+                        )
+                except Exception:  # noqa: BLE001 — nunca romper el path de trading
+                    pass
 
             if consecutive_losses >= self.thresholds["max_consecutive_losses"]:
                 reason = f"Demasiadas pérdidas consecutivas: {consecutive_losses}"
+
+                skip_activation = False
+                try:
+                    from app.core.breaker_override import check_and_consume_override
+
+                    skip_activation, _override = check_and_consume_override(
+                        "system_integrity",
+                        ledger_latest_closed_at=latest_closed_at,
+                    )
+                except Exception as override_exc:  # noqa: BLE001 — fail-soft a la lógica normal
+                    self.logger.debug(
+                        "breaker_override check skip: %s", override_exc
+                    )
+
+                if skip_activation:
+                    results["reasons"].append(f"{reason} (override RCA activo, sin reactivar)")
+                    return
+
                 await self.breakers.activate_breaker("system_integrity", reason)
                 results["breakers_activated"].append("system_integrity")
                 results["reasons"].append(reason)
