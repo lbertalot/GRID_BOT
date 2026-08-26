@@ -149,6 +149,35 @@ def resolve_last_grid_action(
         return fallback
 
 
+def resolve_last_grid_level(
+    symbol: str, *, fallback: float | None = None
+) -> float | None:
+    """Precio del último fill paper → ancla ``last_level`` (Δnivel ≥ 1).
+
+    MM 2026-08-26: sin este ancla, ``decide_grid_action`` no puede exigir
+    cruce de nivel tras BUY y vuelve a round-trips intra-nivel.
+    """
+    try:
+        from app.core.paper_equity_ledger import (
+            get_paper_ledger,
+            paper_equity_is_source_of_truth,
+        )
+
+        if not paper_equity_is_source_of_truth():
+            return fallback
+        sym = str(symbol).upper()
+        fills = [f for f in get_paper_ledger().fills if str(f.symbol).upper() == sym]
+        if not fills:
+            return fallback
+        price = getattr(fills[-1], "price", None)
+        if price is None:
+            return fallback
+        return float(price)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[paper-liq] resolve_last_grid_level falló: %s", exc)
+        return fallback
+
+
 def should_enforce_level_notional_on_sell(*, paper: bool) -> bool:
     """Piso L0 (15/20 USDT) es para BUY/nuevos niveles, no para cerrar inventario paper."""
     return not bool(paper)
