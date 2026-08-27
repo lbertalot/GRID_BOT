@@ -46,8 +46,6 @@ def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
     from app.core.telegram_ceo_copy import reset_debounce_memory
     from app.services import desk_status_tasks as mod
 
-    reset_debounce_memory()
-
     rem_result = {
         "acted": True,
         "action": "reset_system_integrity",
@@ -56,6 +54,7 @@ def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
         "active_breakers_after": [],
     }
     with (
+        patch("app.core.telegram_ceo_copy._redis_client", return_value=None),
         patch("app.core.desk_hourly_status.is_enabled", return_value=True),
         patch(
             "app.core.desk_hourly_status.build_live_digest",
@@ -67,6 +66,7 @@ def test_hourly_digest_sends_remediation_telegram(paper_env, digest_stub):
         ),
         patch.object(mod, "_telegram", return_value=True) as tg,
     ):
+        reset_debounce_memory()
         out = mod.send_desk_hourly_digest()
 
     assert out["ok"] is True
@@ -97,8 +97,6 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
     from app.core.telegram_ceo_copy import reset_debounce_memory
     from app.services import desk_status_tasks as mod
 
-    reset_debounce_memory()
-
     rem_result = {
         "acted": False,
         "action": "hold",
@@ -106,6 +104,7 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
         "validate": {"auth_ok": False, "net_ok": True},
     }
     with (
+        patch("app.core.telegram_ceo_copy._redis_client", return_value=None),
         patch("app.core.desk_hourly_status.is_enabled", return_value=True),
         patch(
             "app.core.desk_hourly_status.build_live_digest",
@@ -125,6 +124,7 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
         ),
         patch.object(mod, "_telegram", return_value=True) as tg,
     ):
+        reset_debounce_memory()
         out = mod.send_desk_eod_day_plan()
 
     assert out["ok"] is True
@@ -132,10 +132,13 @@ def test_eod_includes_remediation_fields(paper_env, digest_stub):
     assert out["path"] == "/tmp/day2.md"
     assert out["tear_path"] == "/tmp/tear-capa-a-2026-08-09.md"
     assert out["area_actions"] and out["area_actions"][0]["auto"] is False
-    # HOLD remedia + EOD CEO (sin lista ACCIONES)
+    # HOLD auth + EOD CEO. El watch SI no debe duplicar con heartbeat PnL.
     assert tg.call_count == 2
+    bodies = [str(c.args[0]) for c in tg.call_args_list]
+    assert any("Freno: no valida" in b for b in bodies)
     assert "Cierre del día" in tg.call_args_list[-1].args[0]
     assert "Dinero real" in tg.call_args_list[-1].args[0]
+    assert not any("cada hora" in b.lower() for b in bodies)
 
 
 def test_eod_disabled(paper_env):

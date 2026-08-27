@@ -73,9 +73,11 @@ def _run_auto_remediation() -> Dict[str, Any]:
                 reason=str(result.get("breaker_reason") or ""),
             )
         elif action == "hold":
+            # HOLD auth/net: el copy ya salió. Registrar estado auth para que
+            # el watch no emita heartbeat PnL (reason vacío se trata como PnL).
             watch = process_si_ceo_watch(
                 si_open=True,
-                reason=str(result.get("breaker_reason") or ""),
+                reason=str(result.get("breaker_reason") or "binance_auth_fail"),
             )
         elif result.get("acted") or action == "none":
             watch = process_si_ceo_watch(
