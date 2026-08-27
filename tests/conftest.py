@@ -440,9 +440,26 @@ def pytest_collection_modifyitems(config, items):
 try:
     from fastapi.testclient import TestClient
     from app.main import app
+    from app.core.middleware.security_hardening import RateLimitMiddleware
+
+    def _clear_app_rate_limit_windows(fastapi_app) -> None:
+        """El RateLimitMiddleware es in-memory y se comparte en toda la suite CI."""
+        node = getattr(fastapi_app, "middleware_stack", None)
+        seen: set[int] = set()
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            if isinstance(node, RateLimitMiddleware) and hasattr(node, "_windows"):
+                node._windows.clear()
+            node = getattr(node, "app", None)
+
+    @pytest.fixture(autouse=True)
+    def _reset_shared_rate_limit_windows():
+        _clear_app_rate_limit_windows(app)
+        yield
 
     @pytest.fixture
     def client():
+        _clear_app_rate_limit_windows(app)
         return TestClient(app)
 
     # Exponer en builtins para tests que referencian nombres sin importar
