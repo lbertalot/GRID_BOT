@@ -33,6 +33,11 @@ class BreakerTripRecord:
     last_activation_ts: float = 0.0
     last_activation_reason: str = ""
     activation_count: int = 0
+    # v2: faltante en registros v1 => migración conservadora en policy.
+    operational_state: Optional[str] = None
+    transitioned_at: Optional[str] = None
+    transition_reason: Optional[str] = None
+    state_version: int = 2
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -47,6 +52,10 @@ def trip_record_from_mapping(data: Dict[str, Any]) -> BreakerTripRecord:
         last_activation_ts=float(data.get("last_activation_ts") or 0.0),
         last_activation_reason=str(data.get("last_activation_reason") or ""),
         activation_count=int(data.get("activation_count") or 0),
+        operational_state=data.get("operational_state"),
+        transitioned_at=data.get("transitioned_at"),
+        transition_reason=data.get("transition_reason"),
+        state_version=int(data.get("state_version") or 1),
     )
 
 

@@ -64,7 +64,14 @@ class IntegrityGuardMiddleware(BaseHTTPMiddleware):
                             },
                         )
             except Exception:
-                # En caso de error, continuar para no derribar la API
-                pass
+                # La API puede seguir sana, pero no debe enviar una orden cuando
+                # no puede comprobar su autorización de riesgo.
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "blocked",
+                        "reason": "integrity_state_unavailable",
+                    },
+                )
 
         return await call_next(request)

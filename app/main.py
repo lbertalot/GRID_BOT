@@ -440,6 +440,7 @@ from app.api.portfolio_routes import get_portfolio_positions  # noqa: E402
 from app.api.ceo_routes import router as ceo_router  # noqa: E402
 from app.api.capital_routes import router as capital_router  # noqa: E402
 from app.api.ops_routes import router as ops_router  # noqa: E402
+from app.api.paper_positions_routes import router as paper_positions_router  # noqa: E402
 
 # /integrity/* requiere auth — estado interno de integridad financiera
 app.include_router(integrity_router, dependencies=[Depends(_require_auth)])
@@ -454,6 +455,8 @@ app.include_router(breakers_api_router)
 app.include_router(capital_risk_router)
 # /portfolio/* requiere auth — posiciones y PnL
 app.include_router(portfolio_router, dependencies=[Depends(_require_auth)])
+# /api/paper/positions requiere auth y solo expone lectura del ledger PAPER.
+app.include_router(paper_positions_router, dependencies=[Depends(_require_auth)])
 # /api/ceo/* read-only — el router resuelve su propia auth (ver CEO_DASHBOARD_PUBLIC)
 app.include_router(ceo_router)
 # /api/capital/* read-only y sin secrets — lo consume el dashboard CEO (ADR-004/ADR-005)

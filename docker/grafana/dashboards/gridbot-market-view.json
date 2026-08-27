@@ -1,0 +1,521 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "postgres", "uid": "postgres" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "#02c076",
+        "name": "Bot BUY",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  timestamp AS \"time\",\n  '▲ BUY @ ' || trim(to_char(entry_price, 'FM999999990.00'))\n    || ' · qty ' || trim(to_char(quantity, 'FM999990.0000')) AS text,\n  'BUY' AS tags\nFROM trades\nWHERE $__timeFilter(timestamp)\n  AND upper(symbol) = upper('$symbol')\n  AND upper(side) = 'BUY'\nORDER BY 1;",
+          "refId": "AnnoBuy"
+        }
+      },
+      {
+        "datasource": { "type": "postgres", "uid": "postgres" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "#cf304a",
+        "name": "Bot SELL",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  timestamp AS \"time\",\n  '▼ SELL @ ' || trim(to_char(COALESCE(exit_price, entry_price), 'FM999999990.00'))\n    || ' · qty ' || trim(to_char(quantity, 'FM999990.0000')) AS text,\n  'SELL' AS tags\nFROM trades\nWHERE $__timeFilter(timestamp)\n  AND upper(symbol) = upper('$symbol')\n  AND (\n    upper(side) = 'SELL'\n    OR (upper(side) = 'BUY' AND exit_price IS NOT NULL)\n  )\nORDER BY 1;",
+          "refId": "AnnoSell"
+        }
+      }
+    ]
+  },
+  "description": "Vista estilo Binance: OHLC real desde klines_data (API pública) + anotaciones BUY/SELL del bot (tabla trades). Paper-only.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Vista CEO",
+      "type": "link",
+      "url": "/d/gridbot-ceo-auto"
+    },
+    {
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Paper L0",
+      "type": "link",
+      "url": "/d/gridbot-paper-l0"
+    }
+  ],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Último close de klines_data (spot Binance público).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "#02c076", "value": null }]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 5, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "title": "$symbol · Precio",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT close_price::double precision AS price\nFROM klines_data\nWHERE upper(symbol) = upper('$symbol')\n  AND interval = '$candle'\nORDER BY open_time DESC\nLIMIT 1;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Δ% close ahora vs close de la vela ~24h atrás (mismo interval).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#cf304a", "value": null },
+              { "color": "#02c076", "value": 0 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 5, "x": 5, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "title": "Cambio 24h %",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH latest AS (\n  SELECT close_price::double precision AS px, open_time\n  FROM klines_data\n  WHERE upper(symbol) = upper('$symbol') AND interval = '$candle'\n  ORDER BY open_time DESC\n  LIMIT 1\n),\nref AS (\n  SELECT k.close_price::double precision AS px\n  FROM klines_data k, latest l\n  WHERE upper(k.symbol) = upper('$symbol')\n    AND k.interval = '$candle'\n    AND k.open_time <= l.open_time - interval '24 hours'\n  ORDER BY k.open_time DESC\n  LIMIT 1\n)\nSELECT\n  CASE WHEN ref.px IS NULL OR ref.px = 0 THEN NULL\n       ELSE ((latest.px / ref.px) - 1.0) * 100.0 END AS change_24h_pct\nFROM latest LEFT JOIN ref ON TRUE;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "text", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 5, "x": 10, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "title": "24h High / Low",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  max(high_price)::double precision AS high_24h,\n  min(low_price)::double precision AS low_24h\nFROM klines_data\nWHERE upper(symbol) = upper('$symbol')\n  AND interval = '$candle'\n  AND open_time >= NOW() - interval '24 hours';",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null },
+              { "color": "#f0b90b", "value": 0.000001 }
+            ]
+          },
+          "unit": "locale"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 5, "x": 15, "y": 0 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "title": "Volumen 24h (quote≈)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(sum(volume * close_price), 0)::double precision AS vol_quote_24h\nFROM klines_data\nWHERE upper(symbol) = upper('$symbol')\n  AND interval = '$candle'\n  AND open_time >= NOW() - interval '24 hours';",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null },
+              { "color": "#02c076", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 20, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "title": "Trades bot 24h",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::bigint AS trades_24h\nFROM trades\nWHERE upper(symbol) = upper('$symbol')\n  AND timestamp >= NOW() - interval '24 hours';",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Velas reales Binance (klines_data). Triángulos/marcadores = anotaciones del bot (BUY verde / SELL rojo).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 14, "w": 16, "x": 0, "y": 3 },
+      "id": 10,
+      "options": {
+        "mode": "candles",
+        "candleStyle": "candles",
+        "colorStrategy": "open-close",
+        "colors": {
+          "up": "#02c076",
+          "down": "#cf304a",
+          "flat": "#848e9c"
+        },
+        "includeAllFields": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "fields": {
+          "open": "open",
+          "high": "high",
+          "low": "low",
+          "close": "close"
+        }
+      },
+      "title": "Mercado $symbol · $candle (Binance) + decisiones bot",
+      "type": "candlestick",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  open_time AS time,\n  open_price::double precision AS open,\n  high_price::double precision AS high,\n  low_price::double precision AS low,\n  close_price::double precision AS close\nFROM klines_data\nWHERE $__timeFilter(open_time)\n  AND upper(symbol) = upper('$symbol')\n  AND interval = '$candle'\nORDER BY open_time ASC;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Historial autoritativo PAPER: aperturas y liquidaciones del ledger transaccional. Columnas fijas; BUY/SELL con color.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "inspect": false,
+            "filterable": true
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "side" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "BUY": { "color": "#02c076", "index": 0, "text": "BUY" },
+                      "SELL": { "color": "#cf304a", "index": 1, "text": "SELL" }
+                    }
+                  }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "custom.width", "value": 70 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "executed_at" },
+            "properties": [{ "id": "custom.width", "value": 160 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "price" },
+            "properties": [
+              { "id": "decimals", "value": 2 },
+              { "id": "custom.width", "value": 90 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "quantity" },
+            "properties": [
+              { "id": "decimals", "value": 4 },
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "total_usdt" },
+            "properties": [
+              { "id": "decimals", "value": 2 },
+              { "id": "custom.width", "value": 90 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "pnl_usdt" },
+            "properties": [
+              { "id": "decimals", "value": 4 },
+              { "id": "custom.width", "value": 90 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "#cf304a", "value": null },
+                    { "color": "#02c076", "value": 0 }
+                  ]
+                }
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 14, "w": 8, "x": 16, "y": 3 },
+      "id": 20,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": true, "enablePagination": false, "fields": "", "reducer": ["count"], "show": true },
+        "showHeader": true
+      },
+      "title": "Mis Trades (ledger paper · 50)",
+      "type": "table",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH executions AS (\n  SELECT\n    opened_at AS executed_at,\n    symbol,\n    'BUY' AS side,\n    buy_price AS price,\n    buy_quantity AS quantity,\n    buy_price * buy_quantity AS total_usdt,\n    NULL::numeric AS pnl_usdt\n  FROM paper_ledger_cycles\n  UNION ALL\n  SELECT\n    f.executed_at,\n    c.symbol,\n    f.side,\n    f.price,\n    f.quantity,\n    f.price * f.quantity AS total_usdt,\n    CASE WHEN f.side = 'SELL'\n      THEN (f.price - c.buy_price) * f.quantity\n      ELSE NULL::numeric END AS pnl_usdt\n  FROM paper_ledger_fills f\n  JOIN paper_ledger_cycles c ON c.cycle_id = f.cycle_id\n)\nSELECT\n  executed_at,\n  side,\n  price,\n  quantity,\n  total_usdt,\n  pnl_usdt\nFROM executions\nWHERE upper(symbol) = upper('$symbol')\n  AND $__timeFilter(executed_at)\nORDER BY executed_at DESC\nLIMIT 50;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Volumen de exchange (base asset) por vela — debajo del precio al estilo Binance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "#5E6673" },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 16, "x": 0, "y": 17 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "title": "Volumen mercado ($candle)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  open_time AS time,\n  volume::double precision AS volume\nFROM klines_data\nWHERE $__timeFilter(open_time)\n  AND upper(symbol) = upper('$symbol')\n  AND interval = '$candle'\nORDER BY open_time ASC;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "description": "Cantidad ejecutada por el bot en cada fill (no es volumen de mercado).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "#f0b90b" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 0,
+            "showPoints": "never"
+          },
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 17 },
+      "id": 12,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "title": "Qty bot / fill",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  timestamp AS time,\n  quantity::double precision AS qty\nFROM trades\nWHERE $__timeFilter(timestamp)\n  AND upper(symbol) = upper('$symbol')\nORDER BY timestamp ASC;",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["gridbot", "market", "paper", "l0", "binance-view"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "ETHUSDT", "value": "ETHUSDT" },
+        "hide": 0,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [
+          { "selected": true, "text": "ETHUSDT", "value": "ETHUSDT" },
+          { "selected": false, "text": "BTCUSDT", "value": "BTCUSDT" }
+        ],
+        "query": "ETHUSDT,BTCUSDT",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "5m", "value": "5m" },
+        "hide": 0,
+        "label": "Candle",
+        "name": "candle",
+        "options": [
+          { "selected": false, "text": "1m", "value": "1m" },
+          { "selected": true, "text": "5m", "value": "5m" },
+          { "selected": false, "text": "1h", "value": "1h" }
+        ],
+        "query": "1m,5m,1h",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": { "from": "now-3d", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "GridBot Market View",
+  "uid": "gridbot-market-view",
+  "version": 2,
+  "weekStart": ""
+}
