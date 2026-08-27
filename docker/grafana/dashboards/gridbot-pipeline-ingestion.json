@@ -351,6 +351,5 @@
   },
   "timezone": "browser",
   "title": "GridBot Pipeline Ingestion",
-  "uid": "gridbot-pipeline-ingestion",
-  "version": 2
+  "uid": "gridbot-pipeline-ingestion"
 }
