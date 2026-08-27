@@ -1,0 +1,638 @@
+{
+  "generated_at": "2026-08-26T18:38:54.608584+00:00",
+  "promote_live": "NO",
+  "cost_empirical": {
+    "ledger_path": "/app/paper_telemetry/paper_equity_ledger.json",
+    "n_closed": 19,
+    "cost_model_declared": {
+      "maker_fee_bps": "10",
+      "taker_fee_bps": "10",
+      "adverse_selection_bps": "2"
+    },
+    "bnb_discount": false,
+    "assumption": "Fees/slippage del ledger son PaperCostModel (10 bps fee + 2 bps adverse/side). No hay fills Binance reales ni descuento BNB. Slippage = supuesto declarado, no spread medido.",
+    "cost_rt_bps_mean": 23.998108078683973,
+    "cost_rt_bps_median": 24.002452202486534,
+    "move_bps_mean": -1.5766010966881807,
+    "move_bps_median": 2.0435020721111012,
+    "sum_gross": -0.060516,
+    "sum_fees": 0.7634874039999999,
+    "sum_slip": 0.1526974808,
+    "sum_net": -0.9767008848000001,
+    "edge_bps_mean": -25.574709175372156
+  },
+  "cost_empirical_sample_rows": [
+    {
+      "opened_at": "2026-08-26T12:36:37.107182+00:00",
+      "buy": 2459.86,
+      "sell": 2458.52,
+      "move_bps": -5.447464489849016,
+      "cost_bps": 23.99346304261218,
+      "gross": -0.010988,
+      "net": -0.0593848592,
+      "fees": 0.040330716,
+      "slip": 0.0080661432
+    },
+    {
+      "opened_at": "2026-08-26T12:47:36.567344+00:00",
+      "buy": 2454.42,
+      "sell": 2455.92,
+      "move_bps": 6.111423472755274,
+      "cost_bps": 24.007333708167305,
+      "gross": 0.0123,
+      "net": -0.0360177456,
+      "fees": 0.040264788,
+      "slip": 0.0080529576
+    },
+    {
+      "opened_at": "2026-08-26T12:53:36.157551+00:00",
+      "buy": 2455.1,
+      "sell": 2455.74,
+      "move_bps": 2.6068184595332164,
+      "cost_bps": 24.00312818215144,
+      "gross": 0.005248,
+      "net": -0.0430746656,
+      "fees": 0.040268888,
+      "slip": 0.0080537776
+    },
+    {
+      "opened_at": "2026-08-26T13:05:36.625348+00:00",
+      "buy": 2453.0,
+      "sell": 2445.71,
+      "move_bps": -29.71871178149205,
+      "cost_bps": 23.96433754586221,
+      "gross": -0.059778,
+      "net": -0.1079813064,
+      "fees": 0.040169422,
+      "slip": 0.0080338844
+    },
+    {
+      "opened_at": "2026-08-26T13:15:36.220457+00:00",
+      "buy": 2446.78,
+      "sell": 2447.28,
+      "move_bps": 2.0435020721111012,
+      "cost_bps": 24.002452202486534,
+      "gross": 0.0041,
+      "net": -0.0440575504,
+      "fees": 0.040131292,
+      "slip": 0.0080262584
+    }
+  ],
+  "data": {
+    "interval": "1h",
+    "n_bars": 1000,
+    "from_ts": 1784170800.0,
+    "to_ts": 1787767200.0,
+    "limitation": "5m sync Binance \u22481000 velas (~3.5d). Reg\u00edmenes son sub-ventanas dentro de ese tramo; no sustituye OOS multi-semana."
+  },
+  "sweep_full": [
+    {
+      "mode": "fixed",
+      "spacing_bps": 25.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 280,
+      "gross_pnl": 14.0,
+      "net_pnl": 0.5432,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.029,
+      "final_equity": 1000.54,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 25.0,
+      "params": {
+        "eff_spacing_end": 25.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 50.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 185,
+      "gross_pnl": 18.5,
+      "net_pnl": 9.5978,
+      "win_rate": 1.0,
+      "max_dd_pct": 0.991,
+      "final_equity": 1009.6,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 50.0,
+      "params": {
+        "eff_spacing_end": 50.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 75.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 108,
+      "gross_pnl": 16.2,
+      "net_pnl": 10.9966,
+      "win_rate": 1.0,
+      "max_dd_pct": 0.984,
+      "final_equity": 1011.0,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 75.0,
+      "params": {
+        "eff_spacing_end": 75.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 100.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 63,
+      "gross_pnl": 12.6,
+      "net_pnl": 9.5609,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.02,
+      "final_equity": 1009.56,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 100.0,
+      "params": {
+        "eff_spacing_end": 100.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 150.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 33,
+      "gross_pnl": 9.9,
+      "net_pnl": 8.3041,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.051,
+      "final_equity": 1008.3,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 150.0,
+      "params": {
+        "eff_spacing_end": 150.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 200.0,
+      "atr_k": null,
+      "notional": 20.0,
+      "n_trades": 19,
+      "gross_pnl": 7.6,
+      "net_pnl": 6.6789,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.138,
+      "final_equity": 1006.68,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 200.0,
+      "params": {
+        "eff_spacing_end": 200.0,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": "ATR*0.5",
+      "atr_k": 0.5,
+      "notional": 20.0,
+      "n_trades": 284,
+      "gross_pnl": 24.4556,
+      "net_pnl": 10.7943,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.001,
+      "final_equity": 1010.79,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 43.06,
+      "params": {
+        "eff_spacing_end": 40.260567330514796,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": "ATR*1.0",
+      "atr_k": 1.0,
+      "notional": 20.0,
+      "n_trades": 178,
+      "gross_pnl": 24.3087,
+      "net_pnl": 15.7356,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.094,
+      "final_equity": 1015.6,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 68.28,
+      "params": {
+        "eff_spacing_end": 80.52113466102959,
+        "n_levels": 10.0
+      }
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": "ATR*1.5",
+      "atr_k": 1.5,
+      "notional": 20.0,
+      "n_trades": 98,
+      "gross_pnl": 18.2643,
+      "net_pnl": 13.5384,
+      "win_rate": 1.0,
+      "max_dd_pct": 1.316,
+      "final_equity": 1012.47,
+      "cost_rt_bps": 24.0,
+      "mean_capture_bps": 93.19,
+      "params": {
+        "eff_spacing_end": 120.7817019915444,
+        "n_levels": 10.0
+      }
+    }
+  ],
+  "sweep_range": {
+    "label": "range@332",
+    "n_bars": 166,
+    "rows": [
+      {
+        "mode": "fixed",
+        "spacing_bps": 25.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 43,
+        "gross_pnl": 2.15,
+        "net_pnl": 0.0834,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.805,
+        "final_equity": 999.56,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 25.0,
+        "params": {
+          "eff_spacing_end": 25.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 50.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 46,
+        "gross_pnl": 4.6,
+        "net_pnl": 2.3865,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.741,
+        "final_equity": 1001.11,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 50.0,
+        "params": {
+          "eff_spacing_end": 50.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 75.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 26,
+        "gross_pnl": 3.9,
+        "net_pnl": 2.6473,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.766,
+        "final_equity": 1000.64,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 75.0,
+        "params": {
+          "eff_spacing_end": 75.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 100.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 13,
+        "gross_pnl": 2.6,
+        "net_pnl": 1.9729,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.786,
+        "final_equity": 999.25,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 100.0,
+        "params": {
+          "eff_spacing_end": 100.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 150.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 5,
+        "gross_pnl": 1.5,
+        "net_pnl": 1.2582,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.881,
+        "final_equity": 997.11,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 150.0,
+        "params": {
+          "eff_spacing_end": 150.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 200.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 3,
+        "gross_pnl": 1.2,
+        "net_pnl": 1.0546,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.993,
+        "final_equity": 995.52,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 200.0,
+        "params": {
+          "eff_spacing_end": 200.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*0.5",
+        "atr_k": 0.5,
+        "notional": 20.0,
+        "n_trades": 30,
+        "gross_pnl": 2.4,
+        "net_pnl": 0.9571,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.798,
+        "final_equity": 998.23,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 40.0,
+        "params": {
+          "eff_spacing_end": 40.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*1.0",
+        "atr_k": 1.0,
+        "notional": 20.0,
+        "n_trades": 18,
+        "gross_pnl": 2.151,
+        "net_pnl": 1.2844,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.793,
+        "final_equity": 998.56,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 59.75,
+        "params": {
+          "eff_spacing_end": 66.26824742728961,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*1.5",
+        "atr_k": 1.5,
+        "notional": 20.0,
+        "n_trades": 15,
+        "gross_pnl": 2.702,
+        "net_pnl": 1.9788,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.786,
+        "final_equity": 999.25,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 90.07,
+        "params": {
+          "eff_spacing_end": 99.4023711409344,
+          "n_levels": 10.0
+        }
+      }
+    ]
+  },
+  "sweep_trend": {
+    "label": "trend@747",
+    "n_bars": 166,
+    "rows": [
+      {
+        "mode": "fixed",
+        "spacing_bps": 25.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 36,
+        "gross_pnl": 1.8,
+        "net_pnl": 0.0698,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.112,
+        "final_equity": 1000.07,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 25.0,
+        "params": {
+          "eff_spacing_end": 25.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 50.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 19,
+        "gross_pnl": 1.9,
+        "net_pnl": 0.9857,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.184,
+        "final_equity": 1000.99,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 50.0,
+        "params": {
+          "eff_spacing_end": 50.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 75.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 11,
+        "gross_pnl": 1.65,
+        "net_pnl": 1.12,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.259,
+        "final_equity": 1001.12,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 75.0,
+        "params": {
+          "eff_spacing_end": 75.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 100.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 9,
+        "gross_pnl": 1.8,
+        "net_pnl": 1.3658,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.331,
+        "final_equity": 1001.37,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 100.0,
+        "params": {
+          "eff_spacing_end": 100.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 150.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 7,
+        "gross_pnl": 2.1,
+        "net_pnl": 1.7615,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.472,
+        "final_equity": 1001.76,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 150.0,
+        "params": {
+          "eff_spacing_end": 150.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "fixed",
+        "spacing_bps": 200.0,
+        "atr_k": null,
+        "notional": 20.0,
+        "n_trades": 6,
+        "gross_pnl": 2.4,
+        "net_pnl": 2.1091,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.61,
+        "final_equity": 1002.11,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 200.0,
+        "params": {
+          "eff_spacing_end": 200.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*0.5",
+        "atr_k": 0.5,
+        "notional": 20.0,
+        "n_trades": 17,
+        "gross_pnl": 1.4358,
+        "net_pnl": 0.6181,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.331,
+        "final_equity": 1000.62,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 42.23,
+        "params": {
+          "eff_spacing_end": 40.0,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*1.0",
+        "atr_k": 1.0,
+        "notional": 20.0,
+        "n_trades": 13,
+        "gross_pnl": 1.6118,
+        "net_pnl": 0.9859,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.331,
+        "final_equity": 1000.99,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 61.99,
+        "params": {
+          "eff_spacing_end": 70.59177907735055,
+          "n_levels": 10.0
+        }
+      },
+      {
+        "mode": "atr",
+        "spacing_bps": "ATR*1.5",
+        "atr_k": 1.5,
+        "notional": 20.0,
+        "n_trades": 10,
+        "gross_pnl": 1.9702,
+        "net_pnl": 1.4878,
+        "win_rate": 1.0,
+        "max_dd_pct": 0.331,
+        "final_equity": 1001.49,
+        "cost_rt_bps": 24.0,
+        "mean_capture_bps": 98.51,
+        "params": {
+          "eff_spacing_end": 105.88766861602582,
+          "n_levels": 10.0
+        }
+      }
+    ]
+  },
+  "best_net_full": {
+    "mode": "atr",
+    "spacing_bps": "ATR*1.0",
+    "atr_k": 1.0,
+    "notional": 20.0,
+    "n_trades": 178,
+    "gross_pnl": 24.3087,
+    "net_pnl": 15.7356,
+    "win_rate": 1.0,
+    "max_dd_pct": 1.094,
+    "final_equity": 1015.6,
+    "cost_rt_bps": 24.0,
+    "mean_capture_bps": 68.28,
+    "params": {
+      "eff_spacing_end": 80.52113466102959,
+      "n_levels": 10.0
+    }
+  },
+  "best_fixed_net": {
+    "mode": "fixed",
+    "spacing_bps": 75.0,
+    "atr_k": null,
+    "notional": 20.0,
+    "n_trades": 108,
+    "gross_pnl": 16.2,
+    "net_pnl": 10.9966,
+    "win_rate": 1.0,
+    "max_dd_pct": 0.984,
+    "final_equity": 1011.0,
+    "cost_rt_bps": 24.0,
+    "mean_capture_bps": 75.0,
+    "params": {
+      "eff_spacing_end": 75.0,
+      "n_levels": 10.0
+    }
+  },
+  "sizing": {
+    "binance_min_notional_usdt": 5.0,
+    "freeze_notional_per_level": 20.0,
+    "headroom_vs_min": 4.0,
+    "ok": true,
+    "note": "Freeze L0 usa USD 20 (\u2265 piso desk USD 15 (1.5\u00d7 min hist\u00f3rico 10; ahora exchange min=5)."
+  },
+  "recommendation": {
+    "keep_freeze_spacing_bps": 100,
+    "rationale": "Costo RT emp\u00edrico \u224824 bps. Capture media N10 \u2248 \u22121.6 bps (no el spacing de 100 bps): el fallo fue \u0394nivel\u22480 (RT intra-nivel), no un freeze < costo. Con backtest de cruce de nivel, spacing \u2265100 bps maximiza neto vs 25\u201375. No bajar spacing. Subir a 150 solo si desk acepta N11 (menos trades).",
+    "require_level_step": true,
+    "early_streak_warn": 3,
+    "breaker_threshold": 5
+  }
+}

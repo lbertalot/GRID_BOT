@@ -181,6 +181,8 @@ def test_tick_resets_cycle_after_five_minutes(monkeypatch):
 
 
 def test_execute_trading_cycle_paper_happy_mocked(monkeypatch):
+    # El re-centrado está apagado por seguridad; este caso cubre la ruta opt-in.
+    monkeypatch.setenv("ENABLE_DYNAMIC_GRID_RECENTER", "true")
     singleton = MagicMock()
     singleton.validate_credentials_and_connectivity.return_value = {
         "net_ok": True,

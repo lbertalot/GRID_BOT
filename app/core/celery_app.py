@@ -135,4 +135,11 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=0, minute=45),  # post-cierre 00:45 UTC
         "options": {"queue": "low"},
     },
+    # Market View: velas públicas ETHUSDT → klines_data (sin trading)
+    "sync-market-klines-eth": {
+        "task": "app.services.trading_tasks.sync_market_klines",
+        "schedule": 300.0,  # cada 5 minutos
+        "options": {"queue": "low"},
+        "kwargs": {"symbol": "ETHUSDT", "intervals": ["1m", "5m", "1h"], "limit": 1000},
+    },
 }

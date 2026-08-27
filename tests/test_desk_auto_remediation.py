@@ -140,8 +140,20 @@ def test_refuse_unknown_or_pnl_reason_even_if_validate_ok(paper_env, monkeypatch
     assert "consecutivas" in (r.get("breaker_reason") or "").lower()
     mock_ck.deactivate_breaker.assert_not_called()
     msg = format_remediation_telegram(r)
-    assert msg and "No tenés que resetear" in msg and "Dinero real: NO" in msg
-    assert "estabilice" not in msg.lower()
+    assert msg is None  # CEO plain: heartbeat vía breaker_ceo_watch
+    from app.core.breaker_ceo_watch import process_si_ceo_watch
+
+    watch = process_si_ceo_watch(
+        si_open=True,
+        reason=r.get("breaker_reason"),
+        now=9_000_000.0,
+    )
+    assert watch and "Dinero real: NO" in watch
+    assert "no resetear" in watch.lower() or "no lo resetees" in watch.lower()
+    assert "Desk Lead" in watch
+    assert "estabilice" not in watch.lower()
+    assert "robo" not in watch.lower()
+    assert "system_integrity" not in watch
 
 
 def test_refuse_empty_reason(paper_env, monkeypatch):

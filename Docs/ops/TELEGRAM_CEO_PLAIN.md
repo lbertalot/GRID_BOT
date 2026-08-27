@@ -11,7 +11,8 @@ Alineado al tablero [Cómo va la prueba](DASHBOARD_CEO_AUTO.md).
 | Evento | Mensaje | Anti-spam |
 |--------|---------|-----------|
 | Digest | Semáforo + balance ensayo + “qué hago” | Solo si cambia el estado, o EOD, o rojo sistema |
-| HOLD pérdidas | Freno de protección — no lo resetees | Máx. 1 cada 12 h si no cambia |
+| HOLD pérdidas | Ensayo en pausa + checklist Desk Lead | **Cada 1 h** mientras SI PnL siga abierto |
+| Freno levantado (PnL) | Aviso inmediato “freno levantado” | Al cerrar SI (tick ≤60s o digest) |
 | HOLD red/clave | Seguí el aviso de IP | Máx. 1 cada 12 h |
 | REMEDIADO | Freno de *conexión* levantado (no es PnL) | En cada reset auth/net |
 | IP −2015 | Agregá `{ip}` en Binance | Cooldown 30 min (ya existía) |
@@ -26,11 +27,11 @@ Alineado al tablero [Cómo va la prueba](DASHBOARD_CEO_AUTO.md).
 ## Semáforo
 
 - **Verde:** prueba andando. No hagas nada.
-- **Naranja:** aviso (−1,5%) y/o freno HOLD. Esperá. No live.
+- **Naranja:** aviso (−1,5%) y/o freno por racha de pérdidas paper. Esperá. No live. No resetear (la racha sigue en el libro). Heartbeat **1 h** + aviso al levantarse.
 - **Rojo capital:** −3% / −5%. El equipo interviene. No live.
 - **Rojo sistema:** no-paper, servidor, IP. El ensayo está a ciegas.
 
-El % vs inicio es **valor estimado**, no ganancia. El HOLD de pérdidas **no** se saca solo.
+El % vs inicio es **valor estimado**, no ganancia. El HOLD de pérdidas **no** se saca solo: es protección por racha en el libro de ensayo (no robo, no falla de IP). Resetear a mano sin decisión desk reabre el mismo freno.
 
 ## Código
 

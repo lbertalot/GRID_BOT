@@ -2,7 +2,7 @@
 
 Los importes monetarios permanecen en NUMERIC/Decimal; no se usan para live.
 """
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 
 from app.models.base import Base
 
@@ -18,6 +18,16 @@ class PaperLedgerCycle(Base):
     cost_basis_open_usdt = Column(Numeric(24, 12), nullable=False)
     opened_at = Column(DateTime(timezone=True), nullable=False)
     closed_at = Column(DateTime(timezone=True))
+    buy_fee_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    buy_slippage_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    buy_fee_remaining = Column(Numeric(24, 12), nullable=False, default=0)
+    buy_slippage_remaining = Column(Numeric(24, 12), nullable=False, default=0)
+    closed_quantity = Column(Numeric(24, 12), nullable=False, default=0)
+    sell_notional_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    gross_pnl_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    net_pnl_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    fees_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    slippage_usdt = Column(Numeric(24, 12), nullable=False, default=0)
     __table_args__ = (CheckConstraint("open_quantity >= 0", name="ck_paper_cycle_open_quantity"),)
 
 
@@ -53,7 +63,56 @@ class PaperLedgerFill(Base):
     quantity = Column(Numeric(24, 12), nullable=False)
     price = Column(Numeric(24, 12), nullable=False)
     executed_at = Column(DateTime(timezone=True), nullable=False)
+    symbol = Column(String(32), nullable=False, default="")
+    order_type = Column(String(16), nullable=False, default="LIMIT")
+    notional_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    commission_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    slippage_usdt = Column(Numeric(24, 12), nullable=False, default=0)
+    grid_level = Column(Numeric(24, 12))
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_paper_fill_quantity"),
         CheckConstraint("price > 0", name="ck_paper_fill_price"),
     )
+
+
+class PaperLedgerAccount(Base):
+    """Snapshot auditable de la cuenta paper de una ventana."""
+
+    __tablename__ = "paper_ledger_accounts"
+    window_id = Column(String(64), primary_key=True)
+    schema_version = Column(Integer, nullable=False)
+    quote_asset = Column(String(16), nullable=False)
+    initial_cash = Column(Numeric(24, 12), nullable=False)
+    cash = Column(Numeric(24, 12), nullable=False)
+    deployed_capital = Column(Numeric(24, 12), nullable=False)
+    realized_gross_pnl_usdt = Column(Numeric(24, 12), nullable=False)
+    realized_net_pnl_usdt = Column(Numeric(24, 12), nullable=False)
+    fees_total_usdt = Column(Numeric(24, 12), nullable=False)
+    slippage_total_usdt = Column(Numeric(24, 12), nullable=False)
+    cost_model_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class PaperLedgerFillCycle(Base):
+    """Asignación explícita de un fill a uno o más ciclos FIFO."""
+
+    __tablename__ = "paper_ledger_fill_cycles"
+    fill_id = Column(String(128), ForeignKey("paper_ledger_fills.fill_id"), primary_key=True)
+    cycle_id = Column(String(64), ForeignKey("paper_ledger_cycles.cycle_id"), primary_key=True)
+    quantity = Column(Numeric(24, 12), nullable=False)
+    __table_args__ = (CheckConstraint("quantity > 0", name="ck_paper_fill_cycle_quantity"),)
+
+
+class PaperLedgerEquitySample(Base):
+    """Muestra MtM idempotente del ledger paper."""
+
+    __tablename__ = "paper_ledger_equity_samples"
+    sample_id = Column(String(64), primary_key=True)
+    at = Column(DateTime(timezone=True), nullable=False, index=True)
+    equity = Column(Numeric(24, 12), nullable=False)
+    cash = Column(Numeric(24, 12), nullable=False)
+    inventory_value = Column(Numeric(24, 12), nullable=False)
+    deployed_capital = Column(Numeric(24, 12), nullable=False)
+    config_hash = Column(String(64))
+    daily_close_at = Column(DateTime(timezone=True))

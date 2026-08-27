@@ -1,0 +1,7 @@
+# SearXNG: habilitar API JSON (requerido por el AI Assistant de n8n).
+# Doc: https://docs.n8n.io/deploy/host-n8n/install-options/install-using-docker-compose
+use_default_settings: true
+search:
+  formats:
+    - html
+    - json

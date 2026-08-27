@@ -1,0 +1,129 @@
+# n8n + sandbox AI (docs oficiales) junto a GRID_BOT local (paper).
+# Ref: https://docs.n8n.io/deploy/host-n8n/install-options/install-using-docker-compose
+#
+# Red externa: misma que docker-compose.local.yml → http://api:8000 desde workflows.
+# Solo publicar :5678. sandbox-runner es privileged (DinD) — solo localhost.
+# PROMOTE_LIVE: NO · no poner API keys Binance en n8n.
+
+volumes:
+  sandbox-tls:
+  n8n_data:
+
+networks:
+  default:
+  gridbot_network:
+    external: true
+    name: grid_bot_gridbot_network
+
+services:
+  sandbox-certs:
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:latest
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        bootstrap-mtls.sh --out-dir /tls --api-san sandbox-api
+        --control-san-prefix sandbox-runner &&
+        chown -R sandbox-api:sandbox-api /tls/api
+    environment:
+      NUM_RUNNERS: "1"
+    volumes:
+      - sandbox-tls:/tls
+
+  sandbox-api:
+    image: ghcr.io/n8n-io/n8n-sandbox-service-api:latest
+    depends_on:
+      sandbox-certs:
+        condition: service_completed_successfully
+    environment:
+      SANDBOX_API_KEYS: ${SANDBOX_API_KEYS}
+      SANDBOX_API_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_API_RUNNER_REGISTRATION_TOKEN}
+      SANDBOX_API_RUNNER_API_KEY: ${SANDBOX_API_RUNNER_API_KEY}
+      SANDBOX_API_GRPC_TLS_CERT_FILE: /tls/api/grpc-server.crt
+      SANDBOX_API_GRPC_TLS_KEY_FILE: /tls/api/grpc-server.key
+      SANDBOX_API_GRPC_TLS_CLIENT_CA_FILE: /tls/api/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CA_FILE: /tls/api/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/api/control-grpc-api-client.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/api/control-grpc-api-client.key
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_SERVER_NAME: sandbox-runner-1
+    volumes:
+      - sandbox-tls:/tls:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  sandbox-runner-1:
+    image: ghcr.io/n8n-io/n8n-sandbox-service-runner-dind:latest
+    privileged: true
+    depends_on:
+      sandbox-api:
+        condition: service_healthy
+    environment:
+      SANDBOX_RUNNER_API_KEYS: ${SANDBOX_API_RUNNER_API_KEY}
+      SANDBOX_RUNNER_REGISTRATION_TOKEN: ${SANDBOX_API_RUNNER_REGISTRATION_TOKEN}
+      SANDBOX_RUNNER_API_GRPC_ADDR: sandbox-api:9090
+      SANDBOX_RUNNER_HTTP_BASE_URL: http://sandbox-runner-1:8080
+      SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR: ":9091"
+      SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR: sandbox-runner-1:9091
+      SANDBOX_RUNNER_ID: runner-1
+      SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE: /tls/runner/ca.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE: /tls/runner/grpc-client.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE: /tls/runner/grpc-client.key
+      SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME: sandbox-api
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/runner/control-grpc-server.crt
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/runner/control-grpc-server.key
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE: /tls/runner/ca.crt
+    volumes:
+      - sandbox-tls:/tls:ro
+
+  searxng:
+    image: ghcr.io/searxng/searxng:latest
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET}
+    volumes:
+      - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
+
+  n8n:
+    image: n8nio/n8n
+    container_name: gridbot_n8n
+    depends_on:
+      sandbox-api:
+        condition: service_healthy
+    ports:
+      - "5678:5678"
+    env_file: .env
+    environment:
+      N8N_ENABLED_MODULES: instance-ai
+      N8N_INSTANCE_AI_MODEL: anthropic/claude-opus-4-8
+      N8N_INSTANCE_AI_SANDBOX_ENABLED: "true"
+      N8N_INSTANCE_AI_SANDBOX_IMAGE: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+      N8N_INSTANCE_AI_SANDBOX_API_URL: http://sandbox-api:8080
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_LICENSE_ACTIVATION_KEY: ${N8N_LICENSE_ACTIVATION_KEY:-}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Argentina/Buenos_Aires}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      # GRID_BOT paper — base URL para nodos HTTP Request
+      GRIDBOT_API_BASE_URL: http://api:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - default
+      - gridbot_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:5678/healthz >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s

@@ -104,12 +104,27 @@ def test_ceo_digest_not_paper_is_system_red():
 
 
 def test_hold_pnl_copy_does_not_promise_auto_resume():
-    msg = render_hold_pnl_telegram("Demasiadas pérdidas consecutivas: 5")
-    assert "no lo resetees" in msg.lower() or "No tenés que resetear" in msg
+    msg = render_hold_pnl_telegram("Demasiadas pérdidas consecutivas: 19")
+    assert "no resetear" in msg.lower() or "no lo resetees" in msg.lower()
+    assert "19 cierres" in msg
+    assert "Desk Lead" in msg
+    assert "cada hora" in msg.lower()
+    assert "vuelve a activar" in msg.lower() or "se vuelve a activar" in msg.lower()
     assert "Dinero real: NO" in msg
+    assert "robo" not in msg.lower()
     assert "estabilice" not in msg.lower()
     assert "se reinicia solo" not in msg.lower()
     assert "PROMOTE_LIVE" not in msg
+    assert "system_integrity" not in msg
+    assert "ledger" not in msg.lower()
+
+
+def test_si_cleared_copy():
+    from app.core.telegram_ceo_copy import render_si_cleared_telegram
+
+    msg = render_si_cleared_telegram()
+    assert "levantado" in msg.lower()
+    assert "Dinero real: NO" in msg
     assert "system_integrity" not in msg
 
 
@@ -150,15 +165,16 @@ def test_debounce_force_eod_always_sends():
     assert should_emit_ceo("digest", fp, force=True, now=2.0) is True
 
 
-def test_hold_pnl_repeat_after_12h():
+def test_hold_pnl_repeat_after_1h():
     reset_debounce_memory()
-    fp = "1|at|paper|pnl"
+    fp = "open|pnl|Demasiadas pérdidas consecutivas: 5"
+    assert HOLD_PNL_MIN_REPEAT_S == 3600
     assert should_emit_ceo(
         "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0
     )
     assert (
         should_emit_ceo(
-            "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0 + 3600
+            "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0 + 1800
         )
         is False
     )
