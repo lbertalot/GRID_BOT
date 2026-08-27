@@ -132,8 +132,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Mode paper",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -144,7 +142,9 @@
           "legendFormat": "paper",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Mode paper",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -191,8 +191,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Paper equity (SoT)",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -203,7 +201,9 @@
           "legendFormat": "equity",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Paper equity (SoT)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -249,8 +249,6 @@
         },
         "textMode": "auto"
       },
-      "title": "E_0 (paper)",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -261,7 +259,9 @@
           "legendFormat": "e0",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "E_0 (paper)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -316,8 +316,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Snapshot age",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -328,7 +326,9 @@
           "legendFormat": "age_s",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Snapshot age",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -392,8 +392,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Pipeline degraded",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -404,7 +402,9 @@
           "legendFormat": "degraded",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Pipeline degraded",
+      "type": "stat"
     },
     {
       "collapsed": false,
@@ -478,8 +478,6 @@
         },
         "textMode": "auto"
       },
-      "title": "API up",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -490,7 +488,9 @@
           "legendFormat": "api",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "API up",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -552,8 +552,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Flower up",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -564,7 +562,9 @@
           "legendFormat": "flower",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Flower up",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -613,8 +613,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Breaker any open",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -625,7 +623,9 @@
           "legendFormat": "any_open",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Breaker any open",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -668,8 +668,6 @@
           "sort": "none"
         }
       },
-      "title": "Binance API errors by code",
-      "type": "timeseries",
       "targets": [
         {
           "datasource": {
@@ -680,7 +678,9 @@
           "legendFormat": "{{code}}",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Binance API errors by code",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -734,8 +734,6 @@
           "sort": "none"
         }
       },
-      "title": "pipeline_health_table_ok",
-      "type": "timeseries",
       "targets": [
         {
           "datasource": {
@@ -746,7 +744,9 @@
           "legendFormat": "{{table}}",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "pipeline_health_table_ok",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -789,8 +789,6 @@
           "sort": "none"
         }
       },
-      "title": "Paper equity vs portfolio gauge",
-      "type": "timeseries",
       "targets": [
         {
           "datasource": {
@@ -819,7 +817,9 @@
           "legendFormat": "portfolio_ops",
           "refId": "C"
         }
-      ]
+      ],
+      "title": "Paper equity vs portfolio gauge",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -878,8 +878,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Cash (grid)",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -889,7 +887,9 @@
           "expr": "max(cash_balance_usdt{job=\"gridbot-api\", strategy=\"grid\"})",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Cash (grid)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -935,8 +935,6 @@
         },
         "textMode": "auto"
       },
-      "title": "Órdenes totales",
-      "type": "stat",
       "targets": [
         {
           "datasource": {
@@ -946,7 +944,9 @@
           "expr": "sum(gridbot_orders_total{job=\"gridbot-api\"}) or on() vector(0)",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Órdenes totales",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -986,8 +986,6 @@
           "mode": "multi"
         }
       },
-      "title": "Integrity scores",
-      "type": "timeseries",
       "targets": [
         {
           "datasource": {
@@ -1025,7 +1023,9 @@
           "legendFormat": "system",
           "refId": "D"
         }
-      ]
+      ],
+      "title": "Integrity scores",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -1063,8 +1063,6 @@
           "mode": "multi"
         }
       },
-      "title": "Invalid symbol rate (top 10)",
-      "type": "timeseries",
       "targets": [
         {
           "datasource": {
@@ -1075,7 +1073,9 @@
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Invalid symbol rate (top 10)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -1097,6 +1097,5 @@
   "timepicker": {},
   "timezone": "utc",
   "title": "GridBot Health SRE (paper)",
-  "uid": "gridbot-health-sre",
-  "version": 2
+  "uid": "gridbot-health-sre"
 }

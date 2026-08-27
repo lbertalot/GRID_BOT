@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "description": "Vista CEO principiante — tablero de auto. Paper-only. Equity SoT ≠ ganancia. No usar como live gate ni dash de rentabilidad.",
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -44,22 +46,40 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 100,
       "title": "Cinturón — ¿esto es un ensayo?",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Verde = ensayo. Rojo = no es paper: parar y avisar.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "red", "index": 0, "text": "NO ES PAPER" },
-                "1": { "color": "green", "index": 1, "text": "PAPER · ENSAYO" }
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "NO ES PAPER"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "PAPER · ENSAYO"
+                }
               },
               "type": "value"
             }
@@ -67,45 +87,78 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
       "id": 1,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Modo",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0)",
           "legendFormat": "paper",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Modo",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Verde = correcto en esta prueba (sin dinero real). Rojo = hay que revisar el modo.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "red", "index": 0, "text": "REVISAR MODO" },
-                "1": { "color": "green", "index": 1, "text": "LIVE: NO" }
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "REVISAR MODO"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "LIVE: NO"
+                }
               },
               "type": "value"
             }
@@ -113,47 +166,88 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 5, "x": 8, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 8,
+        "y": 1
+      },
       "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Dinero real",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0)",
           "legendFormat": "live_off",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Dinero real",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "0 verde · 1 naranja (aviso capital o freno HOLD) · 2 rojo capital · 3 rojo sistema.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "VERDE" },
-                "1": { "color": "orange", "index": 1, "text": "NARANJA" },
-                "2": { "color": "red", "index": 2, "text": "ROJO CAPITAL" },
-                "3": { "color": "dark-red", "index": 3, "text": "ROJO SISTEMA" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "VERDE"
+                },
+                "1": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "NARANJA"
+                },
+                "2": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "ROJO CAPITAL"
+                },
+                "3": {
+                  "color": "dark-red",
+                  "index": 3,
+                  "text": "ROJO SISTEMA"
+                }
               },
               "type": "value"
             }
@@ -161,49 +255,96 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 2 },
-              { "color": "semi-dark-red", "value": 3 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              },
+              {
+                "color": "semi-dark-red",
+                "value": 3
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 5, "x": 13, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 13,
+        "y": 1
+      },
       "id": 3,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Semáforo",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n)",
           "legendFormat": "semaforo",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Semáforo",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Qué hacer vos (CEO). El equipo ya tiene owners; no hace falta ‘procede’.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "No hagas nada" },
-                "1": { "color": "orange", "index": 1, "text": "Esperá · no live" },
-                "2": { "color": "red", "index": 2, "text": "Desk interviene · no live" },
-                "3": { "color": "dark-red", "index": 3, "text": "Intervení: servidor / IP" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "No hagas nada"
+                },
+                "1": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Esperá · no live"
+                },
+                "2": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "Desk interviene · no live"
+                },
+                "3": {
+                  "color": "dark-red",
+                  "index": 3,
+                  "text": "Intervení: servidor / IP"
+                }
               },
               "type": "value"
             }
@@ -211,195 +352,332 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 2 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "id": 4,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Qué hago yo",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n)",
           "legendFormat": "accion",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Qué hago yo",
+      "type": "stat"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
       "id": 101,
       "title": "Nafta — cuenta de ensayo (no es ganancia)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Valor estimado de la cuenta ficticia (ledger paper). No es ganancia realizada.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "#d9d9d9", "value": null }]
+            "steps": [
+              {
+                "color": "#d9d9d9",
+                "value": null
+              }
+            ]
           },
           "unit": "currencyUSD"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 7 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 7
+      },
       "id": 5,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Balance (ensayo)",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(paper_equity_usdt{job=\"gridbot-api\"})",
           "legendFormat": "equity",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Balance (ensayo)",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Foto inicial de la prueba (E₀). En L0 suele ser 1000.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "text", "value": null }]
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
           },
           "unit": "currencyUSD"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 4, "x": 6, "y": 7 },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 6,
+        "y": 7
+      },
       "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Inicio de la prueba",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(paper_equity_e0_usdt{job=\"gridbot-api\"})",
           "legendFormat": "e0",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Inicio de la prueba",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Cambio vs inicio. Aviso −1.5% · grave −3% · pausa −5%. No es ‘esta semana’.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": -2.999 },
-              { "color": "green", "value": -1.499 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": -2.999
+              },
+              {
+                "color": "green",
+                "value": -1.499
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 5, "x": 10, "y": 7 },
+      "gridPos": {
+        "h": 6,
+        "w": 5,
+        "x": 10,
+        "y": 7
+      },
       "id": 7,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Cambio vs inicio",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)",
           "legendFormat": "vs_inicio",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Cambio vs inicio",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Cuántas veces el sistema revisó la cuenta de ensayo. Un número alto = está vigilando.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "#d9d9d9", "value": null }]
+            "steps": [
+              {
+                "color": "#d9d9d9",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 4, "x": 15, "y": 7 },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 15,
+        "y": 7
+      },
       "id": 8,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Chequeos de estado",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(paper_equity_samples{job=\"gridbot-api\"})",
           "legendFormat": "samples",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Chequeos de estado",
+      "type": "stat"
     },
     {
-      "gridPos": { "h": 6, "w": 5, "x": 19, "y": 7 },
+      "gridPos": {
+        "h": 6,
+        "w": 5,
+        "x": 19,
+        "y": 7
+      },
       "id": 9,
       "options": {
-        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
         "content": "**Composición BTC/ETH/cash:** no disponible en esta prueba (grid USDT).\n\n**Día N/30:** mirá el digest de Telegram.\n\nEste número grande es **valor estimado**, no plata ganada.",
         "mode": "markdown"
       },
@@ -407,11 +685,16 @@
       "type": "text"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Curva de la cuenta ficticia vs el inicio. Los huecos = el servidor estuvo apagado (p. ej. corte de luz).",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 8,
@@ -423,46 +706,80 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
       "id": 10,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "none" }
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       },
-      "title": "Cómo evoluciona la cuenta de ensayo",
-      "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(paper_equity_usdt{job=\"gridbot-api\"})",
           "legendFormat": "cuenta ahora",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(paper_equity_e0_usdt{job=\"gridbot-api\"})",
           "legendFormat": "inicio",
           "refId": "B"
         }
-      ]
+      ],
+      "title": "Cómo evoluciona la cuenta de ensayo",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
       "id": 102,
       "title": "Zona verde — la máquina está viva",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "text": "CAÍDA" },
-                "1": { "text": "ANDANDO" }
+                "0": {
+                  "text": "CAÍDA"
+                },
+                "1": {
+                  "text": "ANDANDO"
+                }
               },
               "type": "value"
             }
@@ -470,44 +787,73 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 22 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 22
+      },
       "id": 11,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Sistema principal",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(up{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "api",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Sistema principal",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "text": "CAÍDA" },
-                "1": { "text": "ANDANDO" }
+                "0": {
+                  "text": "CAÍDA"
+                },
+                "1": {
+                  "text": "ANDANDO"
+                }
               },
               "type": "value"
             }
@@ -515,40 +861,65 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 22 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 22
+      },
       "id": 12,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Rutinas automáticas",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(up{job=\"gridbot-celery\"}) or on() vector(0)",
           "legendFormat": "flower",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Rutinas automáticas",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Cuántas compras/ventas de ensayo se registraron. Cero no es un error: a veces el bot espera. Este número no es ganancia.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 0,
           "mappings": [
             {
@@ -569,38 +940,66 @@
           ],
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "#d9d9d9", "value": null }]
+            "steps": [
+              {
+                "color": "#d9d9d9",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 22 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 22
+      },
       "id": 13,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Operaciones (no es ganancia)",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "sum(gridbot_orders_total{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "ordenes",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Operaciones (no es ganancia)",
+      "type": "stat"
     },
     {
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 22 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 22
+      },
       "id": 14,
       "options": {
-        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
         "content": "Si **Sistema principal** y **Rutinas automáticas** dicen ANDANDO, el servidor está funcionando.\n\nUn **0** en operaciones no es un fallo: el bot puede estar esperando. El informe honesto de “¿ganamos?” llega de noche, no de este recuadro.",
         "mode": "markdown"
       },
@@ -609,22 +1008,40 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
       "id": 103,
       "title": "Zona naranja — aviso, no pánico",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "1 = hay un freno. En paper suele ser pérdidas seguidas: HOLD, no lo resetees.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "Sin freno extra" },
-                "1": { "color": "orange", "index": 1, "text": "Freno puesto (HOLD) — no lo resetees" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Sin freno extra"
+                },
+                "1": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "Freno puesto (HOLD) — no lo resetees"
+                }
               },
               "type": "value"
             }
@@ -632,78 +1049,135 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 28 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 28
+      },
       "id": 15,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Freno de seguridad",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "breaker",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Freno de seguridad",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Hace cuánto se actualizó el valor de la cuenta. Menos de 20 min = al día. Un número enorme suele ser un reloj vacío, no 56 años reales.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 900 },
-              { "color": "orange", "value": 1200 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 900
+              },
+              {
+                "color": "orange",
+                "value": 1200
+              }
             ]
           },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 28 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 28
+      },
       "id": 16,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Última revisión de la cuenta",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "time() - max(portfolio_snapshot_last_unixtime{job=\"gridbot-api\"} > 1000000000)",
           "legendFormat": "age",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Última revisión de la cuenta",
+      "type": "stat"
     },
     {
-      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 28 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      },
       "id": 17,
       "options": {
-        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
         "content": "**Aviso (−1,5%):** la cuenta ficticia bajó un poco. Normal en cripto.\n\n**Grave (−3%):** el equipo mira; vos no pases a live.\n\n**Pausa (−5%):** umbral de parar. Sigue siendo paper.",
         "mode": "markdown"
       },
@@ -712,22 +1186,40 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
       "id": 104,
       "title": "Zona roja — solo si hay que actuar ahora",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Parada de emergencia. 1 = intervenir.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "No" },
-                "1": { "color": "red", "index": 1, "text": "SÍ — parada de emergencia" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "No"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "SÍ — parada de emergencia"
+                }
               },
               "type": "value"
             }
@@ -735,46 +1227,79 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 34 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 34
+      },
       "id": 18,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "¿Bot frenado a la fuerza?",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "estop",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "¿Bot frenado a la fuerza?",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "1 = Binance sigue rechazando esta IP (−2015) ahora. 0 = IP OK. No arrastra fallos viejos del corte de luz.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 0,
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "IP OK" },
-                "1": { "color": "red", "index": 1, "text": "IP rechazada ahora" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "IP OK"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "IP rechazada ahora"
+                }
               },
               "type": "value"
             }
@@ -782,46 +1307,79 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 34 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 34
+      },
       "id": 19,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "Binance rechazó la IP (−2015)",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "ip_err",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Binance rechazó la IP (−2015)",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "1 si el cambio vs inicio es −3% o peor (grave / pausa).",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
             {
               "options": {
-                "0": { "color": "green", "index": 0, "text": "Dentro de aviso" },
-                "1": { "color": "red", "index": 1, "text": "Caída grave (≥3%) — no live" }
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Dentro de aviso"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "Caída grave (≥3%) — no live"
+                }
               },
               "type": "value"
             }
@@ -829,46 +1387,80 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 34 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 34
+      },
       "id": 20,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
-      "title": "¿Caída fuera de aviso?",
-      "type": "stat",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1)",
           "legendFormat": "off",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "¿Caída fuera de aviso?",
+      "type": "stat"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
       "id": 105,
       "title": "Cómo leer esto en 5 segundos",
       "type": "row"
     },
     {
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 40 },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
       "id": 21,
       "options": {
-        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
         "content": "| Color | Qué significa | Qué hacés vos |\n|-------|----------------|---------------|\n| **Verde** | Ensayo andando. La cuenta no cruzó el aviso (−1,5%). | Nada. Dejá que corra. |\n| **Naranja** | La cuenta ficticia bajó un poco, o hay un freno de seguridad puesto a propósito. | Paciencia. No live. No resetear frenos. No agrandar la apuesta. |\n| **Rojo capital** | Bajó −3% o más vs el inicio. | El equipo mira. Vos **no** pases a dinero real. |\n| **Rojo sistema** | Se cayó el servidor, cambió la IP, o el modo ya no es ensayo. | Revisar el servidor / la lista de IPs. El ensayo está a ciegas. |\n\n**No uses** tableros que digan “Ganancia” o “Rentabilidad”: no son la verdad de esta prueba.\n\nEl veredicto de “¿hay ventaja?” sale de noche en el informe del equipo, no de este tablero.",
         "mode": "markdown"
       },
@@ -878,12 +1470,21 @@
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["gridbot", "paper", "ceo", "l0"],
-  "templating": { "list": [] },
-  "time": { "from": "now-12h", "to": "now" },
+  "tags": [
+    "gridbot",
+    "paper",
+    "ceo",
+    "l0"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-12h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "utc",
   "title": "GRID_BOT · Cómo va la prueba (paper)",
-  "uid": "gridbot-ceo-auto",
-  "version": 1
+  "uid": "gridbot-ceo-auto"
 }
