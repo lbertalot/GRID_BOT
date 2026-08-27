@@ -246,7 +246,7 @@ def test_trade_executor_breakers_ticker_and_adapter_side():
     cb = MagicMock()
     cb.is_trading_halted.return_value = True
     cb.get_all_breakers_status.return_value = {"active_breakers": ["max_dd"]}
-    with patch("app.core.circuit_breakers.CircuitBreakers", return_value=cb):
+    with patch("app.core.circuit_breakers.get_shared_breakers", return_value=cb):
         with pytest.raises(ValueError, match="Circuit Breaker"):
             ex.execute_order("BTCUSDT", "BUY", "MARKET", "0.001")
 
@@ -255,9 +255,9 @@ def test_trade_executor_breakers_ticker_and_adapter_side():
         "status": "NEW",
         "orderId": 1,
     }
-    with patch("app.core.circuit_breakers.CircuitBreakers", return_value=cb):
-        out = ex.execute_order("BTCUSDT", "BUY", "MARKET", "0.001", update_balance=False)
-    assert out["status"] == "NEW"
+    with patch("app.core.circuit_breakers.get_shared_breakers", return_value=cb):
+        with pytest.raises(ValueError, match="no verificable"):
+            ex.execute_order("BTCUSDT", "BUY", "MARKET", "0.001", update_balance=False)
 
     with patch(
         "app.services.trade_executor.BalanceService.update_balance"

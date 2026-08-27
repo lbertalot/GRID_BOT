@@ -208,8 +208,79 @@ def publish_obs_gauges(
                 _write_snapshot_sidecar(float(resolved))
 
         hydrate_pipeline_health_gauges(pipeline_degraded=pipeline_degraded)
+        _publish_paper_edge_gauges()
     except Exception as exc:  # noqa: BLE001
         logger.debug("obs_gauges publish failed: %s", exc)
+
+
+def _early_streak_threshold() -> int:
+    raw = os.getenv("PAPER_EARLY_STREAK_WARN", "3").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 3
+
+
+def _publish_paper_edge_gauges() -> None:
+    """Edge neto por ciclo + racha (validación paper del patch Δnivel)."""
+    from app.core import metrics as m
+    from app.core.auto_circuit_breaker import consecutive_losses_from_closed_cycles
+
+    try:
+        from app.core.paper_equity_ledger import (
+            paper_equity_is_source_of_truth,
+            reload_paper_ledger_from_disk,
+        )
+    except Exception:
+        return
+    if not paper_equity_is_source_of_truth():
+        return
+    try:
+        ledger = reload_paper_ledger_from_disk()
+    except Exception:
+        return
+    closed = ledger.closed_cycles()
+    m.paper_cycle_edge_net_cum_usdt.set(float(ledger.realized_net_pnl_usdt))
+    if closed:
+        last = max(closed, key=lambda c: c.closed_at or c.opened_at)
+        m.paper_cycle_edge_gross_usdt.set(float(last.gross_pnl_usdt or 0))
+        m.paper_cycle_edge_net_usdt.set(float(last.net_pnl_usdt or 0))
+    streak = consecutive_losses_from_closed_cycles(closed)
+    m.paper_consecutive_losses.set(float(streak))
+    warn_at = _early_streak_threshold()
+    m.paper_early_streak_warn.set(1.0 if streak >= warn_at else 0.0)
+    if streak >= warn_at:
+        _maybe_telegram_early_streak(streak, warn_at)
+
+
+def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
+    """Aviso temprano (no abre breaker). Debounce 1h."""
+    try:
+        from app.core.telegram_ceo_copy import (
+            HOLD_PNL_MIN_REPEAT_S,
+            ceo_plain_enabled,
+            should_emit_ceo,
+        )
+        from app.services.telegram_alert import send_telegram_alert
+
+        if not ceo_plain_enabled():
+            return
+        fp = f"early_streak|{streak}|{warn_at}"
+        if not should_emit_ceo(
+            "early_streak",
+            fp,
+            min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
+        ):
+            return
+        send_telegram_alert(
+            "🟡 **Aviso temprano de racha (paper)**\n"
+            f"Hay {streak} cierres seguidos en pérdida "
+            f"(aviso en {warn_at}; el freno duro sigue en 5).\n"
+            "Es señal de revisión desk, no un reset automático.\n"
+            "**Dinero real: NO.**"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("early streak telegram skip: %s", exc)
 
 
 __all__ = [

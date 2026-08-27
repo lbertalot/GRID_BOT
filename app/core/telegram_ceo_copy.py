@@ -32,8 +32,8 @@ _LABEL = {
 _ACCION = {
     SEMAFORO_VERDE: "Prueba andando. No hagas nada.",
     SEMAFORO_NARANJA: (
-        "Aviso. Cuenta ficticia un poco abajo y/o freno de protección. "
-        "No pases a dinero real. No resetear frenos."
+        "Aviso. Cuenta de ensayo un poco abajo y/o el bot pausó por racha de pérdidas. "
+        "No pases a dinero real. No resetear el freno."
     ),
     SEMAFORO_ROJO_CAPITAL: (
         "Caída fuera de aviso. El equipo interviene. No pases a dinero real."
@@ -44,7 +44,7 @@ _ACCION = {
 }
 
 REDIS_KEY_PREFIX = "gridbot:tg:ceo:"
-HOLD_PNL_MIN_REPEAT_S = 12 * 3600
+HOLD_PNL_MIN_REPEAT_S = 3600  # heartbeat 1h mientras el freno PnL sigue abierto
 DIGEST_MIN_REPEAT_S = 7 * 24 * 3600  # solo si cambia huella, salvo EOD (force)
 
 _mem_store: Dict[str, Tuple[str, float]] = {}
@@ -256,18 +256,50 @@ def render_ceo_digest(digest: Any) -> str:
             "Este balance es valor estimado de la cuenta de ensayo, no ganancia realizada."
         )
     if getattr(digest, "any_open_breakers", False) and level != SEMAFORO_ROJO_SISTEMA:
-        lines.append("Freno de protección activo — no lo toques.")
+        lines.append(
+            "Freno de protección activo (racha de pérdidas en paper) — "
+            "no lo resetees; el equipo lo revisa."
+        )
     return "\n".join(lines)
 
 
+def _streak_plain(reason: Optional[str]) -> str:
+    """Extrae conteo de racha si viene en el reason del breaker; sin jerga técnica."""
+    if not reason:
+        return "varios cierres seguidos en pérdida"
+    text = str(reason)
+    digits = "".join(ch if ch.isdigit() else " " for ch in text).split()
+    if digits and ("pérdida" in text.lower() or "consecutiv" in text.lower()):
+        return f"{digits[0]} cierres seguidos en pérdida"
+    return "varios cierres seguidos en pérdida"
+
+
 def render_hold_pnl_telegram(reason: Optional[str] = None) -> str:
+    streak = _streak_plain(reason)
     return (
-        "🟠 **Freno de protección (no es un robo)**\n"
-        "El ensayo pausó porque hubo varias pérdidas seguidas en paper.\n"
-        "**Estado:** la cuenta ficticia sigue en el libro de ensayo. "
-        "**No tenés que resetear nada.**\n"
-        "El freno **no** se saca solo. El equipo (riesgo + grid) lo revisa.\n"
+        "🟠 **Ensayo en pausa — freno de protección**\n"
+        f"El bot tuvo {streak} en paper "
+        "(pasó el límite de seguridad).\n"
+        "**Qué significa:** paró a propósito. La cuenta de ensayo sigue en el libro; "
+        "no se movió dinero real.\n"
+        "**Qué no hacer:** no resetear el freno. "
+        "La racha sigue anotada; si lo sacás a mano, se vuelve a activar solo.\n"
+        "El freno **no** se saca solo.\n"
+        "**Desk Lead (evaluar):**\n"
+        "1) ¿La racha es legítima? → mantener freno.\n"
+        "2) ¿El ajuste de grid ya está vivo para medir edge de verdad?\n"
+        "3) Solo si 1–2 OK: autorizar override acotado (no reset a ciegas).\n"
+        "Este aviso se repite cada hora mientras el freno siga. "
+        "Cuando se levante, te avisamos al momento.\n"
         "**Dinero real: NO.**"
+    )
+
+
+def render_si_cleared_telegram() -> str:
+    return (
+        "🟢 **Freno de protección levantado**\n"
+        "El ensayo puede volver a operar en paper.\n"
+        "Seguí en modo ensayo. **Dinero real: NO.**"
     )
 
 

@@ -54,8 +54,10 @@ Antes del digest / EOD plan, si `DESK_AUTO_REMEDIATE_BREAKERS=true` (default):
 
 Si validate falla → Telegram `🛠️ DESK AUTO · HOLD` (revisar IP allowlist).
 Skill: `trading-binance-ip-allowlist` · runbook: `Docs/engineering/runbook-binance-ip-allowlist-browser.md`.  
-Si reason es trading/PnL (p.ej. *pérdidas consecutivas*, IC-2) → Telegram
-`🛠️ DESK AUTO · HOLD (no auto-clear)` — **no** reset; owner RISK+MM.  
+Si reason es trading/PnL (p.ej. *pérdidas consecutivas*, IC-2) → **no** reset.
+Telegram CEO: heartbeat **cada 1 h** con checklist Desk Lead (`breaker_ceo_watch`);
+al cerrar SI → aviso inmediato “freno levantado”.
+Owner: RISK+MM + firma Desk Lead para override.
 Kill switch: `DESK_AUTO_REMEDIATE_BREAKERS=false`.
 
 El digest se construye **después** del intento, para reflejar RISK ON_TRACK si el reset funcionó.

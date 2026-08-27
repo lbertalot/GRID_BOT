@@ -464,6 +464,15 @@ def trading_cycle_tick() -> Dict[str, Any]:
     Si un ciclo anterior aún está corriendo, este ciclo se omite automáticamente.
     """
     try:
+        from app.core.breaker_ceo_watch import process_si_ceo_watch
+
+        si_msg = process_si_ceo_watch()
+        if si_msg:
+            send_telegram_alert(si_msg)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("si ceo watch (non-fatal): %s", exc)
+
+    try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -1576,3 +1585,34 @@ def dust_sweep(dry_run: bool = True) -> dict:
     except Exception as e:
         logger.error(f"[EMOJI] Error en dust_sweep: {e}")
         return {"status": "error", "message": str(e)}
+
+
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def sync_market_klines(
+    symbol: str = "ETHUSDT",
+    intervals: Optional[list] = None,
+    limit: int = 1000,
+) -> Dict[str, Any]:
+    """Sincroniza velas públicas Binance → ``klines_data`` (dashboard Market View).
+
+    Paper-safe: solo lectura de market data pública, sin órdenes. PROMOTE_LIVE: NO.
+    """
+    from app.services.binance_data_sync import binance_sync
+
+    intervals = intervals or ["1m", "5m", "1h"]
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+
+        async def _run() -> Dict[str, Any]:
+            out: Dict[str, Any] = {"symbol": symbol, "results": {}}
+            for iv in intervals:
+                out["results"][iv] = await binance_sync.sync_klines_data(
+                    symbol, iv, limit
+                )
+            return out
+
+        return loop.run_until_complete(_run())
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()

@@ -48,7 +48,8 @@ def test_freeze_writes_hash_and_range(tmp_path):
     assert eth["mid_price_at_freeze"] == "3500"
     assert eth["min_price"] == 3325.0
     assert eth["max_price"] == 3675.0
-    assert eth["quantity"] == pytest.approx(20 / 3500, abs=1e-6)
+    # Cantidad debe respetar el lot step de Binance y nunca subfinanciar el nivel.
+    assert eth["quantity"] == 0.0058
     assert eth["trading_mode"] == "PAPER"
     assert written["system_config"]["force_real_mode"] is False
     assert len(out["config_hash"]) == 64

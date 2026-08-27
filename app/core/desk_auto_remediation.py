@@ -175,7 +175,6 @@ def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
     from app.core.telegram_ceo_copy import (
         ceo_plain_enabled,
         render_hold_auth_telegram,
-        render_hold_pnl_telegram,
         render_remediated_telegram,
     )
 
@@ -192,7 +191,8 @@ def format_remediation_telegram(result: Dict[str, Any]) -> Optional[str]:
             )
         if result.get("action") == "hold_trading_reason":
             if ceo_plain_enabled():
-                return render_hold_pnl_telegram(result.get("breaker_reason"))
+                # Heartbeat 1h + aviso al cerrar: `breaker_ceo_watch`.
+                return None
             return (
                 "🛠️ DESK AUTO · HOLD (no auto-clear)\n"
                 f"system_integrity por razón de trading/PnL: "

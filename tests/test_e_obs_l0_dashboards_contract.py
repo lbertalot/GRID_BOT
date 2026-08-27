@@ -19,6 +19,7 @@ KEEP = {
     "gridbot-pg-sre.json": "gridbot-pg-sre",
     "gridbot-pipeline-ingestion.json": "gridbot-pipeline-ingestion",
     "gridbot-celery.json": "gridbot-celery",
+    "gridbot-market-view.json": "gridbot-market-view",
 }
 
 REMOVED = {
@@ -113,3 +114,26 @@ def test_profitability_total_ops_not_red_on_volume():
     brk = next(p for p in data["panels"] if "Breakers" in p.get("title", ""))
     bsteps = brk["fieldConfig"]["defaults"]["thresholds"]["steps"]
     assert any(s.get("value") == 1 and s.get("color") == "red" for s in bsteps)
+
+
+def test_market_view_postgres_annotations_and_panels():
+    data = _load("gridbot-market-view.json")
+    raw = (DASH_DIR / "gridbot-market-view.json").read_text(encoding="utf-8")
+    assert data["uid"] == "gridbot-market-view"
+    assert data["title"] == "GridBot Market View"
+    assert "postgres" in raw
+    assert FAKE_DS not in raw
+    titles = [p.get("title") for p in data["panels"]]
+    assert any("Mercado" in (t or "") or "Candlestick" in (t or "") for t in titles)
+    assert any("Mis Trades" in (t or "") for t in titles)
+    anno_names = [a.get("name") for a in data["annotations"]["list"]]
+    assert "Bot BUY" in anno_names
+    assert "Bot SELL" in anno_names
+    assert "klines_data" in raw
+    assert "open_price" in raw
+    assert "entry_price" in raw
+    my_trades = next(panel for panel in data["panels"] if panel.get("id") == 20)
+    trade_sql = my_trades["targets"][0]["rawSql"]
+    assert "paper_ledger_cycles" in trade_sql
+    assert "paper_ledger_fills" in trade_sql
+    assert "FROM trades" not in trade_sql

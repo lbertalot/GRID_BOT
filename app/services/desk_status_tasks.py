@@ -31,6 +31,7 @@ def _telegram(message: str) -> bool:
 def _run_auto_remediation() -> Dict[str, Any]:
     """Ejecuta remediación paper y avisa Telegram si actuó o hold validate."""
     try:
+        from app.core.breaker_ceo_watch import process_si_ceo_watch
         from app.core.desk_auto_remediation import (
             format_remediation_telegram,
             maybe_remediate_stale_system_integrity,
@@ -55,11 +56,7 @@ def _run_auto_remediation() -> Dict[str, Any]:
                         force=True,
                     )
                 elif kind == "pnl":
-                    send = should_emit_ceo(
-                        "hold_pnl",
-                        f"pnl|{result.get('breaker_reason') or ''}",
-                        min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
-                    )
+                    send = False  # heartbeat / clear → process_si_ceo_watch
                 elif kind == "auth":
                     send = should_emit_ceo(
                         "hold_auth",
@@ -68,6 +65,29 @@ def _run_auto_remediation() -> Dict[str, Any]:
                     )
             if send:
                 _telegram(note)
+
+        action = str(result.get("action") or "")
+        if action == "hold_trading_reason":
+            watch = process_si_ceo_watch(
+                si_open=True,
+                reason=str(result.get("breaker_reason") or ""),
+            )
+        elif action == "hold":
+            watch = process_si_ceo_watch(
+                si_open=True,
+                reason=str(result.get("breaker_reason") or ""),
+            )
+        elif result.get("acted") or action == "none":
+            watch = process_si_ceo_watch(
+                si_open=False,
+                reason="",
+                skip_cleared=bool(result.get("acted")),
+            )
+        else:
+            watch = process_si_ceo_watch(skip_cleared=bool(result.get("acted")))
+        if watch:
+            _telegram(watch)
+
         logger.info(
             "desk auto-remediate acted=%s action=%s reason=%s",
             result.get("acted"),

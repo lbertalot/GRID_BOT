@@ -1,0 +1,332 @@
+{
+  "generated_at": "2026-08-26T18:50:35.525172+00:00",
+  "promote_live": "NO",
+  "window": {
+    "interval": "1h",
+    "days_requested": 180,
+    "n_bars": 4320,
+    "from": "2026-02-27T19:00:00+00:00",
+    "to": "2026-08-26T18:00:00+00:00"
+  },
+  "sweep_long_1h": [
+    {
+      "mode": "fixed",
+      "spacing_bps": 50.0,
+      "atr_k": null,
+      "n_trades": 312,
+      "gross_pnl": 31.2,
+      "net_pnl": 16.1866,
+      "mean_capture_bps": 50.0,
+      "max_dd_pct": 4.125,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 50.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 75.0,
+      "atr_k": null,
+      "n_trades": 269,
+      "gross_pnl": 40.35,
+      "net_pnl": 27.3896,
+      "mean_capture_bps": 75.0,
+      "max_dd_pct": 4.053,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 75.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 100.0,
+      "atr_k": null,
+      "n_trades": 193,
+      "gross_pnl": 38.6,
+      "net_pnl": 29.2897,
+      "mean_capture_bps": 100.0,
+      "max_dd_pct": 3.958,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 100.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 150.0,
+      "atr_k": null,
+      "n_trades": 150,
+      "gross_pnl": 45.0,
+      "net_pnl": 37.746,
+      "mean_capture_bps": 150.0,
+      "max_dd_pct": 3.824,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 150.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    {
+      "mode": "fixed",
+      "spacing_bps": 200.0,
+      "atr_k": null,
+      "n_trades": 116,
+      "gross_pnl": 46.4,
+      "net_pnl": 40.7763,
+      "mean_capture_bps": 200.0,
+      "max_dd_pct": 3.711,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 200.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": 47.6302763488618,
+      "atr_k": 0.5,
+      "n_trades": 1253,
+      "gross_pnl": 119.3615,
+      "net_pnl": 59.0742,
+      "mean_capture_bps": 47.63,
+      "max_dd_pct": 26.708,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 40.172247309900655,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      },
+      "spacing_label": "ATR*0.5"
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": 81.81596498553155,
+      "atr_k": 1.0,
+      "n_trades": 819,
+      "gross_pnl": 134.0146,
+      "net_pnl": 94.5417,
+      "mean_capture_bps": 81.82,
+      "max_dd_pct": 25.507,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 80.34449461980131,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      },
+      "spacing_label": "ATR*1.0"
+    },
+    {
+      "mode": "atr",
+      "spacing_bps": 126.7521907250079,
+      "atr_k": 1.5,
+      "n_trades": 455,
+      "gross_pnl": 115.3445,
+      "net_pnl": 93.3661,
+      "mean_capture_bps": 126.75,
+      "max_dd_pct": 27.041,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 120.51674192970196,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      },
+      "spacing_label": "ATR*1.5"
+    }
+  ],
+  "best_fixed": {
+    "mode": "fixed",
+    "spacing_bps": 200.0,
+    "atr_k": null,
+    "n_trades": 116,
+    "gross_pnl": 46.4,
+    "net_pnl": 40.7763,
+    "mean_capture_bps": 200.0,
+    "max_dd_pct": 3.711,
+    "win_rate": 1.0,
+    "params": {
+      "eff_spacing_end": 200.0,
+      "n_levels": 10.0,
+      "require_level_step": 1.0,
+      "whipsaw_capture_bps": 5.0
+    }
+  },
+  "best_any": {
+    "mode": "atr",
+    "spacing_bps": 81.81596498553155,
+    "atr_k": 1.0,
+    "n_trades": 819,
+    "gross_pnl": 134.0146,
+    "net_pnl": 94.5417,
+    "mean_capture_bps": 81.82,
+    "max_dd_pct": 25.507,
+    "win_rate": 1.0,
+    "params": {
+      "eff_spacing_end": 80.34449461980131,
+      "n_levels": 10.0,
+      "require_level_step": 1.0,
+      "whipsaw_capture_bps": 5.0
+    },
+    "spacing_label": "ATR*1.0"
+  },
+  "level_step_ablation_100bps": {
+    "with_delta_level": {
+      "mode": "fixed",
+      "spacing_bps": 100.0,
+      "atr_k": null,
+      "n_trades": 193,
+      "gross_pnl": 38.6,
+      "net_pnl": 29.2897,
+      "mean_capture_bps": 100.0,
+      "max_dd_pct": 3.958,
+      "win_rate": 1.0,
+      "params": {
+        "eff_spacing_end": 100.0,
+        "n_levels": 10.0,
+        "require_level_step": 1.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    "whipsaw_5bps_capture": {
+      "mode": "fixed_whipsaw",
+      "spacing_bps": 100.0,
+      "atr_k": null,
+      "n_trades": 679,
+      "gross_pnl": 6.79,
+      "net_pnl": -25.8101,
+      "mean_capture_bps": 5.0,
+      "max_dd_pct": 5.381,
+      "win_rate": 0.0,
+      "params": {
+        "eff_spacing_end": 100.0,
+        "n_levels": 10.0,
+        "require_level_step": 0.0,
+        "whipsaw_capture_bps": 5.0
+      }
+    },
+    "delta_capture_bps": 95.0,
+    "delta_net_pnl": 55.0998,
+    "interpretation": "Si with_delta_level.mean_capture \u2248 spacing (100) y whipsaw \u2248 5, el patch explica el salto de captura; no hace falta N11 de spacing mientras el paper post-patch confirme capture\u226560 bps."
+  },
+  "regimes": {
+    "range": {
+      "label": "range@1080",
+      "n": 720,
+      "fixed_100": {
+        "mode": "fixed",
+        "spacing_bps": 100.0,
+        "atr_k": null,
+        "n_trades": 71,
+        "gross_pnl": 14.2,
+        "net_pnl": 10.775,
+        "mean_capture_bps": 100.0,
+        "max_dd_pct": 0.4,
+        "win_rate": 1.0,
+        "params": {
+          "eff_spacing_end": 100.0,
+          "n_levels": 10.0,
+          "require_level_step": 1.0,
+          "whipsaw_capture_bps": 5.0
+        }
+      },
+      "atr_1": {
+        "mode": "atr",
+        "spacing_bps": 70.2353778175235,
+        "atr_k": 1.0,
+        "n_trades": 114,
+        "gross_pnl": 16.0137,
+        "net_pnl": 10.5224,
+        "mean_capture_bps": 70.24,
+        "max_dd_pct": 0.406,
+        "win_rate": 1.0,
+        "params": {
+          "eff_spacing_end": 75.65546575494848,
+          "n_levels": 10.0,
+          "require_level_step": 1.0,
+          "whipsaw_capture_bps": 5.0
+        }
+      }
+    },
+    "trend": {
+      "label": "trend@2880",
+      "n": 720,
+      "fixed_100": {
+        "mode": "fixed",
+        "spacing_bps": 100.0,
+        "atr_k": null,
+        "n_trades": 25,
+        "gross_pnl": 5.0,
+        "net_pnl": 3.794,
+        "mean_capture_bps": 100.0,
+        "max_dd_pct": 0.442,
+        "win_rate": 1.0,
+        "params": {
+          "eff_spacing_end": 100.0,
+          "n_levels": 10.0,
+          "require_level_step": 1.0,
+          "whipsaw_capture_bps": 5.0
+        }
+      },
+      "atr_1": {
+        "mode": "atr",
+        "spacing_bps": 94.83936534536991,
+        "atr_k": 1.0,
+        "n_trades": 29,
+        "gross_pnl": 5.5007,
+        "net_pnl": 4.1021,
+        "mean_capture_bps": 94.84,
+        "max_dd_pct": 0.44,
+        "win_rate": 1.0,
+        "params": {
+          "eff_spacing_end": 89.27466407355034,
+          "n_levels": 10.0,
+          "require_level_step": 1.0,
+          "whipsaw_capture_bps": 5.0
+        }
+      }
+    }
+  },
+  "atr_paper_gate": {
+    "proposal": "ATR\u00d71.0 paper-only overlay (sin cambiar freeze 100 bps hash)",
+    "min_calendar_days": 14,
+    "min_closed_cycles": 40,
+    "primary_metric": "paper_cycle_edge_net_cum_usdt",
+    "pass_if": [
+      "mean_capture_bps de ciclos cerrados \u2265 60 (vs costo 24 \u2192 colch\u00f3n \u2265 36 bps)",
+      "edge_net_cum > 0 al cierre de la ventana",
+      "racha m\u00e1xima < 5 (no trip SI) y early_streak_warn dispara \u2264 2 veces",
+      "net_pnl ATR paper \u2265 net_pnl baseline freeze 100 bps en la misma ventana"
+    ],
+    "fail_if": [
+      "mean_capture_bps < 40 (sigue regalando edge a costos)",
+      "SI open por consecutive losses",
+      "muestra < 40 ciclos o < 14 d\u00edas \u2192 NO DECIDIR (extender)"
+    ],
+    "explicit_non_goals": [
+      "No optimizar por n\u00famero de trades",
+      "No bajar freeze a 75 sin N11 aunque 14d ATR gane",
+      "No live / PROMOTE_LIVE: NO"
+    ]
+  },
+  "decision_now": {
+    "change_freeze_spacing": "NO",
+    "keep_100bps": true,
+    "priority": "validar \u0394nivel\u22651 en paper con m\u00e9tricas edge neto",
+    "atr_trial": "solo tras pasar atr_paper_gate; no adoptar por backtest solo"
+  }
+}
