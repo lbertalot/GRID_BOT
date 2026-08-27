@@ -124,6 +124,35 @@ def test_execute_order_recv_window_caller_override(executor_with_mocks):
     assert mock_client.create_order.call_args.kwargs["recvWindow"] == 5000
 
 
+def test_reduce_only_activo_no_habilita_sell_real(executor_with_mocks, monkeypatch):
+    """REDUCE_ONLY autoriza únicamente el contrato PAPER, nunca Binance real."""
+    executor, mock_client, _ = executor_with_mocks
+    breakers = MagicMock()
+    breakers.get_all_breakers_status.return_value = {
+        "critical_mode": False,
+        "active_breakers": ["system_integrity"],
+        "total_active": 1,
+        "breakers": {
+            "system_integrity": {
+                "active": True,
+                "operational_state": "REDUCE_ONLY",
+            }
+        },
+    }
+    # Fuerza que la decisión dependa del estado operativo, no solo del helper legacy.
+    breakers.is_trading_halted.return_value = False
+    monkeypatch.setattr(
+        "app.core.circuit_breakers.get_shared_breakers", lambda: breakers
+    )
+
+    with pytest.raises(ValueError, match="paper-only"):
+        executor.execute_order(
+            "BTCUSDT", "SELL", "MARKET", "0.001", reduce_only=True
+        )
+
+    mock_client.create_order.assert_not_called()
+
+
 # ─────────────────────────────────────────────────────────────────
 # Mitigación error -1021 (timestamp drift)
 # ─────────────────────────────────────────────────────────────────

@@ -175,6 +175,37 @@ def test_place_order_breaker_active_503(api_headers, monkeypatch):
     assert "circuit breaker" in r.json()["detail"].lower()
 
 
+def test_place_order_rejects_reduce_only_even_for_sell(api_headers):
+    """La ruta Binance genérica nunca transforma REDUCE_ONLY en un SELL real."""
+    breakers = MagicMock()
+    breakers.get_all_breakers_status.return_value = {
+        "critical_mode": False,
+        # Snapshot corrupto: la política SI debe prevalecer sobre total_active.
+        "total_active": 0,
+        "active_breakers": [],
+        "breakers": {
+            "system_integrity": {
+                "active": True,
+                "operational_state": "REDUCE_ONLY",
+            }
+        },
+    }
+    app.state.breakers = breakers
+    try:
+        client = TestClient(app, base_url="http://localhost")
+        response = client.post(
+            "/api/trade/order",
+            json=_order_body(side="SELL"),
+            headers=api_headers,
+        )
+    finally:
+        if hasattr(app.state, "breakers"):
+            delattr(app.state, "breakers")
+
+    assert response.status_code == 503
+    assert "system_integrity" in response.json()["detail"]
+
+
 def test_place_order_validation_reject_400(api_headers, monkeypatch):
     monkeypatch.setenv("BINANCE_API_KEY", "k")
     monkeypatch.setenv("BINANCE_SECRET_KEY", "s")

@@ -951,3 +951,60 @@ ic2_trips_total = Counter(
     "ic2_trips_total",
     "Activaciones IC-2 (DD MtM Core ≥ umbral % del capital desplegado)",
 )
+
+# ============================================================================
+# PAPER EDGE / STREAK (validación patch Δnivel — research 2026-08-26)
+# ============================================================================
+
+paper_cycle_edge_gross_usdt = Gauge(
+    "paper_cycle_edge_gross_usdt",
+    "PnL bruto del último ciclo cerrado paper (USDT)",
+)
+
+paper_cycle_edge_net_usdt = Gauge(
+    "paper_cycle_edge_net_usdt",
+    "Edge neto del último ciclo (gross − fees − slippage) USDT",
+)
+
+paper_cycle_edge_net_cum_usdt = Gauge(
+    "paper_cycle_edge_net_cum_usdt",
+    "Edge neto acumulado paper (realized_net_pnl_usdt del ledger)",
+)
+
+paper_consecutive_losses = Gauge(
+    "paper_consecutive_losses",
+    "Racha actual de ciclos paper con net_pnl < 0 (SoT ledger)",
+)
+
+paper_early_streak_warn = Gauge(
+    "paper_early_streak_warn",
+    "1 si racha ≥ PAPER_EARLY_STREAK_WARN (default 3), menor al breaker",
+)
+
+# REDUCE_ONLY — etiquetas enumeradas, sin IDs de orden/ciclo para evitar cardinalidad.
+reduce_only_mode_active = Gauge(
+    "reduce_only_mode_active",
+    "1 si system_integrity permite únicamente reducir inventario",
+)
+reduce_only_exit_checks_total = Counter(
+    "reduce_only_exit_checks_total",
+    "Evaluaciones de salida reduce-only paper",
+    ["outcome", "reason"],
+)
+paper_ledger_transactions_total = Counter(
+    "paper_ledger_transactions_total",
+    "Transacciones autoritativas del ledger paper",
+    ["operation", "outcome"],
+)
+inventory_notional_usdt = Gauge(
+    "inventory_notional_usdt",
+    "Notional de inventario paper abierto al coste (USDT)",
+)
+inventory_cap_usdt = Gauge(
+    "inventory_cap_usdt",
+    "Cap de inventario paper configurado (USDT)",
+)
+inventory_cap_utilization_ratio = Gauge(
+    "inventory_cap_utilization_ratio",
+    "Uso de cap de inventario paper, entre 0 y 1",
+)

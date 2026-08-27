@@ -117,6 +117,7 @@ class TradeExecutor:
         quantity: Union[Decimal, str],
         db: Optional[Session] = None,
         update_balance: bool = True,
+        reduce_only: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
         """
@@ -138,17 +139,27 @@ class TradeExecutor:
             Exception si la orden falla
         """
         try:
+            from app.core.circuit_breakers import get_shared_breakers
+            from app.core.system_integrity_state import (
+                assert_system_integrity_execution_allowed,
+                system_integrity_record_from_breaker_summary,
+            )
             from app.core.order_execution_guard import assert_real_order_allowed
 
+            breaker_summary = get_shared_breakers().get_all_breakers_status()
+            assert_system_integrity_execution_allowed(
+                record=system_integrity_record_from_breaker_summary(breaker_summary),
+                side=side,
+                reduce_only=reduce_only,
+                paper_only=False,
+            )
             assert_real_order_allowed(context="TradeExecutor.execute_trade")
 
             # ── GUARD DE SEGURIDAD: verificar Circuit Breakers antes de enviar ──
             # Si cualquier breaker está activo, rechazar la orden inmediatamente.
             # Esto es la última línea de defensa antes de Binance.
             try:
-                from app.core.circuit_breakers import CircuitBreakers as _CB
-
-                _cb = _CB()
+                _cb = get_shared_breakers()
                 if _cb.is_trading_halted():
                     active = _cb.get_all_breakers_status().get("active_breakers", [])
                     logger.error(
@@ -161,9 +172,9 @@ class TradeExecutor:
             except ValueError:
                 raise
             except Exception as cb_err:
-                logger.warning(
-                    f"[Guard] No se pudo verificar circuit breakers: {cb_err}"
-                )
+                raise ValueError(
+                    f"Estado de circuit breakers no verificable: {cb_err}"
+                ) from cb_err
 
             merged_kwargs: Dict[str, Any] = dict(kwargs)
             merged_kwargs.setdefault("recvWindow", 10000)

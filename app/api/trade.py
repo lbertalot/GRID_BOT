@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body, Depends
 from binance import Client
 import asyncio
+import logging
 import os
 import json
 from app.services.grid_strategy import calculate_grid_levels, decide_grid_action
@@ -21,6 +22,11 @@ from app.core.metrics import (
     gridbot_spot_market_submit_path_total,
 )
 from app.core.circuit_breakers import get_shared_breakers
+from app.core.system_integrity_state import (
+    SystemIntegrityOrderBlocked,
+    assert_system_integrity_execution_allowed,
+    system_integrity_record_from_breaker_summary,
+)
 from fastapi import Request
 from app.services.pnl_service import settle_pnl_on_sell, recompute_profit_metrics
 from app.core.operation_tracker import OperationTracker, OperationStatus
@@ -32,6 +38,7 @@ from app.services.broker_market_execution import place_spot_market_via_adapter
 
 router = APIRouter()
 _operation_tracker = OperationTracker()
+logger = logging.getLogger(__name__)
 
 # Instancia global del servicio de Binance
 binance_service = BinanceService()
@@ -241,6 +248,15 @@ async def place_order(
         else:
             breakers = get_shared_breakers()
         summary = breakers.get_all_breakers_status()
+
+        # REDUCE_ONLY permite solamente una reserva/liquidación en el ledger PAPER.
+        # Esta ruta genérica llega a Binance y por eso jamás propaga un SELL real.
+        assert_system_integrity_execution_allowed(
+            record=system_integrity_record_from_breaker_summary(summary),
+            side=order.side,
+            reduce_only=False,
+            paper_only=False,
+        )
         if summary.get("critical_mode") or summary.get("total_active", 0) > 0:
             order_validation_rejects_total.labels(
                 reason="breaker_active", symbol=order.symbol.upper()
@@ -248,10 +264,19 @@ async def place_order(
             raise HTTPException(
                 status_code=503, detail="Trading bloqueado por circuit breaker activo"
             )
+    except SystemIntegrityOrderBlocked as exc:
+        logger.warning("Orden bloqueada por system_integrity: %s", exc)
+        raise HTTPException(
+            status_code=503, detail=f"Trading bloqueado por system_integrity: {exc}"
+        ) from exc
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as exc:
+        # Una autorización no verificable nunca equivale a breaker cerrado.
+        logger.error("No se pudo verificar circuit breakers: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="Estado de protección no verificable"
+        ) from exc
     api_key_binance = os.getenv("BINANCE_API_KEY", "")
     api_secret = os.getenv("BINANCE_SECRET_KEY", "")
 

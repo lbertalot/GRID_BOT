@@ -73,6 +73,9 @@ class CircuitBreakers:
                 self._last_activation_reason.get(breaker_type, "")
             ),
             activation_count=int(self._activation_count.get(breaker_type, 0)),
+            operational_state=state.get("operational_state"),
+            transitioned_at=state.get("transitioned_at"),
+            transition_reason=state.get("transition_reason"),
         )
 
     def _apply_record(self, breaker_type: str, record: "BreakerTripRecord") -> None:
@@ -81,6 +84,9 @@ class CircuitBreakers:
         self.breakers[breaker_type]["active"] = bool(record.active)
         self.breakers[breaker_type]["activated_at"] = record.activated_at
         self.breakers[breaker_type]["reason"] = record.reason
+        self.breakers[breaker_type]["operational_state"] = record.operational_state
+        self.breakers[breaker_type]["transitioned_at"] = record.transitioned_at
+        self.breakers[breaker_type]["transition_reason"] = record.transition_reason
         self._last_activation_ts[breaker_type] = float(record.last_activation_ts or 0.0)
         self._last_activation_reason[breaker_type] = str(
             record.last_activation_reason or ""
@@ -230,6 +236,28 @@ class CircuitBreakers:
                 f"❌ Error desactivando circuit breaker '{breaker_type}': {e}"
             )
             return False
+
+    async def transition_operational_state(
+        self, breaker_type: str, state: str, *, reason: str
+    ) -> bool:
+        """Transición auditada; no desactiva el trip ni altera su antigüedad."""
+        if breaker_type not in self.breakers:
+            return False
+        from app.core.system_integrity_state import SystemIntegrityState
+
+        try:
+            target = SystemIntegrityState(state.upper())
+        except ValueError:
+            return False
+        self._refresh_from_store()
+        current = self.breakers[breaker_type]
+        if target is SystemIntegrityState.CLOSED and current.get("active"):
+            return False
+        current["operational_state"] = target.value
+        current["transitioned_at"] = datetime.now().isoformat()
+        current["transition_reason"] = reason
+        self._persist_breaker(breaker_type)
+        return True
 
     async def activate_critical_mode(self) -> bool:
         """Activar modo crítico (todos los circuit breakers).
