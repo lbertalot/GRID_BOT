@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from decimal import Decimal
+from decimal import ROUND_UP, Decimal
 from pathlib import Path
 
 import pytest
@@ -48,8 +48,14 @@ def test_freeze_writes_hash_and_range(tmp_path):
     assert eth["mid_price_at_freeze"] == "3500"
     assert eth["min_price"] == 3325.0
     assert eth["max_price"] == 3675.0
-    # Cantidad debe respetar el lot step de Binance y nunca subfinanciar el nivel.
-    assert eth["quantity"] == 0.0058
+    # ROUND_UP al lot step ETHUSDT (0.0001). 20/3500=0.005714… → 0.0058;
+    # nocional nunca por debajo del piso L0 (el motor no puede truncar otra vez).
+    lot_step = Decimal("0.0001")
+    expected_qty = float(
+        (Decimal("20") / Decimal("3500")).quantize(lot_step, rounding=ROUND_UP)
+    )
+    assert eth["quantity"] == expected_qty
+    assert eth["quantity"] * 3500 >= 20
     assert eth["trading_mode"] == "PAPER"
     assert written["system_config"]["force_real_mode"] is False
     assert len(out["config_hash"]) == 64
