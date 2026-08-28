@@ -44,7 +44,9 @@ class CircuitBreakers:
             "system_integrity": {"active": False, "activated_at": None, "reason": None},
             "critical_mode": {"active": False, "activated_at": None, "reason": None},
         }
-        self.logger.info("🔧 Módulo de circuit breakers inicializado")
+        from app.core.boot_log import boot_info
+
+        boot_info(self.logger, "circuit_breakers", "🔧 Módulo de circuit breakers inicializado")
         # Cooldown por breaker y estado
         self._last_activation_ts: Dict[str, float] = {}
         self._last_activation_reason: Dict[str, str] = {}
@@ -93,11 +95,26 @@ class CircuitBreakers:
         )
         self._activation_count[breaker_type] = int(record.activation_count or 0)
 
-    def _persist_breaker(self, breaker_type: str) -> None:
+    def _persist_breaker(self, breaker_type: str, *, allow_close: bool = False) -> None:
+        """Persiste un breaker. No pisa un OPEN remoto con CLOSED salvo ``allow_close``.
+
+        Recreate/hydrate de un proceso vacío no debe borrar SI REDUCE_ONLY en Redis.
+        Solo ``deactivate_breaker`` (allow_close=True) puede cerrar el HASH.
+        """
         if self._store is None or breaker_type not in self.breakers:
             return
         try:
-            self._store.save_breaker(breaker_type, self._record_for(breaker_type))
+            record = self._record_for(breaker_type)
+            if not record.active and not allow_close:
+                remote = self._store.load_all().get(breaker_type)
+                if remote is not None and remote.active:
+                    self.logger.warning(
+                        "Skip persist closed '%s': store sigue OPEN "
+                        "(recreate/hydrate vacío no wipe SI)",
+                        breaker_type,
+                    )
+                    return
+            self._store.save_breaker(breaker_type, record)
         except Exception as exc:  # noqa: BLE001 — never break trading path
             self.logger.warning(
                 "No se pudo persistir breaker '%s' en store: %s", breaker_type, exc
@@ -228,7 +245,7 @@ class CircuitBreakers:
                 breaker_state.labels(type=breaker_type).set(0)
             except Exception:
                 pass
-            self._persist_breaker(breaker_type)
+            self._persist_breaker(breaker_type, allow_close=True)
             return True
 
         except Exception as e:

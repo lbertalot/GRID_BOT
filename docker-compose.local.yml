@@ -292,10 +292,10 @@ services:
     command: >
       celery -A app.core.celery_app beat
       --loglevel=warning
-      --schedule /tmp/celerybeat-schedule
-      --pidfile=/tmp/celerybeat.pid
+      --schedule /app/data/celerybeat-schedule
+      --pidfile=/app/data/celerybeat.pid
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule"]
+      test: ["CMD-SHELL", "test -f /app/data/celerybeat-schedule"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -107,8 +107,20 @@ def _build_logging_config() -> dict:
     }
 
 
+_LOGGING_CONFIGURED = False
+
+
 def setup_optimized_logging():
-    """Configura el sistema de logging optimizado. Respeta ENVIRONMENT y LOG_LEVEL."""
+    """Configura el sistema de logging optimizado. Respeta ENVIRONMENT y LOG_LEVEL.
+
+    Idempotente: dictConfig una vez por proceso (worker usa este setup, no
+    ``logging_config.setup_logging``).
+    """
+    global _LOGGING_CONFIGURED
+    logger = logging.getLogger(__name__)
+    if _LOGGING_CONFIGURED:
+        logger.debug("Sistema de logging optimizado ya configurado (skip)")
+        return logger
     log_dir = os.path.dirname(os.getenv("LOG_FILE_PATH", "logs/trading.log") or "logs")
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
@@ -137,7 +149,7 @@ def setup_optimized_logging():
     sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
     sqlalchemy_logger.addFilter(SlowQueryFilter(threshold_ms=100))
 
-    logger = logging.getLogger(__name__)
     logger.info("✅ Sistema de logging optimizado configurado")
+    _LOGGING_CONFIGURED = True
 
     return logger

@@ -278,3 +278,24 @@ DATABASE_URL=... alembic current
 
 Cualquier desviación se discute en el siguiente standup y se anota en
 `reports/ops_watch/LATEST.md`.
+
+---
+
+## 9. Recreate paper-safe (no wipe Redis breakers)
+
+Los circuit breakers L0 (SI REDUCE_ONLY) viven en Redis HASH `gridbot:breakers:v1`.
+Recrear API/worker **no** debe tocar Redis ni Postgres.
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build --force-recreate --no-deps api worker beat
+```
+
+Tras recreate:
+
+1. `docker compose exec redis redis-cli TYPE gridbot:breakers:v1` → `hash`
+2. `GET /breakers/summary` → `system_integrity` activo, `REDUCE_ONLY`
+3. Grafana CEO: Freno = 1 **o** racha paper ≥ 5
+
+Si `TYPE none` o `breaker_store_backend{backend="memory"}==1` con racha ≥ 5:
+rehidratar REDUCE_ONLY (mismo procedimiento 27-ago). **No** `deactivate`.
+Detalle: [`Docs/ops/followup-logs-diagnostico-2026-08-28.md`](ops/followup-logs-diagnostico-2026-08-28.md).
