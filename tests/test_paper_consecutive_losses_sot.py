@@ -64,6 +64,34 @@ def test_ventana_vacia_metricas_cero():
     assert metrics["daily_loss_pct"] == 0.0
     assert metrics["hourly_loss_pct"] == 0.0
     assert metrics["total_loss_usd"] == 0.0
+    assert metrics["last_closed_at"] is None
+
+
+def test_ventana_daily_cero_expone_last_closed_at():
+    now = datetime(2026, 8, 28, 12, 0, tzinfo=timezone.utc)
+    cycles = [
+        _cycle(net="-1", at="2026-08-26T18:00:00+00:00"),
+    ]
+    metrics = paper_window_loss_metrics(
+        cycles, now=now, initial_cash=Decimal("1000")
+    )
+    assert metrics["daily_loss_pct"] == 0.0
+    assert "2026-08-26" in (metrics["last_closed_at"] or "")
+
+
+def test_format_daily_metrics_log_sin_closes_hoy():
+    from app.core.auto_circuit_breaker import format_daily_metrics_log
+
+    msg = format_daily_metrics_log(
+        {
+            "total_loss_pct": 0.001,
+            "daily_loss_pct": 0.0,
+            "last_closed_at": "2026-08-26T18:00:00+00:00",
+        }
+    )
+    assert "sin closes hoy" in msg
+    assert "2026-08-26" in msg
+    assert "Total=" in msg
 
 
 def test_metricas_solo_cierres_negativos_de_esta_ventana():

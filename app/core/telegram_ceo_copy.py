@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import time
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -263,6 +263,11 @@ def render_ceo_digest(digest: Any) -> str:
     return "\n".join(lines)
 
 
+def utc_stamp_line() -> str:
+    """Timestamp UTC para copy CEO / Telegram (el bot corre en UTC)."""
+    return datetime.now(timezone.utc).strftime("Reloj: %Y-%m-%d %H:%M UTC")
+
+
 def _streak_plain(reason: Optional[str]) -> str:
     """Extrae conteo de racha si viene en el reason del breaker; sin jerga técnica."""
     if not reason:
@@ -291,6 +296,7 @@ def render_hold_pnl_telegram(reason: Optional[str] = None) -> str:
         "3) Solo si 1–2 OK: autorizar override acotado (no reset a ciegas).\n"
         "Este aviso se repite cada hora mientras el freno siga. "
         "Cuando se levante, te avisamos al momento.\n"
+        f"{utc_stamp_line()}\n"
         "**Dinero real: NO.**"
     )
 
@@ -307,6 +313,7 @@ def render_hold_auth_telegram() -> str:
     return (
         "🟠 **Freno: no valida red/clave**\n"
         "Suele ser un cambio de IP. Si llegó el aviso rojo de Binance, seguí esos pasos.\n"
+        f"{utc_stamp_line()}\n"
         "**Dinero real: NO.**"
     )
 

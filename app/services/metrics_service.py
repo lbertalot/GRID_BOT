@@ -129,7 +129,12 @@ class MetricsService:
             profit_total_usdt.labels(strategy="grid").set(float(total_profit))
             roi_total_percent.labels(strategy="grid").set(float(roi_pct))
             logger.info(
-                f"📈 PnL/ROI Binance publicados: profit={total_profit:.6f} USDT, invested={total_invested:.6f} USDT, roi={roi_pct:.4f}%"
+                "📈 PnL/ROI Binance OPS/histórico (≠ SoT paper Capa A; "
+                "equity paper = ledger ~999, no invested Binance): "
+                "profit=%.6f USDT, invested=%.6f USDT, roi=%.4f%%",
+                total_profit,
+                total_invested,
+                roi_pct,
             )
             return {
                 "profit_total_usdt": total_profit,
