@@ -159,7 +159,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(breaker_any_open{job=\"gridbot-api\"})",
+          "expr": "max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "any_open",
           "refId": "A"
         }
@@ -208,7 +208,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "active_breakers_total{job=\"gridbot-api\"}",
+          "expr": "max(active_breakers_total{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "active",
           "refId": "A"
         }
@@ -508,7 +508,7 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-12h",
     "to": "now"
   },
   "timepicker": {},

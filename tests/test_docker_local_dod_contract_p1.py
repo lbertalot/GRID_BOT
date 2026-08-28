@@ -42,6 +42,16 @@ def test_compose_local_declares_migrate_before_api() -> None:
     assert idx_migrate < idx_api
 
 
+def test_compose_beat_pidfile_not_on_persistent_data_volume() -> None:
+    """Schedule sí en /app/data; pidfile en /tmp (recreate no crash-loop)."""
+    text = _read(REPO_ROOT / "docker-compose.local.yml")
+    assert "--schedule /app/data/celerybeat-schedule" in text
+    assert "--pidfile=/tmp/celerybeat.pid" in text
+    assert "--pidfile=/app/data/celerybeat.pid" not in text
+    assert "/tmp/celerybeat.pid" in text
+    assert "test -f /app/data/celerybeat-schedule" not in text
+
+
 def test_agents_links_docker_dod_checklist() -> None:
     agents = _read(REPO_ROOT / "AGENTS.md")
     assert "DOCKER_LOCAL_DOD_CHECKLIST.md" in agents

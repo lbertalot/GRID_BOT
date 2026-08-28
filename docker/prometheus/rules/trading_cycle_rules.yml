@@ -14,13 +14,29 @@ groups:
 
       - alert: GridBotTickStalled
         expr: |
-          absent(cycle_phase_timestamp{phase="evaluation"})
+          (
+            sum(
+              increase(
+                flower_events_total{
+                  task="app.services.trading_tasks.trading_cycle_tick",
+                  type="task-succeeded"
+                }[15m]
+              )
+            ) or on() vector(0)
+          ) == 0
+          and on() (
+            max(up{job="gridbot-celery"}) == 1
+          )
         for: 10m
         labels:
           severity: critical
         annotations:
-          summary: "Tick 5m detenido"
-          description: "No se observa actividad de fase 'evaluation' en 10 minutos."
+          summary: "Tick paper detenido (Flower sin trading_cycle_tick 15m)"
+          description: >-
+            Beat/worker no completaron trading_cycle_tick en 15m (Flower).
+            No usar absent(cycle_phase_timestamp): ese gauge vive en el
+            worker y no se scrapea. HOLD no debe cortar el tick. Revisar
+            beat pidfile /tmp (no /app/data). Dinero real: NO.
 
       # Paper-aware (L0): ROI diario negativo en paper es ruido (fees/MtM), no edge.
       # Mute mientras effective_mode=paper — mismo patrón que pipeline_ingestion_rules.
