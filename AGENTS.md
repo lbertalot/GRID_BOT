@@ -14,6 +14,7 @@ Este archivo acelera el onboarding de agentes y nuevos colaboradores. Resume có
   - Integridad financiera (Decimal para precios/cantidades, reconciliación ≤ 60s).
   - Inteligencia adaptativa (ML con fallback seguro).
   - Rendimiento asíncrono (I/O non-blocking, P99 ≤ 250 ms).
+  - Paper L0 All Hands: evidencia T0.5 en `Docs/ops/t0-obs-frescura-all-hands-2026-08-28.md` (protocolo en el monorepo `Docs/product/README.md`).
 
 ### Estructura relevante
 - `app/api/`: routers/endpoints (FastAPI)
