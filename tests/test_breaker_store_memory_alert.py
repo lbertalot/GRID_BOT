@@ -18,6 +18,5 @@ def test_breaker_store_memory_alert_present():
     names = [r["alert"] for g in data["groups"] for r in g["rules"]]
     assert "BreakerStoreFallbackMemory" in names
     raw = RULES.read_text(encoding="utf-8")
-    assert "breaker_store_backend" in raw
-    assert 'backend="memory"' in raw
+    assert 'breaker_store_backend{job="gridbot-api", backend="memory"}' in raw
     assert "paper_consecutive_losses" in raw
