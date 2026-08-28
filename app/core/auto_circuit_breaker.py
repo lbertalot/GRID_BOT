@@ -75,6 +75,15 @@ def paper_window_loss_metrics(
     total_loss = _sum_since(None)
     daily_loss = _sum_since(now - timedelta(days=1))
     hourly_loss = _sum_since(now - timedelta(hours=1))
+    closed_any = [
+        c
+        for c in cycles
+        if getattr(c, "state", None) == "closed" and getattr(c, "closed_at", None)
+    ]
+    last_closed_at = None
+    if closed_any:
+        last_ts = max(c.closed_at for c in closed_any)
+        last_closed_at = last_ts.isoformat() if hasattr(last_ts, "isoformat") else str(last_ts)
     return {
         "total_loss_pct": float(abs(total_loss) / baseline),
         "daily_loss_pct": float(abs(daily_loss) / baseline),
@@ -82,7 +91,20 @@ def paper_window_loss_metrics(
         "total_loss_usd": float(abs(total_loss)),
         "daily_loss_usd": float(abs(daily_loss)),
         "hourly_loss_usd": float(abs(hourly_loss)),
+        "last_closed_at": last_closed_at,
     }
+
+
+def format_daily_metrics_log(metrics: Dict[str, Any]) -> str:
+    """Copy ops: Diario=0 no es inconsistente con Total si no hay closes hoy."""
+    daily = float(metrics.get("daily_loss_pct") or 0.0)
+    total = float(metrics.get("total_loss_pct") or 0.0)
+    last = metrics.get("last_closed_at") or "n/a"
+    if daily == 0.0:
+        daily_part = f"Diario=0.00% (sin closes hoy; last={last})"
+    else:
+        daily_part = f"Diario={daily:.2%}"
+    return f"📊 Métricas: Total={total:.2%}, {daily_part}"
 
 
 class AutoCircuitBreaker:
@@ -104,7 +126,9 @@ class AutoCircuitBreaker:
             "critical_loss_pct": 0.20,  # 20% pérdida crítica (modo crítico)
         }
 
-        self.logger.info("🛡️ Auto Circuit Breaker inicializado")
+        from app.core.boot_log import boot_info
+
+        boot_info(self.logger, "auto_circuit_breaker", "🛡️ Auto Circuit Breaker inicializado")
 
     @property
     def breakers(self) -> CircuitBreakers:
@@ -148,9 +172,7 @@ class AutoCircuitBreaker:
                 self.logger.warning(
                     f"🚨 Circuit breakers activados: {activation_results['breakers_activated']}"
                 )
-                self.logger.warning(
-                    f"📊 Métricas: Total={loss_metrics['total_loss_pct']:.2%}, Diario={loss_metrics['daily_loss_pct']:.2%}"
-                )
+                self.logger.warning(format_daily_metrics_log(loss_metrics))
 
             return activation_results
 
@@ -233,6 +255,7 @@ class AutoCircuitBreaker:
                 "total_loss_usd": abs(total_loss),
                 "daily_loss_usd": abs(daily_loss),
                 "hourly_loss_usd": abs(hourly_loss),
+                "last_closed_at": None,
             }
 
         except Exception as e:
@@ -244,6 +267,7 @@ class AutoCircuitBreaker:
                 "total_loss_usd": 0.0,
                 "daily_loss_usd": 0.0,
                 "hourly_loss_usd": 0.0,
+                "last_closed_at": None,
             }
 
     async def _check_daily_loss_threshold(

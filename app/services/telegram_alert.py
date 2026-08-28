@@ -21,6 +21,16 @@ def _should_send(msg: str) -> bool:
     return True
 
 
+def stamp_telegram_utc(message: str) -> str:
+    """Añade Reloj UTC si el copy CEO aún no lo trae. No altera el hash de cooldown."""
+    if "Reloj:" in message:
+        return message
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return f"{message}\nReloj: {ts}"
+
+
 def send_telegram_alert(message: str) -> bool:
     """
     Envía un mensaje de alerta a un chat de Telegram usando el bot configurado por variables de entorno.
@@ -38,7 +48,7 @@ def send_telegram_alert(message: str) -> bool:
         logger.info("Telegram dedupe/cooldown: mensaje suprimido")
         return True
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": message}
+    payload = {"chat_id": chat_id, "text": stamp_telegram_utc(message)}
     try:
         resp = requests.post(url, data=payload, timeout=5)
         if resp.status_code == 200:
@@ -74,7 +84,7 @@ async def send_telegram_alert_async(message: str) -> bool:
         logger.info("Telegram dedupe/cooldown (async): mensaje suprimido")
         return True
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": message}
+    payload = {"chat_id": chat_id, "text": stamp_telegram_utc(message)}
 
     try:
         async with aiohttp.ClientSession() as session:

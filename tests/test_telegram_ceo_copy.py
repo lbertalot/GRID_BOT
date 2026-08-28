@@ -117,6 +117,8 @@ def test_hold_pnl_copy_does_not_promise_auto_resume():
     assert "PROMOTE_LIVE" not in msg
     assert "system_integrity" not in msg
     assert "ledger" not in msg.lower()
+    assert "Reloj:" in msg
+    assert "UTC" in msg
 
 
 def test_si_cleared_copy():

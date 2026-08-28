@@ -303,7 +303,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n)",
+          "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((max(paper_consecutive_losses{job=\"gridbot-api\"}) or on() vector(0)) >= bool 5), 1), \"src\", \"streak\", \"\", \"\")\n)",
           "legendFormat": "semaforo",
           "refId": "A"
         }
@@ -396,7 +396,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n)",
+          "expr": "max(\n  label_replace(3 * clamp_max((1 - clamp_max(max(trading_effective_mode{job=\"gridbot-api\", mode=\"paper\"}) or on() vector(0), 1)), 1), \"src\", \"mode\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((1 - clamp_max(max(up{job=\"gridbot-api\"}) or on() vector(0), 1)), 1), \"src\", \"api\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max(max(emergency_stop_active{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"estop\", \"\", \"\")\n  or\n  label_replace(3 * clamp_max((max(binance_ip_rejected{job=\"gridbot-api\"}) or on() vector(0)), 1), \"src\", \"ip\", \"\", \"\")\n  or\n  label_replace(2 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -3), 1), \"src\", \"dd3\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((100 * ((max(paper_equity_usdt{job=\"gridbot-api\"}) / max(paper_equity_e0_usdt{job=\"gridbot-api\"})) - 1)) <= bool -1.5), 1), \"src\", \"dd15\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0), 1), \"src\", \"brk\", \"\", \"\")\n  or\n  label_replace(1 * clamp_max(((max(paper_consecutive_losses{job=\"gridbot-api\"}) or on() vector(0)) >= bool 5), 1), \"src\", \"streak\", \"\", \"\")\n)",
           "legendFormat": "accion",
           "refId": "A"
         }
@@ -1023,7 +1023,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 = hay un freno. En paper suele ser pérdidas seguidas: HOLD, no lo resetees.",
+      "description": "1 = freno SI o racha paper ≥5. HOLD D3: no resetear. Si SI se cae de Redis, la racha sigue pintando naranja.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1064,7 +1064,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 28
       },
@@ -1089,12 +1089,79 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0)",
+          "expr": "clamp_max((max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0)) + ((max(paper_consecutive_losses{job=\"gridbot-api\"}) or on() vector(0)) >= bool 5), 1)",
           "legendFormat": "breaker",
           "refId": "A"
         }
       ],
-      "title": "Freno de seguridad",
+      "title": "Freno / racha",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Ciclos paper cerrados net<0 seguidos. Umbral HOLD = 5. No es live.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 28
+      },
+      "id": 22,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(paper_consecutive_losses{job=\"gridbot-api\"}) or on() vector(0)",
+          "legendFormat": "racha",
+          "refId": "A"
+        }
+      ],
+      "title": "Racha paper",
       "type": "stat"
     },
     {
@@ -1131,8 +1198,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 12,
         "y": 28
       },
       "id": 16,
@@ -1167,8 +1234,8 @@
     {
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 18,
         "y": 28
       },
       "id": 17,

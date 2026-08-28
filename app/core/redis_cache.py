@@ -48,7 +48,9 @@ class RedisCache:
         self.cache_hits = 0
         self.cache_misses = 0
 
-        self.logger.info("🔄 Redis Cache inicializado")
+        from app.core.boot_log import boot_info
+
+        boot_info(self.logger, "redis_cache", "🔄 Redis Cache inicializado")
 
     async def _get_client(self) -> redis.Redis:
         """Obtener cliente Redis (lazy initialization)"""

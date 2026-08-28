@@ -18,10 +18,8 @@ from pydantic import field_validator, model_validator
 from binance import Client
 from dotenv import load_dotenv
 
-# Importar configuración de SQLAlchemy ANTES de cualquier import de SQLAlchemy
-from app.core.sqlalchemy_logging import configure_sqlalchemy_logging
-
-configure_sqlalchemy_logging()
+# SQLAlchemy logging: se configura una vez al importar sqlalchemy_logging.
+from app.core.sqlalchemy_logging import configure_sqlalchemy_logging  # noqa: F401
 
 # Cargar variables de entorno desde .env
 load_dotenv()

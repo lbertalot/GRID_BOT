@@ -70,6 +70,8 @@ def test_ceo_auto_job_filters_on_mode_and_orders():
     assert "gridbot_orders_total{job=" in raw.replace("\\", "")
     assert "binance_ip_rejected{job=" in raw.replace("\\", "")
     assert FAKE_DS not in raw
+    assert "paper_consecutive_losses" in raw
+    assert "Racha paper" in raw
 
 
 def test_paper_l0_all_panels_filter_gridbot_api():

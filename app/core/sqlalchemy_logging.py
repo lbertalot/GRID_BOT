@@ -1,9 +1,16 @@
 # Configuración específica para SQLAlchemy logging
 import logging
 
+logger = logging.getLogger(__name__)
+_SQLALCHEMY_CONFIGURED = False
+
 
 def configure_sqlalchemy_logging():
-    """Configura el logging de SQLAlchemy para reducir verbosidad"""
+    """Configura el logging de SQLAlchemy para reducir verbosidad. Idempotente."""
+    global _SQLALCHEMY_CONFIGURED
+    if _SQLALCHEMY_CONFIGURED:
+        return
+    _SQLALCHEMY_CONFIGURED = True
 
     # Reducir logs de SQLAlchemy a solo warnings y errores
     sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
@@ -36,12 +43,12 @@ def configure_sqlalchemy_logging():
         "sqlalchemy.dialects",
         "sqlalchemy.orm",
     ]:
-        logger = logging.getLogger(logger_name)
-        logger.handlers.clear()  # Limpiar handlers existentes
-        logger.addHandler(sqlalchemy_handler)
-        logger.propagate = False  # Evitar propagación al logger raíz
+        sa_logger = logging.getLogger(logger_name)
+        sa_logger.handlers.clear()  # Limpiar handlers existentes
+        sa_logger.addHandler(sqlalchemy_handler)
+        sa_logger.propagate = False  # Evitar propagación al logger raíz
 
-    print("✅ Configuración de SQLAlchemy aplicada")
+    logger.debug("Configuración de SQLAlchemy aplicada")
 
 
 # Aplicar configuración inmediatamente

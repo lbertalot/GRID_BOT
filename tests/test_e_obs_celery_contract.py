@@ -116,6 +116,15 @@ def test_celery_dashboard_runtime_global_three_series():
     assert len(exprs) == 3
 
 
+def test_celery_conf_cancel_long_running_on_connection_loss():
+    raw = CELERY_APP.read_text(encoding="utf-8")
+    assert "worker_cancel_long_running_tasks_on_connection_loss" in raw
+    from app.core.celery_app import conf_dict
+
+    assert conf_dict["worker_cancel_long_running_tasks_on_connection_loss"] is True
+    assert conf_dict["task_reject_on_worker_lost"] is True
+
+
 def test_celery_table_colors_from_type_not_gradient_on_count():
     data = json.loads(DASH.read_text(encoding="utf-8"))
     table = next(p for p in data["panels"] if p.get("id") == 12)

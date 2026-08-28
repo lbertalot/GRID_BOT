@@ -60,6 +60,8 @@ conf_dict = {
     "broker_connection_retry_on_startup": True,
     "task_acks_late": True,
     "task_reject_on_worker_lost": True,
+    # Celery 6.0: alinear con reject_on_worker_lost (ciclo paper corto).
+    "worker_cancel_long_running_tasks_on_connection_loss": True,
     "worker_hijack_root_logger": False,
     # Eventos para Flower (/metrics). El worker también debe arrancar con -E.
     "worker_send_task_events": True,

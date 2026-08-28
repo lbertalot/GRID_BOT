@@ -138,6 +138,26 @@ class TestStrategySelector:
         assert params.grid_levels > 0
         assert params.order_size_usdt > 0
 
+    def test_calculate_dynamic_params_uses_ethusdt_not_generic(
+        self, strategy_selector, mock_regime_prediction, mock_account_state
+    ):
+        captured = {}
+        orig = strategy_selector.risk_manager.calculate_dynamic_position_size
+
+        def _cap(params):
+            captured["symbol"] = params.symbol
+            return orig(params)
+
+        strategy_selector.risk_manager.calculate_dynamic_position_size = _cap
+        strategy_selector._calculate_dynamic_params(
+            StrategyType.GRID_TRADING,
+            mock_regime_prediction,
+            mock_account_state,
+            symbol="ETHUSDT",
+        )
+        assert captured["symbol"] == "ETHUSDT"
+        assert captured["symbol"] != "GENERIC"
+
     def test_calculate_dynamic_params_dca(
         self, strategy_selector, mock_regime_prediction, mock_account_state
     ):
