@@ -1,4 +1,7 @@
-# Configuración de logging optimizada para el sistema de trading
+# Configuración de logging (legado / tests).
+# El worker paper usa ``app.core.optimized_logging.setup_optimized_logging``
+# (RotatingFileHandler sobre LOG_FILE_PATH=logs/gridbot.log). No mezclar ambos
+# dictConfig en el mismo proceso.
 import logging
 import logging.config
 from datetime import datetime

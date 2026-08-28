@@ -288,3 +288,43 @@ def test_reset_shared_breakers_clear_all_fail_soft(monkeypatch):
     ):
         cb = reset_shared_breakers()
     assert isinstance(cb, CircuitBreakers)
+
+
+def test_empty_hydrate_persist_closed_does_not_wipe_si_reduce_only():
+    """Recreate/hydrate vacío no pisa SI OPEN+REDUCE_ONLY en el store (Ola 1 logs L0)."""
+    store = InMemoryBreakerStateStore()
+    seed = CircuitBreakers(store=store)
+    store.save_breaker(
+        "system_integrity",
+        trip_record_from_mapping(
+            {
+                "active": True,
+                "reason": "Demasiadas pérdidas consecutivas: 19",
+                "operational_state": "REDUCE_ONLY",
+                "activation_count": 1,
+            }
+        ),
+    )
+    hydrated = CircuitBreakers(store=store)
+    assert hydrated.is_breaker_active("system_integrity") is True
+    assert hydrated.breakers["system_integrity"].get("operational_state") == "REDUCE_ONLY"
+
+    empty = CircuitBreakers(store=store)
+    empty.breakers["system_integrity"]["active"] = False
+    empty.breakers["system_integrity"]["reason"] = None
+    empty._persist_breaker("system_integrity")
+
+    remote = store.load_all()["system_integrity"]
+    assert remote.active is True
+    assert remote.operational_state == "REDUCE_ONLY"
+
+
+@pytest.mark.asyncio
+async def test_deactivate_still_persists_closed_si():
+    """allow_close=True (deactivate) sí puede cerrar el HASH; no es recreate."""
+    store = InMemoryBreakerStateStore()
+    proc = CircuitBreakers(store=store)
+    await proc.activate_breaker("system_integrity", "paper test")
+    assert store.load_all()["system_integrity"].active is True
+    assert await proc.deactivate_breaker("system_integrity") is True
+    assert store.load_all()["system_integrity"].active is False

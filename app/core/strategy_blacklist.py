@@ -83,8 +83,13 @@ class StrategyBlacklist:
         # Cargar blacklist desde archivo o usar por defecto
         self.blacklist = self._load_blacklist()
 
-        self.logger.info(
-            f"🚫 Strategy Blacklist inicializado con {len(self.blacklist['symbols'])} símbolos bloqueados"
+        from app.core.boot_log import boot_info
+
+        boot_info(
+            self.logger,
+            "strategy_blacklist",
+            "🚫 Strategy Blacklist inicializado con "
+            f"{len(self.blacklist['symbols'])} símbolos bloqueados",
         )
 
     def _load_blacklist(self) -> Dict:

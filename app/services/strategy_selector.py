@@ -24,6 +24,8 @@ from app.core.risk_manager import (
     RiskManager,
 )
 
+logger = logging.getLogger(__name__)
+
 NumberLike = Union[Decimal, float, int, str]
 
 
@@ -228,6 +230,8 @@ class StrategySelector:
         strategy_type: StrategyType,
         regime_prediction: RegimePrediction,
         account_state: AccountState,
+        *,
+        symbol: str = "ETHUSDT",
     ) -> StrategyParams:
         """
         Calcula parámetros dinámicos para la estrategia.
@@ -236,6 +240,8 @@ class StrategySelector:
             strategy_type: Tipo de estrategia
             regime_prediction: Predicción de régimen
             account_state: Estado de la cuenta
+            symbol: Par del freeze L0 (no ``GENERIC``). El path ATR/Kelly
+                no sustituye sizing freeze 10×20 USD.
 
         Returns:
             Parámetros de estrategia
@@ -244,12 +250,20 @@ class StrategySelector:
 
         total_equity = _d(account_state.total_equity)
         available_balance = _d(account_state.available_balance)
+        sizing_symbol = (symbol or "ETHUSDT").strip() or "ETHUSDT"
 
         # Calcular tamaño de orden basado en Kelly
         if total_equity > Decimal("0"):
-            # Usar RiskManager para calcular tamaño dinámico
+            from app.core.boot_log import boot_info
+
+            boot_info(
+                logger,
+                "sizing-atr-path",
+                f"PositionSizeParams symbol={sizing_symbol} "
+                "(path ATR/Kelly; freeze L0 10×20 USD no se sustituye)",
+            )
             position_params = PositionSizeParams(
-                symbol="GENERIC",
+                symbol=sizing_symbol,
                 account_equity=total_equity,
                 atr=Decimal("0.02"),  # ATR estimado
                 winrate_estimate=Decimal("0.6"),
@@ -374,7 +388,10 @@ class StrategySelector:
 
             # Calcular parámetros dinámicos
             params = self._calculate_dynamic_params(
-                strategy_type, regime_prediction, account_state
+                strategy_type,
+                regime_prediction,
+                account_state,
+                symbol=symbol,
             )
 
             # Calcular confianza basada en predicciones (Decimal end-to-end)
@@ -404,7 +421,10 @@ class StrategySelector:
             ):
                 strategy_type = StrategyType.DCA
                 params = self._calculate_dynamic_params(
-                    strategy_type, regime_prediction, account_state
+                    strategy_type,
+                    regime_prediction,
+                    account_state,
+                    symbol=symbol,
                 )
 
             # Generar reasoning

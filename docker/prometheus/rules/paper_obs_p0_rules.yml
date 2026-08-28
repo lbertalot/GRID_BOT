@@ -99,3 +99,20 @@ groups:
           description: >-
             Backend aún no exporta equity SoT a Prom (E3). Desk usa
             paper_telemetry + digest hasta merge.
+
+      - alert: BreakerStoreFallbackMemory
+        expr: |
+          breaker_store_backend{backend="memory"} == 1
+          and on() (
+            (max(paper_consecutive_losses{job="gridbot-api"}) or on() vector(0)) >= 5
+          )
+        for: 5m
+        labels:
+          severity: warning
+          surface: paper-l0
+        annotations:
+          summary: "Breaker store en memoria con racha ≥5 (SI se pierde al recreate)"
+          description: >-
+            HASH Redis gridbot:breakers:v1 no está en uso y hay racha paper.
+            Recreate --no-deps no debe wipe Redis. Rehidratar REDUCE_ONLY,
+            no deactivate. Dinero real: NO.
