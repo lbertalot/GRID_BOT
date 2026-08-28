@@ -102,7 +102,7 @@ groups:
 
       - alert: BreakerStoreFallbackMemory
         expr: |
-          breaker_store_backend{backend="memory"} == 1
+          max(breaker_store_backend{job="gridbot-api", backend="memory"}) == 1
           and on() (
             (max(paper_consecutive_losses{job="gridbot-api"}) or on() vector(0)) >= 5
           )

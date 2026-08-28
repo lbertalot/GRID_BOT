@@ -296,6 +296,12 @@ Tras recreate:
 2. `GET /breakers/summary` → `system_integrity` activo, `REDUCE_ONLY`
 3. Grafana CEO: Freno = 1 **o** racha paper ≥ 5
 
-Si `TYPE none` o `breaker_store_backend{backend="memory"}==1` con racha ≥ 5:
+Si `TYPE none` o `breaker_store_backend{job="gridbot-api",backend="memory"}==1` con racha ≥ 5:
 rehidratar REDUCE_ONLY (mismo procedimiento 27-ago). **No** `deactivate`.
+
+Beat: `--schedule /app/data/celerybeat-schedule` (persistente) y
+`--pidfile=/tmp/celerybeat.pid` (no en el volumen: un pidfile stale crash-loopea
+exit 73). Tras recreate beat: borrar solo `data/celerybeat.pid` si quedó de un
+intento viejo; **no** borrar el schedule.
+
 Detalle: [`Docs/ops/followup-logs-diagnostico-2026-08-28.md`](ops/followup-logs-diagnostico-2026-08-28.md).

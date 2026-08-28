@@ -1069,7 +1069,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(topk(10, sum by (symbol) (rate(invalid_symbol_total{job=\"gridbot-api\"}[5m]))) or on() label_replace(vector(0), \"symbol\", \"_none_\", \"\", \"\"))",
+          "expr": "(topk(10, sum by (symbol) (rate(invalid_symbol_total{job=\"gridbot-api\"}[5m]))) or on() label_replace(vector(0), \"symbol\", \"n/a\", \"\", \"\"))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }

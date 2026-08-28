@@ -80,6 +80,13 @@ def test_paper_l0_all_panels_filter_gridbot_api():
     assert data["uid"] == "gridbot-paper-l0"
     assert 'job=\\"gridbot-api\\"' in raw or 'job="gridbot-api"' in raw
     assert "breaker_state" in raw
+    assert data["time"]["from"] == "now-12h"
+    any_open = next(p for p in data["panels"] if p.get("id") == 2)
+    active = next(p for p in data["panels"] if p.get("id") == 3)
+    assert 'job="gridbot-api"' in any_open["targets"][0]["expr"]
+    assert 'job="gridbot-api"' in active["targets"][0]["expr"]
+    assert "or on() vector(0)" in any_open["targets"][0]["expr"]
+    assert "or on() vector(0)" in active["targets"][0]["expr"]
 
 
 def test_profitability_defer_tags_and_job_filter():
@@ -99,9 +106,8 @@ def test_health_sre_integrity_and_invalid_symbol_avoid_no_data():
         assert "or on() vector(0)" in t["expr"]
     inv = next(p for p in data["panels"] if p.get("id") == 15)
     assert "or on()" in inv["targets"][0]["expr"]
-    assert "_none_" in inv["targets"][0]["expr"] or "vector(0)" in inv[
-        "targets"
-    ][0]["expr"]
+    assert "_none_" not in inv["targets"][0]["expr"]
+    assert "n/a" in inv["targets"][0]["expr"] or "vector(0)" in inv["targets"][0]["expr"]
 
 
 def test_profitability_total_ops_not_red_on_volume():

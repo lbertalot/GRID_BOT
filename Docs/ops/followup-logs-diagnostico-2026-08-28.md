@@ -22,7 +22,7 @@
 | Ítem | Veredicto | Owner |
 |------|-----------|--------|
 | C1 racha 19 / SI | **HOLD D3** — racha legítima (19 RT net&lt;0). No reabrir grid. | desk-lead · prop · MM |
-| C2 Redis/beat | **Cerrado + monitor 24h** (pidfile `/app/data`) | devops |
+| C2 Redis/beat | **DONE 18:21 ART** — pidfile `/tmp`; beat healthy; ver [`exec-ola0-beat-pidfile-2026-08-28.md`](exec-ola0-beat-pidfile-2026-08-28.md) | devops |
 | C3 Celery 6.0 | **ITERATE** — flag explícito en `celery_app` | backend-tdd |
 | A4 logs 6×/ciclo | **ITERATE** — banners de boot, no 6 ciclos reales | backend-tdd |
 | A5 confianza 0.60 | **DEFER umbral** — fallback ML RANGE; no subir corte | product (defer) |
