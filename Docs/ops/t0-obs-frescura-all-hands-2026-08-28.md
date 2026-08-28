@@ -1,7 +1,7 @@
 # T0.5 — frescura de obs (All Hands, 2026-08-28)
 
 **Modo:** paper-only · **PROMOTE_LIVE: NO**  
-Plantilla de acta: T0.5 en [`ALL-HANDS-L0-GATE-PROTOCOL-2026-08-27.md`](../../../Docs/product/ALL-HANDS-L0-GATE-PROTOCOL-2026-08-27.md) (monorepo). Esta nota es la evidencia versionada en `GRID_BOT`.
+Plantilla de acta: T0.5 en [`ALL-HANDS-L0-GATE-PROTOCOL-2026-08-27.md`](../../../Docs/product/ALL-HANDS-L0-GATE-PROTOCOL-2026-08-27.md). Índice de gobernanza (facilitador, no reconstruir de memoria): [`Docs/product/README.md`](../../../Docs/product/README.md). Esta nota es la evidencia versionada en `GRID_BOT`.
 
 ## Check (leer en voz alta antes del frente 1)
 
