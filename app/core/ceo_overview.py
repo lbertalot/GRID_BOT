@@ -126,7 +126,9 @@ def _is_authorization_error(exc: Exception) -> bool:
     return getattr(exc, "status_code", None) in {401, 403}
 
 
-def _call_adapter(spec: AdapterSpec) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _call_adapter(
+    spec: AdapterSpec, *, now: Optional[datetime] = None
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Devuelve (datos, motivo_de_indisponibilidad)."""
     module = _import_optional(spec.module)
     if module is None:
@@ -137,7 +139,11 @@ def _call_adapter(spec: AdapterSpec) -> Tuple[Optional[Dict[str, Any]], Optional
         return None, f"{spec.module} no expone {spec.func}()"
 
     try:
-        data = func()
+        # PnL MTD es calendario-UTC: reenviar `now` evita flaky vs wall-clock.
+        if now is not None and spec.module == PNL.module and spec.func == PNL.func:
+            data = func(now=now)
+        else:
+            data = func()
     except Exception as exc:
         # Solo el tipo de excepción: el mensaje puede arrastrar datos sensibles.
         # Excepción: adapters que marcan `ceo_reason_safe` (p.ej. PnlUnavailableError).
@@ -365,7 +371,7 @@ def build_ceo_overview(
     ops, ops_reason = _call_adapter(OPS_LEDGER)
     gate, gate_reason = _call_adapter(LIVE_GATE)
     books, books_reason = _call_adapter(BOOKS)
-    pnl, pnl_reason = _call_adapter(PNL)
+    pnl, pnl_reason = _call_adapter(PNL, now=now)
 
     breakers, breakers_reason = _call_adapter(BREAKERS)
     breakers_source = f"{BREAKERS.module} (track {BREAKERS.track})"

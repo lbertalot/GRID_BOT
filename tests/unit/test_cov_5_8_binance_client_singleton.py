@@ -166,7 +166,10 @@ def test_validate_credentials_paths(monkeypatch, creds):
     ), patch("app.core.metrics.binance_api_errors_total") as metrics:
         metrics.labels.return_value = MagicMock()
         out2 = s.validate_credentials_and_connectivity()
-    assert out2["auth_ok"] is True
+    # −2015 en python-binance: auth_ok queda False aunque ccxt responda
+    # (gauge IP rejected / no fingir recovery). Ver test_binance_auth_ip_watch.
+    assert out2["auth_ok"] is False
+    assert out2["ok"] is False
 
     fake.get_account.side_effect = RuntimeError("auth-boom")
     ex.fetch_balance.side_effect = RuntimeError("ccxt-down")
