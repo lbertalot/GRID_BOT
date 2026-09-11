@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import os
+import uuid
 import asyncpg
 import math
 
@@ -1058,9 +1059,20 @@ class OptimizedGridManager:
             px = to_money(str(price), field_name="price")
             try:
                 if action.upper() == "BUY":
-                    ledger.record_buy(symbol, qty, px, grid_level=grid_level)
+                    ledger.record_buy(
+                        symbol,
+                        qty,
+                        px,
+                        grid_level=grid_level,
+                        client_order_id=f"paper-grid-buy-{uuid.uuid4().hex[:16]}",
+                    )
                 else:
-                    ledger.record_sell(symbol, qty, px)
+                    ledger.record_sell(
+                        symbol,
+                        qty,
+                        px,
+                        client_order_id=f"paper-grid-sell-{uuid.uuid4().hex[:16]}",
+                    )
             except PaperLedgerError as exc:
                 logger.warning(
                     f"📄 Fill paper rechazado por el ledger ({symbol} {action}): {exc}"
@@ -1713,6 +1725,7 @@ async def create_optimized_grid_manager(
             assets=assets,
             update_interval=config_data.get("update_interval", 60),
             min_notional_threshold=resolve_min_notional_threshold(config_data),
+            max_concurrent_orders=int(config_data.get("max_concurrent_orders", 3)),
         )
 
         manager = OptimizedGridManager(grid_config)

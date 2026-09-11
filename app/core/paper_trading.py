@@ -30,6 +30,7 @@ son legacy; la conversión a `Decimal` ocurre en el borde y adentro todo es
 import logging
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -42,6 +43,7 @@ from app.core.paper_equity_ledger import (
     compute_paper_portfolio_value,
     get_paper_equity_series,
     get_paper_ledger,
+    resolve_grid_config_hash,
     to_money,
 )
 
@@ -177,8 +179,18 @@ class PaperTradingSystem:
         price: float,
         order_type: str = "LIMIT",
         grid_level: Optional[int] = None,
+        ticker_available: bool = True,
+        postgres_available: bool = True,
     ) -> Dict:
         """Compra paper: descuenta notional **y costos** del cash y abre un ciclo."""
+        from app.core.order_backend_guards import fail_closed_order_block
+
+        blocked = fail_closed_order_block(
+            ticker_available=ticker_available,
+            postgres_available=postgres_available,
+        )
+        if blocked:
+            return {"success": False, "error": blocked, "order_id": None}
         try:
             fill = self._ledger.record_buy(
                 symbol,
@@ -186,6 +198,7 @@ class PaperTradingSystem:
                 to_money(str(price), field_name="price"),
                 order_type=order_type,
                 grid_level=grid_level,
+                client_order_id=f"paper-buy-{uuid.uuid4().hex[:16]}",
             )
         except (PaperLedgerError, ValueError) as exc:
             logger.warning("Orden de compra paper rechazada: %s", exc)
@@ -223,14 +236,25 @@ class PaperTradingSystem:
         quantity: float,
         price: float,
         order_type: str = "LIMIT",
+        ticker_available: bool = True,
+        postgres_available: bool = True,
     ) -> Dict:
         """Venta paper: acredita el notional neto de costos y cierra ciclos FIFO."""
+        from app.core.order_backend_guards import fail_closed_order_block
+
+        blocked = fail_closed_order_block(
+            ticker_available=ticker_available,
+            postgres_available=postgres_available,
+        )
+        if blocked:
+            return {"success": False, "error": blocked, "order_id": None}
         try:
             fill = self._ledger.record_sell(
                 symbol,
                 to_money(str(quantity), field_name="quantity"),
                 to_money(str(price), field_name="price"),
                 order_type=order_type,
+                client_order_id=f"paper-sell-{uuid.uuid4().hex[:16]}",
             )
         except (PaperLedgerError, ValueError) as exc:
             logger.warning("Orden de venta paper rechazada: %s", exc)
@@ -344,12 +368,14 @@ class PaperTradingSystem:
             logger.error("[PaperTrading] Marca omitida por falta de precio: %s", exc)
             return None
         if record:
+            # A1: no heredar header sticky (RCA gap126h/hash-drift 2026-09-11).
             self.series.record(
                 breakdown["equity"],
                 at=at,
                 cash=breakdown["cash"],
                 inventory_value=breakdown["inventory_value"],
                 deployed_capital=self._ledger.deployed_capital,
+                config_hash=resolve_grid_config_hash(),
             )
         # E7 IC-WIRE: observar IC-1/IC-2 en cada marca (enforce paper).
         try:
@@ -377,6 +403,7 @@ class PaperTradingSystem:
                         quantity,
                         price,
                         order_type="MARKET",
+                        client_order_id=f"paper-flatten-{uuid.uuid4().hex[:16]}",
                     )
 
                 positions = {
