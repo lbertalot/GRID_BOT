@@ -71,3 +71,5 @@ paper_telemetry/**
 !/grid_config_safe.json
 !/grid_config_paper_l0.json
 !/grid_config_paper_l0.hash
+!/grid_config_paper_l0_trial_5x15.json
+!/grid_config_paper_l0_trial_5x15.hash
