@@ -128,12 +128,6 @@ def _set_binance_ip_rejected(rejected: bool) -> None:
 
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
     """Notifica por Telegram cuando hay un problema de IP con Binance"""
-    global _last_ip_alert_ts
-    now = time.time()
-    # Cooldown 30 minutos
-    if now - _last_ip_alert_ts < 1800:
-        return
-    _last_ip_alert_ts = now
     public_ip = "desconocida"
     try:
         # Intentar obtener IP desde múltiples fuentes
@@ -163,15 +157,19 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
     )
 
     try:
+        from app.core.binance_auth_ip_watch import process_binance_auth_ip_watch
         from app.core.telegram_ceo_copy import ceo_plain_enabled, render_invalid_ip_telegram
         from app.services.telegram_alert import send_telegram_alert
 
         if ceo_plain_enabled():
-            send_telegram_alert(
-                render_invalid_ip_telegram(
-                    public_ip, location_restricted=is_451_error
-                )
+            msg = process_binance_auth_ip_watch(
+                blocked=True,
+                public_ip=public_ip,
+                location_restricted=is_451_error,
             )
+            if not msg:
+                return
+            send_telegram_alert(msg)
         else:
             msg = (
                 f"⚠️ Binance {error_type}\n\n"
@@ -422,10 +420,24 @@ class BinanceClientSingleton:
             except Exception:
                 result["auth_ok"] = False
         result["ok"] = result["net_ok"] and result["auth_ok"]
-        if result["auth_ok"]:
-            _set_binance_ip_rejected(False)
-        elif ip_rejected:
+        if ip_rejected:
+            result["auth_ok"] = False
+            result["ok"] = False
             _set_binance_ip_rejected(True)
+        elif result["auth_ok"]:
+            _set_binance_ip_rejected(False)
+            try:
+                from app.core.binance_auth_ip_watch import process_binance_auth_ip_watch
+                from app.services.telegram_alert import send_telegram_alert
+
+                recovered = process_binance_auth_ip_watch(
+                    blocked=False,
+                    python_binance_auth_ok=True,
+                )
+                if recovered:
+                    send_telegram_alert(recovered)
+            except Exception:
+                pass
         return result
 
     def get_account_info(self):
@@ -446,6 +458,14 @@ class BinanceClientSingleton:
                 return {"balances": []}
             account = client.get_account()
             _set_binance_ip_rejected(False)
+            try:
+                from app.core.binance_auth_ip_watch import process_binance_auth_ip_watch
+
+                process_binance_auth_ip_watch(
+                    blocked=False, python_binance_auth_ok=True
+                )
+            except Exception:
+                pass
             return account
         except BinanceAPIException as e:
             # Declaración global ya realizada arriba de este bloque

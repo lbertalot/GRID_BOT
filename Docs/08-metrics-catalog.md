@@ -104,7 +104,8 @@
 | Métrica | Tipo | Labels | Descripción |
 |---|---|---|---|
 | `binance_api_errors_total` | Counter | `code`, `phase` | Total de errores de API de Binance |
-| `binance_ip_rejected` | Gauge | — | 1 si el último validate/get_account falló por IP no autorizada (−2015); 0 si auth OK. Semáforo CEO: no usar `increase()` |
+| `binance_ip_rejected` | Gauge | — | 1 si el último validate/get_account falló por IP no autorizada (−2015) **o** el flag compartido `gridbot:binance_auth_ip_blocked=1` (worker). Distingue API `up` de Binance autenticado bloqueado. No usar `increase()`. No bajar a 0 por fallback ccxt tras −2015. |
+| `gridbot_si_ops_state_inconsistent` | Gauge | — | 1 si SI está active con `operational_state` leftover CLOSED. Solo diagnóstico de copy; **no** muta el breaker. |
 | `external_auth_failures_total` | Counter | `provider`, `reason` | Total de fallos de autenticación/permiso con proveedores externos |
 | `commission_update_failures_total` | Counter | `provider`, `reason` | Total de fallos al actualizar comisiones externas |
 

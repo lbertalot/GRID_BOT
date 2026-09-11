@@ -44,10 +44,43 @@ _ACCION = {
 }
 
 REDIS_KEY_PREFIX = "gridbot:tg:ceo:"
-HOLD_PNL_MIN_REPEAT_S = 3600  # heartbeat 1h mientras el freno PnL sigue abierto
+HOLD_PNL_MIN_REPEAT_S = 6 * 3600  # recordatorio 6 h (rango 6–12 vía env)
+_HOLD_SI_REPEAT_MIN_S = 6 * 3600
+_HOLD_SI_REPEAT_MAX_S = 12 * 3600
 DIGEST_MIN_REPEAT_S = 7 * 24 * 3600  # solo si cambia huella, salvo EOD (force)
 
 _mem_store: Dict[str, Tuple[str, float]] = {}
+
+
+def hold_si_min_repeat_s() -> float:
+    """Cadencia de reaviso SI mientras el fingerprint no cambia (6–12 h)."""
+    raw = (os.getenv("TELEGRAM_SI_HOLD_REPEAT_S") or "").strip()
+    if not raw:
+        return float(HOLD_PNL_MIN_REPEAT_S)
+    try:
+        value = float(raw)
+    except ValueError:
+        return float(HOLD_PNL_MIN_REPEAT_S)
+    return max(_HOLD_SI_REPEAT_MIN_S, min(_HOLD_SI_REPEAT_MAX_S, value))
+
+
+def classify_si_reason(reason: Optional[str]) -> str:
+    """Clasifica el reason de SI para copy (no cambia el breaker)."""
+    from app.core.desk_auto_remediation import is_stale_net_auth_integrity_reason
+
+    if is_stale_net_auth_integrity_reason(reason):
+        return "auth"
+    text = str(reason or "")
+    lowered = text.lower()
+    if (
+        "no-go" in lowered
+        or "sin close post-t0" in lowered
+        or "idle" in lowered
+    ):
+        return "trial_nogo"
+    if "pérdida" in lowered or "consecutiv" in lowered:
+        return "pnl_streak"
+    return "integrity"
 
 
 def ceo_plain_enabled() -> bool:
@@ -257,8 +290,8 @@ def render_ceo_digest(digest: Any) -> str:
         )
     if getattr(digest, "any_open_breakers", False) and level != SEMAFORO_ROJO_SISTEMA:
         lines.append(
-            "Freno de protección activo (racha de pérdidas en paper) — "
-            "no lo resetees; el equipo lo revisa."
+            "Freno de protección activo — no implica una pérdida nueva. "
+            "No resetear el freno."
         )
     return "\n".join(lines)
 
@@ -268,36 +301,99 @@ def utc_stamp_line() -> str:
     return datetime.now(timezone.utc).strftime("Reloj: %Y-%m-%d %H:%M UTC")
 
 
-def _streak_plain(reason: Optional[str]) -> str:
-    """Extrae conteo de racha si viene en el reason del breaker; sin jerga técnica."""
-    if not reason:
-        return "varios cierres seguidos en pérdida"
-    text = str(reason)
-    digits = "".join(ch if ch.isdigit() else " " for ch in text).split()
-    if digits and ("pérdida" in text.lower() or "consecutiv" in text.lower()):
-        return f"{digits[0]} cierres seguidos en pérdida"
-    return "varios cierres seguidos en pérdida"
+def _format_triggered_at(
+    activated_at: Optional[str],
+    now: Optional[float] = None,
+) -> str:
+    if not activated_at:
+        return "n/d"
+    stamp = str(activated_at).replace("Z", "+00:00")
+    try:
+        when = datetime.fromisoformat(stamp)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        iso = when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        return str(activated_at)[:40]
+    ts = time.time() if now is None else now
+    age_s = max(0.0, ts - when.timestamp())
+    hours = int(age_s // 3600)
+    mins = int((age_s % 3600) // 60)
+    age = f"hace {hours} h" if hours >= 1 else f"hace {mins} min"
+    return f"{iso} ({age})"
 
 
-def render_hold_pnl_telegram(reason: Optional[str] = None) -> str:
-    streak = _streak_plain(reason)
+def _motivo_estructurado(kind: str, _reason: Optional[str] = None) -> str:
+    if kind == "trial_nogo":
+        return "NO-GO SI: 0 cierres post-t0; idle vencido"
+    if kind == "pnl_streak":
+        return "Pérdidas consecutivas en el libro de ensayo (históricas)"
+    return "freno de integridad activo; causa en revisión"
+
+
+def _read_historical_streak() -> Optional[int]:
+    """Racha SoT read-only. No resetea ledger ni breakers. Sin default numérico."""
+    try:
+        from app.core.auto_circuit_breaker import consecutive_losses_from_closed_cycles
+        from app.core.paper_equity_ledger import reload_paper_ledger_from_disk
+
+        ledger = reload_paper_ledger_from_disk()
+        return int(consecutive_losses_from_closed_cycles(ledger.closed_cycles()))
+    except Exception:
+        return None
+
+
+def _streak_copy_line(streak: Optional[int]) -> str:
+    if streak is None:
+        return (
+            "Racha histórica preservada; consultar ledger. "
+            "No implica una pérdida nueva"
+        )
     return (
-        "🟠 **Ensayo en pausa — freno de protección**\n"
-        f"El bot tuvo {streak} en paper "
-        "(pasó el límite de seguridad).\n"
-        "**Qué significa:** paró a propósito. La cuenta de ensayo sigue en el libro; "
-        "no se movió dinero real.\n"
-        "**Qué no hacer:** no resetear el freno. "
-        "La racha sigue anotada; si lo sacás a mano, se vuelve a activar solo.\n"
-        "El freno **no** se saca solo.\n"
-        "**Desk Lead (evaluar):**\n"
-        "1) ¿La racha es legítima? → mantener freno.\n"
-        "2) ¿El ajuste de grid ya está vivo para medir edge de verdad?\n"
-        "3) Solo si 1–2 OK: autorizar override acotado (no reset a ciegas).\n"
-        "Este aviso se repite cada hora mientras el freno siga. "
-        "Cuando se levante, te avisamos al momento.\n"
-        f"{utc_stamp_line()}\n"
-        "**Dinero real: NO.**"
+        f"Racha histórica preservada: {int(streak)}; "
+        "no implica una pérdida nueva"
+    )
+
+
+def render_hold_pnl_telegram(
+    reason: Optional[str] = None,
+    *,
+    operational_state: Optional[str] = None,
+    public_state: Optional[str] = None,
+    activated_at: Optional[str] = None,
+    historical_streak: Optional[int] = None,
+    now: Optional[float] = None,
+) -> str:
+    """Copy SI / hold: causa técnica, sin afirmar una pérdida nueva."""
+    kind = classify_si_reason(reason)
+    estado = str(public_state or "").strip()
+    if not estado:
+        ops = str(operational_state or "").strip()
+        ops_u = ops.upper()
+        if ops_u == "REDUCE_ONLY":
+            estado = "OPEN · REDUCE_ONLY"
+        elif ops_u in ("", "OPEN", "CLOSED"):
+            estado = "OPEN"
+        elif ops_u.startswith("OPEN"):
+            estado = ops
+        else:
+            estado = "OPEN"
+    if "CLOSED" in estado.upper() and "REDUCE_ONLY" not in estado.upper():
+        estado = "OPEN"
+    streak = (
+        historical_streak
+        if historical_streak is not None
+        else _read_historical_streak()
+    )
+    return (
+        "🟠 **Freno activo — system_integrity**\n"
+        "breaker_type: system_integrity\n"
+        f"Estado: {estado}\n"
+        f"Desde: {_format_triggered_at(activated_at, now)}\n"
+        f"Motivo: {_motivo_estructurado(kind, reason)}\n"
+        f"{_streak_copy_line(streak)}\n"
+        "Modo: PAPER · Dinero real: NO\n"
+        "Acción: No resetear el freno; revisar el acta/tear sheet"
     )
 
 
@@ -305,7 +401,7 @@ def render_si_cleared_telegram() -> str:
     return (
         "🟢 **Freno de protección levantado**\n"
         "El ensayo puede volver a operar en paper.\n"
-        "Seguí en modo ensayo. **Dinero real: NO.**"
+        "Modo: PAPER · Dinero real: NO"
     )
 
 
@@ -344,8 +440,22 @@ def render_invalid_ip_telegram(public_ip: str, *, location_restricted: bool) -> 
         "**Tu tarea:** en Binance → API → lista de IPs permitidas, agregá:\n"
         f"`{ip}`\n"
         "Sacá IPs viejas si hace falta.\n"
-        "Cuando Binance acepte, se retoma solo. **Dinero real: NO.**"
+        "No se retoma solo: hay que confirmar auth OK después del cambio.\n"
+        "**Dinero real: NO.**"
     )
+
+
+def render_binance_auth_ip_recovered_telegram() -> str:
+    return (
+        "🟢 **Binance autenticó de nuevo**\n"
+        "La llamada autenticada posterior al incidente IP (−2015) fue OK.\n"
+        "Modo: PAPER · Dinero real: NO"
+    )
+
+
+def render_breaker_store_missing_telegram() -> str:
+    """Copy P0: HASH de breakers ausente → fail-closed REDUCE_ONLY."""
+    return _CEO_ALERT_COPY["BreakerStoreMissingFailClosed"]
 
 
 def render_eod_ceo(digest: Any, *, tear_ok: bool) -> str:
@@ -392,6 +502,12 @@ _CEO_ALERT_COPY = {
     ),
     "PaperEquityGaugeAbsent": (
         "⚠️ **No hay lectura de balance de ensayo en el tablero**\n"
+        "El equipo lo mira. **No resetear frenos. Dinero real: NO.**"
+    ),
+    "BreakerStoreMissingFailClosed": (
+        "🔴 **Freno: se perdió el estado de protección**\n"
+        "El candado de la cuenta de ensayo no estaba en la memoria compartida. "
+        "El sistema frenó solo (solo puede vender para reducir, no comprar).\n"
         "El equipo lo mira. **No resetear frenos. Dinero real: NO.**"
     ),
 }
