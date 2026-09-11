@@ -1,23 +1,40 @@
 """
 Otorga un override RCA temporal y acotado sobre el breaker `system_integrity`.
 
-Uso (dentro del contenedor worker, requiere RCA firmado):
+Uso legado (RCA puntual, max_ticks=10):
 
     docker compose -f docker-compose.local.yml exec -T worker python3 \
         scripts/grant_breaker_override.py \
         --breaker system_integrity \
         --granted-by "Leandro Bertalot (Desk Lead)" \
-        --rca-ref "Docs/ops/rca-pnl-dd-2026-08-20.md" \
-        --max-ticks 10
+        --rca-ref "Docs/ops/rca-pnl-dd-2026-08-20.md"
 
-No cambia thresholds, spacing ni sizing del grid. Ver `app/core/breaker_override.py`
-para el mecanismo de expiración (ciclo nuevo cerrado, o límite de ticks).
+Uso prueba SI 5×15 (constantes cerradas: idle 12h/720 ticks, techo 96h/5760):
+
+    docker compose -f docker-compose.local.yml exec -T worker python3 \
+        scripts/grant_breaker_override.py --trial \
+        --breaker system_integrity \
+        --granted-by "Leandro Bertalot (Desk Lead)" \
+        --rca-ref "Docs/ops/trial-si-5x15-2026-08-29.md + Docs/ops/rca-pnl-dd-2026-08-20.md"
+
+Solo Desk Lead. El EM no ejecuta este script. Ver `app/core/breaker_override.py`.
 """
 
 import argparse
 import sys
+from pathlib import Path
 
-from app.core.breaker_override import grant_override
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from app.core.breaker_override import (
+    TRIAL_MAX_AGE_HOURS,
+    TRIAL_MAX_AGE_TICKS,
+    TRIAL_MAX_IDLE_HOURS,
+    TRIAL_MAX_IDLE_TICKS,
+    grant_override,
+)
 from app.core.paper_equity_ledger import get_paper_ledger, paper_equity_is_source_of_truth
 
 
@@ -27,6 +44,15 @@ def main() -> int:
     parser.add_argument("--granted-by", required=True)
     parser.add_argument("--rca-ref", required=True)
     parser.add_argument("--max-ticks", type=int, default=10)
+    parser.add_argument(
+        "--trial",
+        action="store_true",
+        help=(
+            "Prueba SI 5×15: ignora --max-ticks y fija idle "
+            f"{TRIAL_MAX_IDLE_HOURS}h/{TRIAL_MAX_IDLE_TICKS} ticks y techo "
+            f"{TRIAL_MAX_AGE_HOURS}h/{TRIAL_MAX_AGE_TICKS} ticks"
+        ),
+    )
     args = parser.parse_args()
 
     watermark = None
@@ -42,12 +68,22 @@ def main() -> int:
         rca_ref=args.rca_ref,
         max_ticks=args.max_ticks,
         ledger_watermark=watermark,
+        trial=args.trial,
     )
     print(
         f"Override concedido: breaker={override.breaker_type} "
-        f"max_ticks={override.max_ticks} watermark={override.ledger_watermark} "
+        f"trial={args.trial} max_ticks={override.max_ticks} "
+        f"max_idle_hours={override.max_idle_hours} "
+        f"max_age_hours={override.max_age_hours} "
+        f"max_age_ticks={override.max_age_ticks} "
+        f"watermark={override.ledger_watermark} "
         f"rca_ref={override.rca_ref} granted_by={override.granted_by}"
     )
+    if watermark is not None:
+        print(
+            "PAPER_TRIAL_STARTED_AT debe ser este watermark (closed_at ≤ t0 se ignora). "
+            f"Sugerido: {watermark.isoformat()}"
+        )
     return 0
 
 

@@ -22,8 +22,9 @@ from app.core.circuit_breakers import (
 
 
 @pytest.fixture(autouse=True)
-def _isolate_shared_breakers():
-    """Cada test parte de un singleton limpio."""
+def _isolate_shared_breakers(monkeypatch):
+    """Cada test parte de un singleton limpio (nunca Redis paper)."""
+    monkeypatch.setenv("CB_SHARED_STORE", "memory")
     reset_shared_breakers()
     yield
     reset_shared_breakers()

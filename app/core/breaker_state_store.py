@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 BREAKER_REDIS_KEY = "gridbot:breakers:v1"
 _DEFAULT_BACKEND = "auto"  # auto | redis | memory
+ALLOW_BREAKER_STORE_WIPE_ENV = "GRIDBOT_ALLOW_BREAKER_STORE_WIPE"
+EMPTY_STORE_POLICY_ENV = "CB_EMPTY_STORE_POLICY"
+POLICY_FAIL_CLOSED = "fail_closed"
+POLICY_FRESH = "fresh"
 
 
 @dataclass
@@ -78,6 +82,26 @@ def _set_backend_metric(backend: str) -> None:
         pass
 
 
+def redis_breaker_wipe_allowed() -> bool:
+    """DEL del HASH paper/prod solo con bandera explícita (RCA 2026-08-30)."""
+    raw = (os.getenv(ALLOW_BREAKER_STORE_WIPE_ENV) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def empty_store_policy() -> str:
+    """Qué hacer si Redis no tiene field system_integrity.
+
+    ``fail_closed`` (default): UNKNOWN → OPEN+REDUCE_ONLY. Incluye ambiente
+    nuevo: nace bloqueado a propósito; Desk desbloquea o setea ``fresh``.
+    ``fresh``: arranque genuinamente nuevo (staging / segunda instancia);
+    vacío es esperado, no se alerta ni se fail-closed.
+    """
+    raw = (os.getenv(EMPTY_STORE_POLICY_ENV) or POLICY_FAIL_CLOSED).strip().lower()
+    if raw in {POLICY_FRESH, "new", "empty_ok", "allow_empty"}:
+        return POLICY_FRESH
+    return POLICY_FAIL_CLOSED
+
+
 class BreakerStateStore(Protocol):
     def load_all(self) -> Dict[str, BreakerTripRecord]: ...
 
@@ -88,6 +112,8 @@ class BreakerStateStore(Protocol):
 
 class InMemoryBreakerStateStore:
     """Store en proceso — útil para tests y degradación sin Redis."""
+
+    durable = False
 
     def __init__(self) -> None:
         self._data: Dict[str, BreakerTripRecord] = {}
@@ -108,8 +134,11 @@ class InMemoryBreakerStateStore:
 class RedisBreakerStateStore:
     """Persistencia HASH Redis. Fail-soft en lectura/escritura."""
 
+    durable = True
+
     def __init__(self, client: Any = None) -> None:
         self._client = client
+        self.last_load_ok = True
 
     def _redis(self) -> Any:
         if self._client is not None:
@@ -127,9 +156,11 @@ class RedisBreakerStateStore:
     def load_all(self) -> Dict[str, BreakerTripRecord]:
         try:
             raw_map = self._redis().hgetall(BREAKER_REDIS_KEY) or {}
+            self.last_load_ok = True
         except Exception as exc:  # noqa: BLE001 — fail-soft
             logger.warning("breaker store Redis read failed: %s", exc)
             _inc_sync_error("read")
+            self.last_load_ok = False
             return {}
 
         result: Dict[str, BreakerTripRecord] = {}
@@ -157,6 +188,15 @@ class RedisBreakerStateStore:
             _inc_sync_error("write")
 
     def clear_all(self) -> None:
+        if not redis_breaker_wipe_allowed():
+            logger.error(
+                "Refusing Redis DEL %s without %s=1 "
+                "(RCA Docs/ops/rca-si-redis-hash-wipe-2026-08-30.md)",
+                BREAKER_REDIS_KEY,
+                ALLOW_BREAKER_STORE_WIPE_ENV,
+            )
+            _inc_sync_error("clear_denied")
+            return
         try:
             self._redis().delete(BREAKER_REDIS_KEY)
         except Exception as exc:  # noqa: BLE001
