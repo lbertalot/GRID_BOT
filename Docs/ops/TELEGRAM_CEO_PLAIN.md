@@ -11,11 +11,11 @@ Alineado al tablero [Cómo va la prueba](DASHBOARD_CEO_AUTO.md).
 | Evento | Mensaje | Anti-spam |
 |--------|---------|-----------|
 | Digest | Semáforo + balance ensayo + “qué hago” | Solo si cambia el estado, o EOD, o rojo sistema |
-| HOLD pérdidas | Ensayo en pausa + checklist Desk Lead | **Cada 1 h** mientras SI PnL siga abierto |
-| Freno levantado (PnL) | Aviso inmediato “freno levantado” | Al cerrar SI (tick ≤60s o digest) |
-| HOLD red/clave | Seguí el aviso de IP | Máx. 1 cada 12 h |
+| HOLD pérdidas / SI | Causa técnica (`breaker_type`, estado, motivo). NO-GO no se presenta como pérdida nueva. Racha histórica separada. | Al abrir o al cambiar estado; recordatorio **cada 6 h** (env 6–12 h) |
+| Freno levantado (PnL) | Aviso inmediato “freno levantado” · `Modo: PAPER · Dinero real: NO` | Solo si hay **transición** abierto→cerrado (memoria de estado); un snapshot cerrado aislado no avisa |
+| HOLD red/clave | Seguí el aviso de IP | Máx. 1 cada 6 h (mismo canal SI hold) |
 | REMEDIADO | Freno de *conexión* levantado (no es PnL) | En cada reset auth/net |
-| IP −2015 | Agregá `{ip}` en Binance | Cooldown 30 min (ya existía) |
+| IP −2015 (`binance_auth_ip_blocked`) | IP observada + “no se retoma solo” | 1 al abrir; reaviso 6–12 h; 1 al recuperarse **solo** tras auth python-binance OK |
 | ACCIONES MM/QUANT | **No** se mandan | Quedan en log / day-plan |
 | Alertmanager WARNING Flower (`PaperSnapshotStale` @ flower) | **No** se mandan | Falso positivo; unixtime=0 |
 | Snapshot API realmente >20m | Chequeo de estado retrasado (llano) | Máx. 1 cada 12 h |
@@ -27,11 +27,11 @@ Alineado al tablero [Cómo va la prueba](DASHBOARD_CEO_AUTO.md).
 ## Semáforo
 
 - **Verde:** prueba andando. No hagas nada.
-- **Naranja:** aviso (−1,5%) y/o freno por racha de pérdidas paper. Esperá. No live. No resetear (la racha sigue en el libro). Heartbeat **1 h** + aviso al levantarse.
+- **Naranja:** aviso (−1,5%) y/o freno activo. El freno **no** implica una pérdida nueva. Esperá. No live. No resetear. Recordatorio **6 h** + aviso al levantarse.
 - **Rojo capital:** −3% / −5%. El equipo interviene. No live.
 - **Rojo sistema:** no-paper, servidor, IP. El ensayo está a ciegas.
 
-El % vs inicio es **valor estimado**, no ganancia. El HOLD de pérdidas **no** se saca solo: es protección por racha en el libro de ensayo (no robo, no falla de IP). Resetear a mano sin decisión desk reabre el mismo freno.
+El % vs inicio es **valor estimado**, no ganancia. El HOLD de `system_integrity` se explica con motivo técnico (p. ej. NO-GO SI 5×15). La racha se lee del ledger (SoT); si no hay lectura, el copy dice “consultar ledger” y **no inventa un número**. Una causa no clasificada se presenta como integridad en revisión, nunca como pérdidas consecutivas. No resetear a mano; revisar el acta/tear sheet.
 
 ## Código
 
