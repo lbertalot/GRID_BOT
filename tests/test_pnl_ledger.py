@@ -190,7 +190,7 @@ def test_daily_pnl_pct_from_last_two_daily_closes():
 
 
 def test_ceo_overview_pnl_mtd_ok_with_series(monkeypatch):
-    """CEO overview reenvía `now` si la firma lo acepta; stubs sin kwargs siguen ok."""
+    """Stub sin kwargs + clock congelado; overview solo reenvía `now` si la firma lo acepta."""
     series = PaperEquitySeries()
     series.record(D("1000.00"), at=_at(2026, 7, 31))
     series.record(D("1018.30"), at=_at(2026, 8, 5))
