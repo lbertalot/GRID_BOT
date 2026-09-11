@@ -15,11 +15,13 @@ from app.core.telegram_ceo_copy import (
     SEMAFORO_ROJO_SISTEMA,
     SEMAFORO_VERDE,
     ceo_semaforo,
+    classify_si_reason,
     digest_fingerprint,
     format_alertmanager_ceo,
     render_ceo_digest,
     render_hold_pnl_telegram,
     render_invalid_ip_telegram,
+    render_breaker_store_missing_telegram,
     render_remediated_telegram,
     reset_debounce_memory,
     should_emit_ceo,
@@ -103,22 +105,121 @@ def test_ceo_digest_not_paper_is_system_red():
     assert "a ciegas" in text
 
 
-def test_hold_pnl_copy_does_not_promise_auto_resume():
-    msg = render_hold_pnl_telegram("Demasiadas pérdidas consecutivas: 19")
-    assert "no resetear" in msg.lower() or "no lo resetees" in msg.lower()
-    assert "19 cierres" in msg
-    assert "Desk Lead" in msg
-    assert "cada hora" in msg.lower()
-    assert "vuelve a activar" in msg.lower() or "se vuelve a activar" in msg.lower()
+NO_GO_REASON = (
+    "Override de prueba SI expiró sin close post-t0 "
+    "(latest_closed_at=2026-08-26T15:45:37.370240+00:00); "
+    "system_integrity REDUCE_ONLY (NO-GO prueba)"
+)
+
+
+def _assert_paper_no_live(msg: str) -> None:
+    assert "Modo: PAPER" in msg
     assert "Dinero real: NO" in msg
+    assert "PROMOTE_LIVE" not in msg
+    low = msg.lower()
+    assert "override" not in low
+    assert "force_real" not in low
+    assert "wipe" not in low
+    assert "sizing" not in low
+    assert "live" not in low or "dinero real: no" in low
+
+
+def test_classify_si_reason_kinds():
+    assert classify_si_reason(NO_GO_REASON) == "trial_nogo"
+    assert classify_si_reason("NO-GO prueba") == "trial_nogo"
+    assert classify_si_reason("idle 12 h sin close post-t0") == "trial_nogo"
+    assert classify_si_reason("Demasiadas pérdidas consecutivas: 19") == "pnl_streak"
+    assert classify_si_reason("binance_auth_fail") == "auth"
+    assert classify_si_reason("HASH ausente fail-closed") == "integrity"
+    assert classify_si_reason("fallo inédito xyz-42") == "integrity"
+    assert classify_si_reason("") == "integrity"
+    assert classify_si_reason(None) == "integrity"
+
+
+def test_hold_si_nogo_payload_not_new_loss():
+    msg = render_hold_pnl_telegram(
+        NO_GO_REASON,
+        operational_state="REDUCE_ONLY",
+        activated_at="2026-09-10T07:13:22.645098",
+        historical_streak=19,
+        now=1_789_047_000.0,
+    )
+    _assert_paper_no_live(msg)
+    assert "breaker_type: system_integrity" in msg
+    assert "REDUCE_ONLY" in msg
+    assert "NO-GO SI: 0 cierres post-t0; idle vencido" in msg
+    assert "Racha histórica preservada: 19; no implica una pérdida nueva" in msg
+    assert "pérdida nueva" in msg.lower()
+    assert "varios cierres seguidos en pérdida" not in msg.lower()
+    assert "No resetear el freno; revisar el acta/tear sheet" in msg
+    assert "cada hora" not in msg.lower()
+    assert "Desk Lead" not in msg
+    assert "2026-09-10T07:13:22" in msg
+
+
+def test_hold_pnl_copy_does_not_promise_auto_resume():
+    msg = render_hold_pnl_telegram(
+        "Demasiadas pérdidas consecutivas: 19",
+        historical_streak=19,
+    )
+    _assert_paper_no_live(msg)
+    assert "no resetear" in msg.lower()
+    assert "Racha histórica preservada: 19" in msg
+    assert "no implica una pérdida nueva" in msg.lower()
     assert "robo" not in msg.lower()
     assert "estabilice" not in msg.lower()
     assert "se reinicia solo" not in msg.lower()
-    assert "PROMOTE_LIVE" not in msg
-    assert "system_integrity" not in msg
-    assert "ledger" not in msg.lower()
-    assert "Reloj:" in msg
-    assert "UTC" in msg
+    assert "breaker_type: system_integrity" in msg
+    assert "consultar ledger" not in msg.lower()
+
+
+def test_hold_si_unknown_reason_is_integrity_review_not_pnl():
+    msg = render_hold_pnl_telegram(
+        "fallo inédito xyz-42",
+        historical_streak=19,
+    )
+    _assert_paper_no_live(msg)
+    assert classify_si_reason("fallo inédito xyz-42") == "integrity"
+    assert "freno de integridad activo; causa en revisión" in msg.lower()
+    assert "pérdidas consecutivas" not in msg.lower()
+    assert "varios cierres seguidos" not in msg.lower()
+    assert "pérdida nueva" in msg.lower()
+
+
+def test_hold_si_missing_streak_consults_ledger_does_not_invent_19():
+    with patch(
+        "app.core.telegram_ceo_copy._read_historical_streak",
+        return_value=None,
+    ):
+        msg = render_hold_pnl_telegram(
+            NO_GO_REASON,
+            operational_state="REDUCE_ONLY",
+        )
+    _assert_paper_no_live(msg)
+    assert "Racha histórica preservada; consultar ledger" in msg
+    assert "Racha histórica preservada: 19" not in msg
+    assert "consultar ledger" in msg.lower()
+    assert "no implica una pérdida nueva" in msg.lower()
+
+
+def test_hold_si_reads_streak_from_sot_when_not_injected():
+    with patch(
+        "app.core.telegram_ceo_copy._read_historical_streak",
+        return_value=7,
+    ) as read_sot:
+        msg = render_hold_pnl_telegram(NO_GO_REASON)
+    read_sot.assert_called_once()
+    assert "Racha histórica preservada: 7; no implica una pérdida nueva" in msg
+    assert "Racha histórica preservada: 19" not in msg
+
+
+def test_ceo_digest_breaker_line_not_new_loss():
+    d = _digest(equity="1000", breakers=True)
+    text = render_ceo_digest(d)
+    assert "Freno de protección activo" in text
+    assert "no implica una pérdida nueva" in text.lower()
+    assert "racha de pérdidas en paper" not in text.lower()
+    assert "No resetear" in text or "no resetear" in text.lower()
 
 
 def test_si_cleared_copy():
@@ -126,8 +227,10 @@ def test_si_cleared_copy():
 
     msg = render_si_cleared_telegram()
     assert "levantado" in msg.lower()
+    assert "Modo: PAPER" in msg
     assert "Dinero real: NO" in msg
-    assert "system_integrity" not in msg
+    assert "PROMOTE_LIVE" not in msg
+    assert "override" not in msg.lower()
 
 
 def test_remediated_is_connection_not_pnl():
@@ -145,6 +248,7 @@ def test_invalid_ip_copy_has_ip_no_endpoint():
     assert "/ip" not in msg
     assert "endpoint" not in msg.lower()
     assert "Dinero real: NO" in msg
+    assert "cuando binance acepte" not in msg.lower()
 
 
 def test_debounce_same_fingerprint_skips_second():
@@ -167,16 +271,16 @@ def test_debounce_force_eod_always_sends():
     assert should_emit_ceo("digest", fp, force=True, now=2.0) is True
 
 
-def test_hold_pnl_repeat_after_1h():
+def test_hold_pnl_repeat_after_6h_not_1h():
     reset_debounce_memory()
-    fp = "open|pnl|Demasiadas pérdidas consecutivas: 5"
-    assert HOLD_PNL_MIN_REPEAT_S == 3600
+    fp = "open|trial_nogo|REDUCE_ONLY|NO-GO"
+    assert HOLD_PNL_MIN_REPEAT_S == 6 * 3600
     assert should_emit_ceo(
         "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0
     )
     assert (
         should_emit_ceo(
-            "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0 + 1800
+            "hold_pnl", fp, min_repeat_s=HOLD_PNL_MIN_REPEAT_S, now=1.0 + 3600
         )
         is False
     )
@@ -343,3 +447,30 @@ def test_ceo_alertmanager_debounce_same_stale():
     second = format_alertmanager_ceo(payload, "warning")
     assert first is not None
     assert second is None
+
+
+def test_ceo_humanizes_breaker_store_missing_fail_closed():
+    reset_debounce_memory()
+    text = format_alertmanager_ceo(
+        {
+            "alerts": [
+                _am_alert(
+                    labels={
+                        "alertname": "BreakerStoreMissingFailClosed",
+                        "instance": "gridbot-api:8000",
+                        "job": "gridbot-api",
+                    },
+                    annotations={
+                        "summary": "HASH de breakers ausente — fail-closed REDUCE_ONLY"
+                    },
+                )
+            ]
+        },
+        "critical",
+    )
+    assert text is not None
+    assert "BreakerStoreMissing" not in text
+    assert "Dinero real: NO" in text
+    assert "freno" in text.lower() or "protección" in text.lower()
+    assert render_breaker_store_missing_telegram() == text
+    assert "No resetear" in text
