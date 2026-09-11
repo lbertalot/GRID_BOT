@@ -226,7 +226,6 @@ def _publish_paper_edge_gauges() -> None:
     """Edge neto por ciclo + racha (validación paper del patch Δnivel)."""
     from app.core import metrics as m
     from app.core.auto_circuit_breaker import (
-        consecutive_loss_trip_threshold,
         consecutive_losses_from_closed_cycles,
         paper_trial_started_at,
     )
@@ -275,6 +274,7 @@ def _hydrate_binance_ip_rejected_from_shared() -> None:
 def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
     """Aviso temprano (no abre breaker). Debounce 6h. Silencio si SI ya abierto."""
     try:
+        from app.core.auto_circuit_breaker import consecutive_loss_trip_threshold
         from app.core.breaker_ceo_watch import _si_snapshot
         from app.core.telegram_ceo_copy import (
             HOLD_PNL_MIN_REPEAT_S,
