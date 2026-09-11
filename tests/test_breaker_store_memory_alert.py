@@ -17,6 +17,9 @@ def test_breaker_store_memory_alert_present():
     data = yaml.safe_load(RULES.read_text(encoding="utf-8"))
     names = [r["alert"] for g in data["groups"] for r in g["rules"]]
     assert "BreakerStoreFallbackMemory" in names
+    assert "BreakerStoreMissingFailClosed" in names
     raw = RULES.read_text(encoding="utf-8")
     assert 'breaker_store_backend{job="gridbot-api", backend="memory"}' in raw
     assert "paper_consecutive_losses" in raw
+    assert 'breaker_store_missing{job="gridbot-api"}' in raw
+    assert "severity: critical" in raw
