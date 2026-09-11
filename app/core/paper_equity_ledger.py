@@ -186,6 +186,20 @@ def compute_config_hash(config: Mapping[str, Any]) -> str:
 DEFAULT_GRID_CONFIG_FILE = "grid_config_optimized.json"
 
 
+def resolve_expected_config_hash() -> Optional[str]:
+    """Expected A1: `GRID_CONFIG_HASH` o sidecar `<stem>.hash` junto al JSON."""
+    explicit = (os.getenv("GRID_CONFIG_HASH") or "").strip()
+    if explicit:
+        return explicit
+    cfg_path = Path(os.getenv("GRID_CONFIG_FILE", "grid_config_paper_l0.json"))
+    sidecar = cfg_path.with_name(f"{cfg_path.stem}.hash")
+    try:
+        text = sidecar.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
+
+
 def resolve_grid_config_hash() -> Optional[str]:
     """`config_hash` de la config de grid vigente, para el freeze de la ventana.
 
@@ -295,6 +309,7 @@ class PaperFill:
     grid_level: Optional[int]
     executed_at: datetime
     cycle_ids: Tuple[str, ...] = ()
+    client_order_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -313,6 +328,7 @@ class PaperFill:
             "slippage_usdt": _money_str(self.slippage_usdt),
             "grid_level": self.grid_level,
             "executed_at": self.executed_at.isoformat(),
+            "client_order_id": self.client_order_id,
         }
 
     @classmethod
@@ -333,6 +349,7 @@ class PaperFill:
             slippage_usdt=to_money(payload["slippage_usdt"]),
             grid_level=payload.get("grid_level"),
             executed_at=_as_utc(datetime.fromisoformat(payload["executed_at"])),
+            client_order_id=str(payload.get("client_order_id") or ""),
         )
 
 
@@ -558,6 +575,7 @@ class PaperEquityLedger:
         grid_level: Optional[int] = None,
         executed_at: Optional[datetime] = None,
         cycle_id: Optional[str] = None,
+        client_order_id: Optional[str] = None,
     ) -> PaperFill:
         """Abre un ciclo de grid y descuenta notional + fee + slippage del cash.
 
@@ -605,6 +623,11 @@ class PaperEquityLedger:
         self._fees_total = _normalize(self._fees_total + fee)
         self._slippage_total = _normalize(self._slippage_total + slippage)
 
+        cid = str(client_order_id or "").strip()
+        if client_order_id is not None and not cid:
+            raise ValueError("client_order_id no puede estar vacío")
+        if not cid:
+            cid = f"paper-{uuid.uuid4().hex[:16]}"
         fill = PaperFill(
             fill_id=f"fil-{uuid.uuid4().hex[:12]}",
             cycle_id=cycle.cycle_id,
@@ -621,6 +644,7 @@ class PaperEquityLedger:
             slippage_usdt=slippage,
             grid_level=grid_level,
             executed_at=moment,
+            client_order_id=cid,
         )
         self._append_fill(fill)
         return fill
@@ -633,6 +657,7 @@ class PaperEquityLedger:
         *,
         order_type: str = "LIMIT",
         executed_at: Optional[datetime] = None,
+        client_order_id: Optional[str] = None,
     ) -> PaperFill:
         """Cierra ciclos FIFO, acredita el neto y cuenta los round-trips completos."""
         symbol = symbol.upper()
@@ -712,6 +737,11 @@ class PaperEquityLedger:
         self._fees_total = _normalize(self._fees_total + fee_total)
         self._slippage_total = _normalize(self._slippage_total + slippage_total)
 
+        cid = str(client_order_id or "").strip()
+        if client_order_id is not None and not cid:
+            raise ValueError("client_order_id no puede estar vacío")
+        if not cid:
+            cid = f"paper-{uuid.uuid4().hex[:16]}"
         fill = PaperFill(
             fill_id=f"fil-{uuid.uuid4().hex[:12]}",
             cycle_id=matched_ids[0] if matched_ids else "",
@@ -728,6 +758,7 @@ class PaperEquityLedger:
             slippage_usdt=slippage_total,
             grid_level=None,
             executed_at=moment,
+            client_order_id=cid,
         )
         self._append_fill(fill)
         return fill
@@ -1072,9 +1103,24 @@ class PaperEquitySeries:
             hashes.add(self.config_hash)
         return hashes
 
-    def config_is_frozen(self) -> bool:
-        """Gate A1: un solo `config_hash` de punta a punta de la ventana."""
-        return len(self.config_hashes()) <= 1
+    def config_is_frozen(self, expected_hash: Optional[str] = None) -> bool:
+        """Gate A1: exactamente un hash y debe coincidir con expected (fail-closed).
+
+        Expected = argumento o ``resolve_expected_config_hash()`` (env/sidecar).
+        Unicidad sola no basta (RCA sticky 2026-09-11).
+        """
+        hashes = {h for h in self.config_hashes() if h}
+        if len(hashes) != 1:
+            return False
+        only = next(iter(hashes))
+        expected = (
+            expected_hash
+            if expected_hash is not None
+            else resolve_expected_config_hash()
+        )
+        if expected is None:
+            return False
+        return only == expected
 
     def coverage(self) -> Dict[str, Any]:
         """Insumo del gate A2: cantidad de marcas, gap máximo y cierres diarios."""
@@ -1393,12 +1439,14 @@ def compute_paper_portfolio_value(
             other_value = _normalize(other_value + position["value"])
 
     if record:
+        # A1: no heredar header sticky (RCA gap126h/hash-drift 2026-09-11).
         target_series.record(
             breakdown["equity"],
             at=at,
             cash=breakdown["cash"],
             inventory_value=breakdown["inventory_value"],
             deployed_capital=ledger.deployed_capital,
+            config_hash=resolve_grid_config_hash(),
         )
         # Persist ledger even without fills so fees/slippage/cost_model are on disk
         # for the first tick / Celery snapshot path (C3 E2E PaperEquityLedger).
@@ -1440,6 +1488,7 @@ __all__ = [
     "compute_config_hash",
     "compute_paper_portfolio_value",
     "daily_close_anchor",
+    "resolve_expected_config_hash",
     "resolve_grid_config_hash",
     "get_mark_price_feed",
     "get_paper_equity_series",

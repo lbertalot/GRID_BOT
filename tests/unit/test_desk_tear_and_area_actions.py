@@ -106,7 +106,7 @@ def test_a8_pass_lee_fills_de_disco_no_cache(tmp_path: Path):
         "slippage_total_usdt": "0.002",
         "realized_gross_pnl_usdt": "0",
         "realized_net_pnl_usdt": "0",
-        "fills": [{"side": "BUY", "quantity": "0.0053"}],
+        "fills": [{"side": "BUY", "quantity": "0.0053", "commission_usdt": "0.01000004"}],
         "cycles": [{"state": "open"}],
     }
     series = {

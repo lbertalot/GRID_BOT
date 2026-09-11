@@ -40,7 +40,10 @@ x-app-env: &app-env
   # Trading — defaults seguros locales: PAPER (simulación; sin órdenes reales).
   # FORCE_REAL_MODE vacío o "false" para no anular PAPER_TRADING.
   PAPER_TRADING: "true"
-  TRADING_ENABLED: "false"
+  # Fail-closed. Interpolado para que .env local pueda encender ciclo paper
+  # (TRADING_ENABLED=true) sin que el YAML pinée false. Default sigue false.
+  # Live / FORCE_REAL_MODE no se habilitan por esta interpolación.
+  TRADING_ENABLED: "${TRADING_ENABLED:-false}"
   EMERGENCY_STOP: "false"
   FORCE_REAL_MODE: ""
   BINANCE_TESTNET: "false"
@@ -77,7 +80,12 @@ x-app-env: &app-env
   #   GRID_CONFIG_HASH=<contenido de grid_config_paper_l0.hash>
   # Sin ese env, resolve_grid_config_hash() hashea el JSON (algoritmo distinto
   # al sidecar) y el gate A1 no cierra contra el hash del desk.
+  #
+  # Overlay 5×15 intento 3 CERRADO 2026-09-10 (NO-GO: idle 12h sin close post-t0).
+  # N10 freeze: grid_config_paper_l0.json · sidecar ff6a35fc…7f5c4.
+  # No PAPER_TRIAL_*. WARN default 3. TRADING_ENABLED vía .env (default false).
   GRID_CONFIG_FILE: grid_config_paper_l0.json
+  PAPER_EARLY_STREAK_WARN: "3"
   PAPER_TELEMETRY_DIR: /app/paper_telemetry
   # B19 / ADR-008: ops ledger en volume nombrado (kill floor). Ver
   # Docs/ops/ops-ledger-persistence.md
@@ -97,6 +105,8 @@ x-app-volumes: &app-volumes
   - ./grid_config_optimized.json:/app/grid_config_optimized.json
   - ./grid_config_paper_l0.json:/app/grid_config_paper_l0.json
   - ./grid_config_paper_l0.hash:/app/grid_config_paper_l0.hash:ro
+  - ./grid_config_paper_l0_trial_5x15.json:/app/grid_config_paper_l0_trial_5x15.json
+  - ./grid_config_paper_l0_trial_5x15.hash:/app/grid_config_paper_l0_trial_5x15.hash:ro
   - ./paper_trading_state.json:/app/paper_trading_state.json
   - ./paper_telemetry:/app/paper_telemetry
   - ./Docs:/app/Docs
@@ -289,11 +299,11 @@ services:
     environment:
       <<: *app-env
     volumes: *app-volumes
-    command: >
-      celery -A app.core.celery_app beat
-      --loglevel=warning
-      --schedule /app/data/celerybeat-schedule
-      --pidfile=/tmp/celerybeat.pid
+    # rm pidfile: restart del mismo contenedor deja /tmp y PID 1 reaparece → exit 73.
+    command:
+      - sh
+      - -c
+      - rm -f /tmp/celerybeat.pid && exec celery -A app.core.celery_app beat --loglevel=warning --schedule /app/data/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$(cat /tmp/celerybeat.pid)\" 2>/dev/null"]
       interval: 30s
