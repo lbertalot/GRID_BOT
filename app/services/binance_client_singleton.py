@@ -128,6 +128,13 @@ def _set_binance_ip_rejected(rejected: bool) -> None:
 
 def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> None:
     """Notifica por Telegram cuando hay un problema de IP con Binance"""
+    global _last_ip_alert_ts
+    now = time.time()
+    # Cooldown local 30 min (evita martillar ipify); el debounce CEO vive en
+    # process_binance_auth_ip_watch (6–12 h).
+    if now - _last_ip_alert_ts < 1800:
+        return
+    _last_ip_alert_ts = now
     public_ip = "desconocida"
     try:
         # Intentar obtener IP desde múltiples fuentes
@@ -167,9 +174,8 @@ def _notify_invalid_ip(reason: str = "Invalid API-key, IP, or permissions") -> N
                 public_ip=public_ip,
                 location_restricted=is_451_error,
             )
-            if not msg:
-                return
-            send_telegram_alert(msg)
+            if msg:
+                send_telegram_alert(msg)
         else:
             msg = (
                 f"⚠️ Binance {error_type}\n\n"
