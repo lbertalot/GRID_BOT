@@ -192,7 +192,8 @@ def test_redis_store_decode_str_fields_and_skip_non_dict():
     assert "corrupt" not in loaded
 
 
-def test_redis_store_clear_all_ok_and_fail_soft():
+def test_redis_store_clear_all_ok_and_fail_soft(monkeypatch):
+    monkeypatch.setenv("GRIDBOT_ALLOW_BREAKER_STORE_WIPE", "1")
     fake = MagicMock()
     store = RedisBreakerStateStore(client=fake)
     store.clear_all()

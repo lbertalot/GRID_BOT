@@ -209,6 +209,7 @@ def publish_obs_gauges(
 
         hydrate_pipeline_health_gauges(pipeline_degraded=pipeline_degraded)
         _publish_paper_edge_gauges()
+        _hydrate_binance_ip_rejected_from_shared()
     except Exception as exc:  # noqa: BLE001
         logger.debug("obs_gauges publish failed: %s", exc)
 
@@ -224,7 +225,10 @@ def _early_streak_threshold() -> int:
 def _publish_paper_edge_gauges() -> None:
     """Edge neto por ciclo + racha (validación paper del patch Δnivel)."""
     from app.core import metrics as m
-    from app.core.auto_circuit_breaker import consecutive_losses_from_closed_cycles
+    from app.core.auto_circuit_breaker import (
+        consecutive_losses_from_closed_cycles,
+        paper_trial_started_at,
+    )
 
     try:
         from app.core.paper_equity_ledger import (
@@ -245,7 +249,9 @@ def _publish_paper_edge_gauges() -> None:
         last = max(closed, key=lambda c: c.closed_at or c.opened_at)
         m.paper_cycle_edge_gross_usdt.set(float(last.gross_pnl_usdt or 0))
         m.paper_cycle_edge_net_usdt.set(float(last.net_pnl_usdt or 0))
-    streak = consecutive_losses_from_closed_cycles(closed)
+    streak = consecutive_losses_from_closed_cycles(
+        closed, since=paper_trial_started_at()
+    )
     m.paper_consecutive_losses.set(float(streak))
     warn_at = _early_streak_threshold()
     m.paper_early_streak_warn.set(1.0 if streak >= warn_at else 0.0)
@@ -253,9 +259,23 @@ def _publish_paper_edge_gauges() -> None:
         _maybe_telegram_early_streak(streak, warn_at)
 
 
-def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
-    """Aviso temprano (no abre breaker). Debounce 1h."""
+def _hydrate_binance_ip_rejected_from_shared() -> None:
+    """API scrape: worker puede haber marcado −2015 en Redis compartido."""
     try:
+        from app.core.binance_auth_ip_watch import load_binance_auth_ip_blocked
+        from app.core.metrics import binance_ip_rejected
+
+        if load_binance_auth_ip_blocked():
+            binance_ip_rejected.set(1.0)
+    except Exception as exc:
+        logger.debug("obs_gauges: hydrate binance ip flag: %s", exc)
+
+
+def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
+    """Aviso temprano (no abre breaker). Debounce 6h. Silencio si SI ya abierto."""
+    try:
+        from app.core.auto_circuit_breaker import consecutive_loss_trip_threshold
+        from app.core.breaker_ceo_watch import _si_snapshot
         from app.core.telegram_ceo_copy import (
             HOLD_PNL_MIN_REPEAT_S,
             ceo_plain_enabled,
@@ -265,6 +285,12 @@ def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
 
         if not ceo_plain_enabled():
             return
+        try:
+            si_open, _, _, _ = _si_snapshot()
+            if si_open:
+                return
+        except Exception:
+            pass
         fp = f"early_streak|{streak}|{warn_at}"
         if not should_emit_ceo(
             "early_streak",
@@ -272,11 +298,12 @@ def _maybe_telegram_early_streak(streak: int, warn_at: int) -> None:
             min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
         ):
             return
+        trip = consecutive_loss_trip_threshold()
         send_telegram_alert(
             "🟡 **Aviso temprano de racha (paper)**\n"
             f"Hay {streak} cierres seguidos en pérdida "
-            f"(aviso en {warn_at}; el freno duro sigue en 5).\n"
-            "Es señal de revisión desk, no un reset automático.\n"
+            f"(aviso en {warn_at}; el freno duro sigue en {trip}).\n"
+            "WARN no abre el breaker. Es señal de revisión desk, no un reset automático.\n"
             "**Dinero real: NO.**"
         )
     except Exception as exc:  # noqa: BLE001

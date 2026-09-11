@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "editable": true,
+  "description": "Paper L0 ops. Para equity y rendimiento paper, usar Paper equity (SoT) / ledger; los paneles PnL/Portfolio operativos no gatean promoción. PROMOTE_LIVE: NO.",
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
@@ -162,6 +162,15 @@
           "expr": "max(breaker_any_open{job=\"gridbot-api\"}) or on() vector(0)",
           "legendFormat": "any_open",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(breaker_store_missing{job=\"gridbot-api\"}) or on() vector(0)",
+          "legendFormat": "store_missing",
+          "refId": "B"
         }
       ],
       "title": "Breaker any open",
@@ -237,6 +246,7 @@
         "y": 0
       },
       "id": 4,
+      "description": "Para equity y rendimiento paper, usar Paper equity (SoT) / ledger; estos paneles no gatean promoción.",
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -262,7 +272,7 @@
           "refId": "A"
         }
       ],
-      "title": "PnL (gridbot_profit_loss)",
+      "title": "PnL operativo (no SoT)",
       "type": "stat"
     },
     {
@@ -286,6 +296,7 @@
         "y": 0
       },
       "id": 5,
+      "description": "Para equity y rendimiento paper, usar Paper equity (SoT) / ledger; estos paneles no gatean promoción.",
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -311,7 +322,7 @@
           "refId": "A"
         }
       ],
-      "title": "Portfolio value (ops)",
+      "title": "Portfolio operativo (no SoT)",
       "type": "stat"
     },
     {

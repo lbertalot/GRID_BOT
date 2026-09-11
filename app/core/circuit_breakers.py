@@ -13,6 +13,37 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+STORE_MISSING_REASON = (
+    "breaker_store_missing (fail-closed REDUCE_ONLY; HASH ausente)"
+)
+STORE_MISSING_CEO_CHANNEL = "am:BreakerStoreMissingFailClosed"
+STORE_MISSING_CEO_FP = "BreakerStoreMissingFailClosed"
+
+
+def _notify_breaker_store_missing() -> None:
+    """Telegram CEO (debounce 1h). La métrica/gauge la publica hydrate."""
+    try:
+        from app.core.telegram_ceo_copy import (
+            HOLD_PNL_MIN_REPEAT_S,
+            ceo_plain_enabled,
+            render_breaker_store_missing_telegram,
+            should_emit_ceo,
+        )
+        from app.services.telegram_alert import send_telegram_alert
+
+        if not ceo_plain_enabled():
+            return
+        if not should_emit_ceo(
+            STORE_MISSING_CEO_CHANNEL,
+            STORE_MISSING_CEO_FP,
+            min_repeat_s=HOLD_PNL_MIN_REPEAT_S,
+        ):
+            return
+        send_telegram_alert(render_breaker_store_missing_telegram())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("breaker_store_missing telegram skip: %s", exc)
+
+
 if TYPE_CHECKING:
     from app.core.breaker_state_store import BreakerStateStore, BreakerTripRecord
 
@@ -59,6 +90,8 @@ class CircuitBreakers:
         except Exception:
             self._cooldown_seconds = 300  # 5 minutos
 
+        self._fail_closed_this_process = False
+
         if self._store is not None:
             self._hydrate_from_store()
 
@@ -99,15 +132,34 @@ class CircuitBreakers:
         """Persiste un breaker. No pisa un OPEN remoto con CLOSED salvo ``allow_close``.
 
         Recreate/hydrate de un proceso vacío no debe borrar SI REDUCE_ONLY en Redis.
-        Solo ``deactivate_breaker`` (allow_close=True) puede cerrar el HASH.
+        ``remote is None`` tampoco autoriza HSET closed (RCA 2026-08-30): es anomalía,
+        no un close de Desk. Solo ``deactivate_breaker`` sobre un OPEN existente
+        puede cerrar el HASH.
         """
         if self._store is None or breaker_type not in self.breakers:
             return
         try:
             record = self._record_for(breaker_type)
-            if not record.active and not allow_close:
+            if not record.active:
                 remote = self._store.load_all().get(breaker_type)
-                if remote is not None and remote.active:
+                if remote is None:
+                    self.logger.error(
+                        "Anomalía persist closed '%s': field ausente "
+                        "(no HSET closed sobre vacío; RCA HASH wipe 2026-08-30)",
+                        breaker_type,
+                    )
+                    try:
+                        from app.core.metrics import (
+                            breaker_store_persist_anomaly_total,
+                        )
+
+                        breaker_store_persist_anomaly_total.labels(
+                            kind="closed_over_missing"
+                        ).inc()
+                    except Exception:
+                        pass
+                    return
+                if not allow_close and remote.active:
                     self.logger.warning(
                         "Skip persist closed '%s': store sigue OPEN "
                         "(recreate/hydrate vacío no wipe SI)",
@@ -120,6 +172,80 @@ class CircuitBreakers:
                 "No se pudo persistir breaker '%s' en store: %s", breaker_type, exc
             )
 
+    def _store_is_durable(self) -> bool:
+        return getattr(self._store, "durable", False) is True
+
+    def _store_last_load_ok(self) -> bool:
+        """False solo si Redis falló al leer (no confundir con HASH vacío)."""
+        return getattr(self._store, "last_load_ok", True) is not False
+
+    def _publish_store_missing_gauge(self, value: int) -> None:
+        if self._fail_closed_this_process:
+            value = 1
+        try:
+            from app.core.metrics import breaker_store_missing
+
+            breaker_store_missing.set(float(value))
+        except Exception:
+            pass
+
+    def _apply_fail_closed_si(self) -> None:
+        now_iso = datetime.now().isoformat()
+        now_ts = time.time()
+        state = self.breakers["system_integrity"]
+        state["active"] = True
+        state["activated_at"] = now_iso
+        state["reason"] = STORE_MISSING_REASON
+        state["operational_state"] = "REDUCE_ONLY"
+        state["transitioned_at"] = now_iso
+        state["transition_reason"] = STORE_MISSING_REASON
+        self._last_activation_ts["system_integrity"] = now_ts
+        self._last_activation_reason["system_integrity"] = _normalize_reason(
+            STORE_MISSING_REASON
+        )
+        if int(self._activation_count.get("system_integrity", 0) or 0) == 0:
+            self._activation_count["system_integrity"] = 1
+
+    def _maybe_fail_closed_missing_si(self, remote: Dict[str, Any]) -> None:
+        from app.core.breaker_state_store import POLICY_FRESH, empty_store_policy
+
+        if not self._store_is_durable():
+            self._publish_store_missing_gauge(0)
+            return
+        if not self._store_last_load_ok():
+            # Lectura Redis falló: no asumir HASH borrado ni persistir OPEN encima.
+            self._publish_store_missing_gauge(0)
+            return
+        if "system_integrity" in remote:
+            self._publish_store_missing_gauge(0)
+            return
+        if empty_store_policy() == POLICY_FRESH:
+            self._publish_store_missing_gauge(0)
+            return
+
+        self._apply_fail_closed_si()
+        first = not self._fail_closed_this_process
+        self._fail_closed_this_process = True
+        self._publish_store_missing_gauge(1)
+        if first:
+            self.logger.error(
+                "HASH breakers ausente: fail-closed system_integrity REDUCE_ONLY "
+                "(%s)",
+                STORE_MISSING_REASON,
+            )
+            try:
+                from app.core.metrics import (
+                    breaker_state,
+                    breaker_store_fail_closed_total,
+                )
+
+                breaker_store_fail_closed_total.inc()
+                breaker_state.labels(type="system_integrity").set(1)
+            except Exception:
+                pass
+            _notify_breaker_store_missing()
+        self._persist_breaker("system_integrity")
+
     def _hydrate_from_store(self) -> None:
         if self._store is None:
             return
@@ -130,6 +256,7 @@ class CircuitBreakers:
             return
         for name, record in remote.items():
             self._apply_record(name, record)
+        self._maybe_fail_closed_missing_si(remote)
 
     def _refresh_from_store(self) -> None:
         """Relee el store antes de consultas de estado (cross-process)."""
@@ -425,7 +552,8 @@ def get_shared_breakers() -> "CircuitBreakers":
 def reset_shared_breakers() -> "CircuitBreakers":
     """Reemplaza el singleton (tests / reinicio controlado). Paper-safe.
 
-    Limpia el store activo para no filtrar trips entre tests.
+    Limpia el store activo para no filtrar trips entre tests. El HASH Redis
+    ``gridbot:breakers:v1`` **no** se borra salvo ``GRIDBOT_ALLOW_BREAKER_STORE_WIPE=1``.
     """
     global _shared_breakers
     from app.core.breaker_state_store import build_breaker_state_store

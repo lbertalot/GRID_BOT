@@ -116,3 +116,18 @@ groups:
             HASH Redis gridbot:breakers:v1 no está en uso y hay racha paper.
             Recreate --no-deps no debe wipe Redis. Rehidratar REDUCE_ONLY,
             no deactivate. Dinero real: NO.
+
+      - alert: BreakerStoreMissingFailClosed
+        expr: |
+          max(breaker_store_missing{job="gridbot-api"}) == 1
+        for: 30s
+        labels:
+          severity: critical
+          surface: paper-l0
+        annotations:
+          summary: "HASH de breakers ausente — fail-closed REDUCE_ONLY"
+          description: >-
+            El API hidrató gridbot:breakers:v1 sin system_integrity y frenó
+            solo (REDUCE_ONLY). No es un close de Desk. No resetear frenos.
+            No asumir ambiente nuevo salvo CB_EMPTY_STORE_POLICY=fresh.
+            RCA Docs/ops/rca-si-redis-hash-wipe-2026-08-30.md. Dinero real: NO.
