@@ -297,7 +297,19 @@ Tras recreate:
 3. Grafana CEO: Freno = 1 **o** racha paper ≥ 5
 
 Si `TYPE none` o `breaker_store_backend{job="gridbot-api",backend="memory"}==1` con racha ≥ 5:
-rehidratar REDUCE_ONLY (mismo procedimiento 27-ago). **No** `deactivate`.
+el proceso debe fail-closed a REDUCE_ONLY y disparar `BreakerStoreMissingFailClosed`
+(Grafana + Telegram). **No** `deactivate`. Policy de ambiente nuevo: default
+`CB_EMPTY_STORE_POLICY=fail_closed` (nace bloqueado); `fresh` solo si Desk lo elige.
+Wipe Redis: solo `GRIDBOT_ALLOW_BREAKER_STORE_WIPE=1` (nunca en paper).
+Incidente 2026-08-30 y defensa C→B→A:
+[`Docs/ops/rca-si-redis-hash-wipe-2026-08-30.md`](ops/rca-si-redis-hash-wipe-2026-08-30.md),
+[`Docs/ops/breakers-process-scope.md`](ops/breakers-process-scope.md).
+Simulacro `DEL` 2026-08-30T13:31:44Z: **PASS**
+([`Docs/ops/smoke-breaker-del-fail-closed-2026-08-30.md`](ops/smoke-breaker-del-fail-closed-2026-08-30.md)).
+Prueba SI 5×15 **intento 3** (firma Desk Lead 2026-09-09; paper `TRADING_ENABLED`):
+[`Docs/ops/trial-si-5x15-2026-09-09.md`](ops/trial-si-5x15-2026-09-09.md) —
+**CERRADO 2026-09-10 NO-GO** (idle 12 h sin close post-t0; SI REDUCE_ONLY; overlay revertido a N10).
+Intentos 1–2 no son evidencia. No wipe de racha 19 / Redis HASH.
 
 Beat: `--schedule /app/data/celerybeat-schedule` (persistente) y
 `--pidfile=/tmp/celerybeat.pid` (no en el volumen: un pidfile stale crash-loopea
