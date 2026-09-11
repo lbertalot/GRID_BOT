@@ -72,6 +72,7 @@ def test_ceo_auto_job_filters_on_mode_and_orders():
     assert FAKE_DS not in raw
     assert "paper_consecutive_losses" in raw
     assert "Racha paper" in raw
+    assert "breaker_store_missing" in raw
 
 
 def test_paper_l0_all_panels_filter_gridbot_api():
@@ -80,6 +81,7 @@ def test_paper_l0_all_panels_filter_gridbot_api():
     assert data["uid"] == "gridbot-paper-l0"
     assert 'job=\\"gridbot-api\\"' in raw or 'job="gridbot-api"' in raw
     assert "breaker_state" in raw
+    assert "breaker_store_missing" in raw
     assert data["time"]["from"] == "now-12h"
     any_open = next(p for p in data["panels"] if p.get("id") == 2)
     active = next(p for p in data["panels"] if p.get("id") == 3)
@@ -87,6 +89,27 @@ def test_paper_l0_all_panels_filter_gridbot_api():
     assert 'job="gridbot-api"' in active["targets"][0]["expr"]
     assert "or on() vector(0)" in any_open["targets"][0]["expr"]
     assert "or on() vector(0)" in active["targets"][0]["expr"]
+
+
+def test_paper_l0_ops_panels_labeled_not_sot():
+    data = _load("gridbot-paper-l0.json")
+    note = (
+        "Para equity y rendimiento paper, usar Paper equity (SoT) / ledger; "
+        "estos paneles no gatean promoción."
+    )
+    pnl = next(p for p in data["panels"] if p.get("id") == 4)
+    port = next(p for p in data["panels"] if p.get("id") == 5)
+    assert pnl["title"] == "PnL operativo (no SoT)"
+    assert port["title"] == "Portfolio operativo (no SoT)"
+    assert pnl["targets"][0]["expr"] == 'gridbot_profit_loss{job="gridbot-api"}'
+    assert (
+        port["targets"][0]["expr"]
+        == 'portfolio_total_value_usdt{job="gridbot-api",strategy="grid"}'
+    )
+    assert note in (pnl.get("description") or "")
+    assert note in (port.get("description") or "")
+    assert "Paper equity (SoT)" in (data.get("description") or "")
+    assert "no gatean promoción" in (data.get("description") or "")
 
 
 def test_profitability_defer_tags_and_job_filter():
