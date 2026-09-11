@@ -137,7 +137,23 @@ def test_collect_off_track_force_real():
     assert by["SEC"].status == STATUS_OFF
 
 
-def test_collect_hash_drift_off():
+def test_collect_sec_on_when_paper_cycle_enabled():
+    """Ciclo paper ON (TRADING_ENABLED=true) no es incidente SEC; FORCE_REAL_MODE sí."""
+    now = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
+    d = collect_desk_digest(
+        when=now,
+        series_samples=[_sample(at="2026-08-06T11:50:00+00:00")],
+        trading_snapshot={
+            "effective_mode": "paper",
+            "force_real_mode": False,
+            "trading_enabled": True,
+        },
+        any_open_breakers=False,
+        expected_hash=HASH,
+    )
+    by = {a.code: a for a in d.areas}
+    assert by["SEC"].status == STATUS_ON
+    assert d.global_status != STATUS_OFF
     now = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
     bad = _sample(at="2026-08-06T11:50:00+00:00")
     bad["config_hash"] = "deadbeef" * 8

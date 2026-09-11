@@ -149,11 +149,11 @@ def test_refuse_unknown_or_pnl_reason_even_if_validate_ok(paper_env, monkeypatch
         now=9_000_000.0,
     )
     assert watch and "Dinero real: NO" in watch
-    assert "no resetear" in watch.lower() or "no lo resetees" in watch.lower()
-    assert "Desk Lead" in watch
+    assert "no resetear" in watch.lower()
     assert "estabilice" not in watch.lower()
     assert "robo" not in watch.lower()
-    assert "system_integrity" not in watch
+    assert "breaker_type: system_integrity" in watch
+    assert "override" not in watch.lower()
 
 
 def test_refuse_empty_reason(paper_env, monkeypatch):

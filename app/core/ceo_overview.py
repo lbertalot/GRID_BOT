@@ -18,13 +18,14 @@ Money travels as `Decimal` serialized to string. No secrets are exposed.
 from __future__ import annotations
 
 import importlib
+import inspect
 import logging
 import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 
 from app.core.trading_mode import get_trading_mode_snapshot
 
@@ -126,7 +127,33 @@ def _is_authorization_error(exc: Exception) -> bool:
     return getattr(exc, "status_code", None) in {401, 403}
 
 
-def _call_adapter(spec: AdapterSpec) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _invoke_adapter(
+    func: Callable[..., Any], *, now: Optional[datetime] = None
+) -> Any:
+    """Invoca el adaptador; reenvía `now` solo si la firma lo acepta.
+
+    Stubs/lambdas de tests (`lambda: {...}`) no toman kwargs — no deben romper
+    el overview. El facade real `get_pnl_summary(now=...)` sí lo acepta.
+    """
+    if now is None:
+        return func()
+    try:
+        parameters = inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return func()
+    if "now" in parameters:
+        return func(now=now)
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        return func(now=now)
+    return func()
+
+
+def _call_adapter(
+    spec: AdapterSpec, *, now: Optional[datetime] = None
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Devuelve (datos, motivo_de_indisponibilidad)."""
     module = _import_optional(spec.module)
     if module is None:
@@ -137,7 +164,7 @@ def _call_adapter(spec: AdapterSpec) -> Tuple[Optional[Dict[str, Any]], Optional
         return None, f"{spec.module} no expone {spec.func}()"
 
     try:
-        data = func()
+        data = _invoke_adapter(func, now=now if spec is PNL else None)
     except Exception as exc:
         # Solo el tipo de excepción: el mensaje puede arrastrar datos sensibles.
         # Excepción: adapters que marcan `ceo_reason_safe` (p.ej. PnlUnavailableError).
@@ -365,7 +392,7 @@ def build_ceo_overview(
     ops, ops_reason = _call_adapter(OPS_LEDGER)
     gate, gate_reason = _call_adapter(LIVE_GATE)
     books, books_reason = _call_adapter(BOOKS)
-    pnl, pnl_reason = _call_adapter(PNL)
+    pnl, pnl_reason = _call_adapter(PNL, now=now)
 
     breakers, breakers_reason = _call_adapter(BREAKERS)
     breakers_source = f"{BREAKERS.module} (track {BREAKERS.track})"

@@ -998,6 +998,11 @@ paper_early_streak_warn = Gauge(
     "1 si racha ≥ PAPER_EARLY_STREAK_WARN (default 3), menor al breaker",
 )
 
+gridbot_si_ops_state_inconsistent = Gauge(
+    "gridbot_si_ops_state_inconsistent",
+    "1 si system_integrity está active con operational_state leftover CLOSED (copy usa OPEN; no muta el breaker)",
+)
+
 # REDUCE_ONLY — etiquetas enumeradas, sin IDs de orden/ciclo para evitar cardinalidad.
 reduce_only_mode_active = Gauge(
     "reduce_only_mode_active",
