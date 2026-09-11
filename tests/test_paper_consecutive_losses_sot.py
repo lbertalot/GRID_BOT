@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.core.auto_circuit_breaker import (
     AutoCircuitBreaker,
+    consecutive_loss_trip_threshold,
     consecutive_losses_from_closed_cycles,
+    paper_trial_started_at,
     paper_window_loss_metrics,
 )
 
@@ -52,6 +54,57 @@ def test_ignora_ciclos_abiertos():
         _cycle(net="-0.01", at="2026-08-13T10:00:00+00:00"),
     ]
     assert consecutive_losses_from_closed_cycles(cycles) == 1
+
+
+def test_watermark_since_ignora_closes_anteriores_o_iguales_a_t0():
+    """Prueba SI: racha SoT 19 no cuenta; solo closed_at > t0."""
+    t0 = datetime(2026, 8, 26, 15, 45, 37, tzinfo=timezone.utc)
+    cycles = [
+        _cycle(net="-0.01", at="2026-08-20T10:00:00+00:00"),
+        _cycle(net="-0.01", at="2026-08-26T15:45:37+00:00"),  # watermark = t0
+        _cycle(net="-0.02", at="2026-08-29T12:00:00+00:00"),
+        _cycle(net="-0.03", at="2026-08-29T18:00:00+00:00"),
+    ]
+    assert consecutive_losses_from_closed_cycles(cycles) == 4
+    assert consecutive_losses_from_closed_cycles(cycles, since=t0) == 2
+
+
+def test_watermark_t0_sin_microsegundos_no_cuenta_el_close_del_mismo_segundo():
+    t0 = datetime(2026, 8, 26, 15, 45, 37, tzinfo=timezone.utc)
+    cycles = [
+        _cycle(net="-0.01", at="2026-08-26T15:45:37.370240+00:00"),
+        _cycle(net="-0.02", at="2026-08-29T12:00:00+00:00"),
+    ]
+    assert consecutive_losses_from_closed_cycles(cycles, since=t0) == 1
+
+
+def test_watermark_since_una_ganancia_post_t0_corta_solo_la_ventana():
+    t0 = datetime(2026, 8, 26, 15, 45, 37, tzinfo=timezone.utc)
+    cycles = [
+        _cycle(net="-0.01", at="2026-08-26T15:45:37+00:00"),
+        _cycle(net="0.05", at="2026-08-29T12:00:00+00:00"),
+        _cycle(net="-0.02", at="2026-08-29T18:00:00+00:00"),
+    ]
+    assert consecutive_losses_from_closed_cycles(cycles, since=t0) == 1
+
+
+def test_trial_env_threshold_2_solo_si_hay_t0(monkeypatch):
+    monkeypatch.delenv("PAPER_TRIAL_STARTED_AT", raising=False)
+    monkeypatch.setenv("PAPER_TRIAL_STREAK_THRESHOLD", "2")
+    assert paper_trial_started_at() is None
+    assert consecutive_loss_trip_threshold() == 5
+
+    monkeypatch.setenv("PAPER_TRIAL_STARTED_AT", "2026-08-26T15:45:37+00:00")
+    started = paper_trial_started_at()
+    assert started == datetime(2026, 8, 26, 15, 45, 37, tzinfo=timezone.utc)
+    assert consecutive_loss_trip_threshold() == 2
+
+
+def test_early_warn_env_no_cambia_el_trip(monkeypatch):
+    """PAPER_EARLY_STREAK_WARN=2 no sustituye el umbral duro."""
+    monkeypatch.setenv("PAPER_EARLY_STREAK_WARN", "2")
+    monkeypatch.delenv("PAPER_TRIAL_STARTED_AT", raising=False)
+    assert consecutive_loss_trip_threshold() == 5
 
 
 def test_ventana_vacia_metricas_cero():
@@ -151,6 +204,98 @@ async def test_paper_sot_cinco_cierres_rojos_activa_si():
     ):
         await auto._check_consecutive_losses(MagicMock(), results)
     assert "system_integrity" in results["breakers_activated"]
+    auto.breakers.activate_breaker.assert_awaited()
+
+
+async def test_paper_trial_ignora_racha_historica_y_no_tripa_con_una_perdida(
+    monkeypatch,
+):
+    monkeypatch.setenv("PAPER_TRIAL_STARTED_AT", "2026-08-26T15:45:37+00:00")
+    monkeypatch.setenv("PAPER_TRIAL_STREAK_THRESHOLD", "2")
+    monkeypatch.setenv("PAPER_EARLY_STREAK_WARN", "2")
+    auto = AutoCircuitBreaker(breakers=MagicMock())
+    auto.breakers.activate_breaker = AsyncMock()
+    ledger = MagicMock()
+    ledger.closed_cycles.return_value = [
+        _cycle(net="-0.01", at="2026-08-20T10:00:00+00:00"),
+        _cycle(net="-0.01", at="2026-08-26T15:45:37+00:00"),
+        _cycle(net="-0.02", at="2026-08-29T12:00:00+00:00"),
+    ]
+    results = {"breakers_activated": [], "reasons": []}
+    with patch(
+        "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
+        return_value=True,
+    ), patch(
+        "app.core.paper_equity_ledger.reload_paper_ledger_from_disk",
+        return_value=ledger,
+    ), patch(
+        "app.core.breaker_override.check_and_consume_override",
+        return_value=MagicMock(
+            skip_activation=False, override=None, force_reduce_only=False
+        ),
+    ):
+        await auto._check_consecutive_losses(MagicMock(), results)
+    assert results["breakers_activated"] == []
+    auto.breakers.activate_breaker.assert_not_called()
+
+
+async def test_paper_trial_dos_perdidas_post_t0_activa_si(monkeypatch):
+    monkeypatch.setenv("PAPER_TRIAL_STARTED_AT", "2026-08-26T15:45:37+00:00")
+    monkeypatch.setenv("PAPER_TRIAL_STREAK_THRESHOLD", "2")
+    auto = AutoCircuitBreaker(breakers=MagicMock())
+    auto.breakers.activate_breaker = AsyncMock()
+    ledger = MagicMock()
+    ledger.closed_cycles.return_value = [
+        _cycle(net="-0.01", at="2026-08-26T15:45:37+00:00"),
+        _cycle(net="-0.02", at="2026-08-29T12:00:00+00:00"),
+        _cycle(net="-0.03", at="2026-08-29T18:00:00+00:00"),
+    ]
+    results = {"breakers_activated": [], "reasons": []}
+    with patch(
+        "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
+        return_value=True,
+    ), patch(
+        "app.core.paper_equity_ledger.reload_paper_ledger_from_disk",
+        return_value=ledger,
+    ), patch(
+        "app.core.breaker_override.check_and_consume_override",
+        return_value=MagicMock(
+            skip_activation=False, override=None, force_reduce_only=False
+        ),
+    ):
+        await auto._check_consecutive_losses(MagicMock(), results)
+    assert "system_integrity" in results["breakers_activated"]
+    auto.breakers.activate_breaker.assert_awaited()
+
+
+async def test_paper_trial_override_expirado_sin_close_fuerza_reduce_only(
+    monkeypatch,
+):
+    monkeypatch.setenv("PAPER_TRIAL_STARTED_AT", "2026-08-26T15:45:37+00:00")
+    monkeypatch.setenv("PAPER_TRIAL_STREAK_THRESHOLD", "2")
+    auto = AutoCircuitBreaker(breakers=MagicMock())
+    auto.breakers.activate_breaker = AsyncMock()
+    ledger = MagicMock()
+    ledger.closed_cycles.return_value = [
+        _cycle(net="-0.01", at="2026-08-26T15:45:37+00:00"),
+    ]
+    results = {"breakers_activated": [], "reasons": []}
+    with patch(
+        "app.core.paper_equity_ledger.paper_equity_is_source_of_truth",
+        return_value=True,
+    ), patch(
+        "app.core.paper_equity_ledger.reload_paper_ledger_from_disk",
+        return_value=ledger,
+    ), patch(
+        "app.core.breaker_override.check_and_consume_override",
+        return_value=MagicMock(
+            skip_activation=False, override=None, force_reduce_only=True
+        ),
+    ):
+        await auto._check_consecutive_losses(MagicMock(), results)
+    assert "system_integrity" in results["breakers_activated"]
+    reason = results["reasons"][0]
+    assert "override" in reason.lower()
     auto.breakers.activate_breaker.assert_awaited()
 
 

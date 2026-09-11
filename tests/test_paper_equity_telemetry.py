@@ -412,12 +412,14 @@ def test_deployed_capital_viaja_en_el_snapshot():
     assert muestra["inventory_value"] == "50"
 
 
-def test_mtm_persiste_ledger_con_fees_y_slippage(tmp_path):
+def test_mtm_persiste_ledger_con_fees_y_slippage(tmp_path, monkeypatch):
     """C3 / Celery: el path MtM debe dejar fees/slippage en disco, no solo la serie.
 
     Sin fills el autosave de buys no corre: el snapshot paper tiene que persistir
     el ledger (cost_model + acumulados) para que el tick E2E sea auditable.
+    El config_hash del sample sale de resolve() (no del header sticky).
     """
+    monkeypatch.setenv("GRID_CONFIG_HASH", "hash-congelado")
     ledger_path = tmp_path / "paper_equity_ledger.json"
     series_path = tmp_path / "paper_equity_series.json"
     ledger = PaperEquityLedger(
@@ -425,7 +427,7 @@ def test_mtm_persiste_ledger_con_fees_y_slippage(tmp_path):
         deployed_capital=D("200"),
         storage_path=ledger_path,
     )
-    series = PaperEquitySeries(config_hash="hash-congelado", storage_path=series_path)
+    series = PaperEquitySeries(config_hash="hash-viejo-sticky", storage_path=series_path)
 
     assert not ledger_path.exists()
     compute_paper_portfolio_value(ledger=ledger, price_feed=FakeMarkPriceFeed({}), series=series)
@@ -477,16 +479,21 @@ def test_config_hash_ignora_secrets():
     assert "AKIA" not in compute_config_hash(con_secrets)
 
 
-def test_config_hash_se_persiste_en_cada_marca_de_equity(ledger):
+def test_config_hash_se_persiste_en_cada_marca_de_equity(ledger, monkeypatch):
     esperado = compute_config_hash(CONFIG_VENTANA)
+    monkeypatch.setenv("GRID_CONFIG_HASH", esperado)
     feed = FakeMarkPriceFeed({BTC: "50000"})
-    series = PaperEquitySeries(config_hash=esperado)
+    # Header sticky distinto a propósito: el sample debe usar resolve().
+    series = PaperEquitySeries(config_hash="hash-sticky-incorrecto")
     ledger.record_buy(BTC, quantity=D("0.001"), price=D("50000"), grid_level=0)
 
     compute_paper_portfolio_value(ledger=ledger, price_feed=feed, series=series)
 
     assert series.samples[-1]["config_hash"] == esperado
-    assert series.config_hashes() == {esperado}
+    assert esperado in series.config_hashes()
+    assert "hash-sticky-incorrecto" not in {
+        s["config_hash"] for s in series.samples if s.get("config_hash")
+    }
 
 
 def test_config_hash_se_resuelve_del_archivo_de_config_del_bot(tmp_path, monkeypatch):
@@ -514,16 +521,42 @@ def test_sin_config_legible_no_hay_hash_inventado(tmp_path, monkeypatch):
     assert resolve_grid_config_hash() is None
 
 
-def test_series_detecta_cambio_de_config_dentro_de_la_ventana():
+def test_series_detecta_cambio_de_config_dentro_de_la_ventana(monkeypatch):
+    monkeypatch.setenv("GRID_CONFIG_HASH", "hash-congelado")
     series = PaperEquitySeries(config_hash="hash-congelado")
     base = datetime(2026, 8, 15, 0, 0, 0, tzinfo=timezone.utc)
 
     series.record(D("560"), at=base)
     assert series.config_is_frozen() is True
+    assert series.config_is_frozen(expected_hash="hash-congelado") is True
+    assert series.config_is_frozen(expected_hash="otro") is False
 
     series.record(D("561"), at=base + timedelta(days=1), config_hash="hash-tuneado")
     assert series.config_is_frozen() is False
     assert series.config_hashes() == {"hash-congelado", "hash-tuneado"}
+
+
+def test_config_is_frozen_fail_closed_sin_expected(monkeypatch):
+    monkeypatch.delenv("GRID_CONFIG_HASH", raising=False)
+    monkeypatch.setenv("GRID_CONFIG_FILE", "/tmp/no-existe-grid-config-a1.json")
+    series = PaperEquitySeries(config_hash="solo-uno")
+    series.record(D("1000"), at=datetime(2026, 8, 15, tzinfo=timezone.utc))
+    assert series.config_is_frozen() is False
+
+
+def test_config_is_frozen_sticky_distinto_al_expected(monkeypatch):
+    sticky = "ac1cb59676abbaa42a9e1409809ee3b7009ae5114e15055615a7a1ff63b4b219"
+    expected = "ff6a35fcf84bf91c1da9ea81116265a3789f1d85e5456d19622897c82ed7f5c4"
+    monkeypatch.setenv("GRID_CONFIG_HASH", expected)
+    series = PaperEquitySeries(config_hash=sticky)
+    series.record(
+        D("1000"),
+        at=datetime(2026, 8, 26, 12, 11, tzinfo=timezone.utc),
+        config_hash=sticky,
+    )
+    assert series.config_is_frozen() is False
+    assert series.config_is_frozen(expected_hash=expected) is False
+    assert series.config_is_frozen(expected_hash=sticky) is True
 
 
 # ---------------------------------------------------------------------------
@@ -613,7 +646,8 @@ def test_los_fills_persisten_comision_por_trade(ledger):
     assert fill["grid_level"] == 0
 
 
-def test_serie_round_trip_json(tmp_path):
+def test_serie_round_trip_json(tmp_path, monkeypatch):
+    monkeypatch.setenv("GRID_CONFIG_HASH", "hash-congelado")
     series = PaperEquitySeries(config_hash="hash-congelado")
     base = datetime(2026, 8, 15, 0, 0, 0, tzinfo=timezone.utc)
     series.record(D("1000"), at=base, deployed_capital=D("200"))
