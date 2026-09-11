@@ -367,7 +367,9 @@ def collect_desk_digest(
 
     sec_status = STATUS_ON
     sec_dev = "ninguno"
-    if not paper_ok or force or trading_en:
+    # Ciclo paper ON (TRADING_ENABLED=true) no es live. SEC OFF solo si
+    # effective_mode≠paper o FORCE_REAL_MODE.
+    if not paper_ok or force:
         sec_status = STATUS_OFF
         sec_dev = f"mode={mode} force_real={force} trading_enabled={trading_en}"
     sec = AreaStatus(

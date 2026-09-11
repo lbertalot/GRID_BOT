@@ -4,6 +4,7 @@ GridBot v2.5 - Sistema de protección automática
 """
 
 import logging
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
@@ -17,13 +18,73 @@ from app.core.capital_risk import daily_loss_limit_fraction
 logger = logging.getLogger(__name__)
 
 
-def consecutive_losses_from_closed_cycles(cycles) -> int:
-    """Racha de net_pnl < 0 desde el cierre más reciente. Paper SoT (L0)."""
+def _aware_dt(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def paper_trial_started_at() -> Optional[datetime]:
+    """t0 de la prueba SI. Vacío / inválido → trial inactivo (trip duro = 5)."""
+    raw = (os.getenv("PAPER_TRIAL_STARTED_AT") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("PAPER_TRIAL_STARTED_AT inválido: %s", raw)
+        return None
+    return _aware_dt(parsed)
+
+
+def consecutive_loss_trip_threshold() -> int:
+    """Umbral duro de system_integrity. WARN Telegram no sustituye esto.
+
+    Trial paper: ``PAPER_TRIAL_STREAK_THRESHOLD`` solo si hay ``PAPER_TRIAL_STARTED_AT``.
+    Sin trial el trip sigue en 5 sobre la racha SoT completa.
+    """
+    if paper_trial_started_at() is None:
+        return 5
+    raw = (os.getenv("PAPER_TRIAL_STREAK_THRESHOLD") or "").strip()
+    if not raw:
+        return 5
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 5
+
+
+def _is_after_watermark(closed_at: datetime, since: datetime) -> bool:
+    """``closed_at > since``. Si t0 no trae microsegundos, compara al segundo.
+
+    Env ``PAPER_TRIAL_STARTED_AT=…15:45:37+00:00`` no debe dejar pasar el close
+    SoT ``…15:45:37.370240`` (mismo segundo = watermark, no ciclo nuevo).
+    """
+    if since.microsecond == 0:
+        return closed_at.replace(microsecond=0) > since
+    return closed_at > since
+
+
+def consecutive_losses_from_closed_cycles(cycles, since: Optional[datetime] = None) -> int:
+    """Racha de net_pnl < 0 desde el cierre más reciente. Paper SoT (L0).
+
+    ``since``: ignora closes con ``closed_at <= since`` (watermark de prueba SI).
+    """
+    since_dt = _aware_dt(since)
     closed = [
         c
         for c in cycles
         if getattr(c, "state", None) == "closed" and getattr(c, "closed_at", None)
     ]
+    if since_dt is not None:
+        filtered = []
+        for cycle in closed:
+            closed_at = _aware_dt(cycle.closed_at)
+            if closed_at is not None and _is_after_watermark(closed_at, since_dt):
+                filtered.append(cycle)
+        closed = filtered
     closed.sort(key=lambda c: c.closed_at, reverse=True)
     n = 0
     for cycle in closed:
@@ -306,7 +367,10 @@ class AutoCircuitBreaker:
                     # Cross-process: releer JSON (otro worker Celery pudo haber
                     # cerrado ciclos desde el último get_paper_ledger() local).
                     closed = reload_paper_ledger_from_disk().closed_cycles()
-                    consecutive_losses = consecutive_losses_from_closed_cycles(closed)
+                    trial_since = paper_trial_started_at()
+                    consecutive_losses = consecutive_losses_from_closed_cycles(
+                        closed, since=trial_since
+                    )
                     loss_source = "paper_ledger"
                     closed_ats = [c.closed_at for c in closed if c.closed_at]
                     if closed_ats:
@@ -333,66 +397,87 @@ class AutoCircuitBreaker:
                     else:
                         break
 
-            threshold = self.thresholds["max_consecutive_losses"]
+            threshold = consecutive_loss_trip_threshold()
+            trial_since = paper_trial_started_at()
             self.logger.info(
                 "system_integrity check: consecutive_losses=%s threshold=%s "
-                "latest_closed_at=%s source=%s",
+                "latest_closed_at=%s source=%s trial_since=%s",
                 consecutive_losses,
                 threshold,
                 latest_closed_at.isoformat() if latest_closed_at else None,
                 loss_source,
+                trial_since.isoformat() if trial_since else None,
             )
 
-            if consecutive_losses < threshold:
-                # Racha rota con datos frescos: cualquier override RCA vigente ya
-                # cumplió su propósito. Se limpia proactivamente para que no quede
-                # "vivo" y termine enmascarando un trip futuro no relacionado.
-                try:
-                    from app.core.breaker_override import (
-                        clear_override,
-                        get_override,
-                    )
+            override_result = None
+            try:
+                from app.core.breaker_override import check_and_consume_override
 
-                    if get_override("system_integrity") is not None:
-                        clear_override("system_integrity")
-                        self.logger.info(
-                            "🔓 Override RCA para 'system_integrity' liberado: racha de pérdidas ya en %s (< umbral)",
-                            consecutive_losses,
-                        )
-                except Exception:  # noqa: BLE001 — nunca romper el path de trading
-                    pass
-
-            if consecutive_losses >= threshold:
-                reason = (
-                    f"Demasiadas pérdidas consecutivas: {consecutive_losses} "
-                    f"(threshold={threshold}, metric=max_consecutive_losses, "
-                    f"latest_closed_at={latest_closed_at.isoformat() if latest_closed_at else 'n/a'})"
+                override_result = check_and_consume_override(
+                    "system_integrity",
+                    ledger_latest_closed_at=latest_closed_at,
+                )
+            except Exception as override_exc:  # noqa: BLE001 — fail-soft a la lógica normal
+                self.logger.debug(
+                    "breaker_override check skip: %s", override_exc
                 )
 
-                skip_activation = False
-                try:
-                    from app.core.breaker_override import check_and_consume_override
-
-                    skip_activation, _override = check_and_consume_override(
-                        "system_integrity",
-                        ledger_latest_closed_at=latest_closed_at,
-                    )
-                except Exception as override_exc:  # noqa: BLE001 — fail-soft a la lógica normal
-                    self.logger.debug(
-                        "breaker_override check skip: %s", override_exc
-                    )
-
-                if skip_activation:
-                    self.logger.warning(
-                        "system_integrity OPEN deferred: %s (override RCA activo)",
-                        reason,
-                    )
-                    results["reasons"].append(f"{reason} (override RCA activo, sin reactivar)")
-                    return
-
+            if override_result is not None and override_result.force_reduce_only:
+                reason = (
+                    "Override de prueba SI expiró sin close post-t0 "
+                    f"(latest_closed_at={latest_closed_at.isoformat() if latest_closed_at else 'n/a'}); "
+                    "system_integrity REDUCE_ONLY (NO-GO prueba)"
+                )
                 await self.breakers.activate_breaker("system_integrity", reason)
                 results["breakers_activated"].append("system_integrity")
                 results["reasons"].append(reason)
+                return
+
+            if consecutive_losses < threshold:
+                # Racha rota con datos *frescos* (post-t0 en trial). No limpiar el
+                # override si aún no hay close nuevo: el idle timer debe seguir.
+                latest_aware = _aware_dt(latest_closed_at)
+                has_fresh_close = trial_since is None or (
+                    latest_aware is not None
+                    and _is_after_watermark(latest_aware, trial_since)
+                )
+                if has_fresh_close:
+                    try:
+                        from app.core.breaker_override import (
+                            clear_override,
+                            get_override,
+                        )
+
+                        if get_override("system_integrity") is not None:
+                            clear_override("system_integrity")
+                            self.logger.info(
+                                "🔓 Override RCA para 'system_integrity' liberado: racha de pérdidas ya en %s (< umbral)",
+                                consecutive_losses,
+                            )
+                    except Exception:  # noqa: BLE001 — nunca romper el path de trading
+                        pass
+                return
+
+            reason = (
+                f"Demasiadas pérdidas consecutivas: {consecutive_losses} "
+                f"(threshold={threshold}, metric=max_consecutive_losses, "
+                f"latest_closed_at={latest_closed_at.isoformat() if latest_closed_at else 'n/a'})"
+            )
+
+            skip_activation = bool(
+                override_result is not None and override_result.skip_activation
+            )
+            if skip_activation:
+                self.logger.warning(
+                    "system_integrity OPEN deferred: %s (override RCA activo)",
+                    reason,
+                )
+                results["reasons"].append(f"{reason} (override RCA activo, sin reactivar)")
+                return
+
+            await self.breakers.activate_breaker("system_integrity", reason)
+            results["breakers_activated"].append("system_integrity")
+            results["reasons"].append(reason)
 
         except Exception as e:
             self.logger.error(f"Error verificando pérdidas consecutivas: {e}")

@@ -190,11 +190,14 @@ def test_daily_pnl_pct_from_last_two_daily_closes():
 
 
 def test_ceo_overview_pnl_mtd_ok_with_series(monkeypatch):
+    """Stub sin kwargs + clock congelado; overview solo reenvía `now` si la firma lo acepta."""
     series = PaperEquitySeries()
     series.record(D("1000.00"), at=_at(2026, 7, 31))
     series.record(D("1018.30"), at=_at(2026, 8, 5))
+    frozen_now = _at(2026, 8, 5, 16)
     monkeypatch.setattr(
-        "app.core.pnl_ledger.get_paper_equity_series", lambda: series
+        "app.core.pnl_ledger.get_pnl_summary",
+        lambda: get_pnl_summary(now=frozen_now, series=series),
     )
     monkeypatch.setattr(
         ceo_overview,
@@ -206,7 +209,7 @@ def test_ceo_overview_pnl_mtd_ok_with_series(monkeypatch):
         ),
     )
 
-    overview = ceo_overview.build_ceo_overview(now=_at(2026, 8, 5, 16))
+    overview = ceo_overview.build_ceo_overview(now=frozen_now)
     widget = overview["pnl_mtd"]
 
     assert widget["status"] in {"ok", "stale"}
