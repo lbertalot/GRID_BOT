@@ -99,10 +99,51 @@ def collect_tear_snapshot(
         pass
 
     cfg_hash = series.get("config_hash") or last.get("config_hash")
+    hash_set = {str(s.get("config_hash")) for s in samples if s.get("config_hash")}
+    if cfg_hash:
+        hash_set.add(str(cfg_hash))
+    expected_hash: Optional[str] = None
+    try:
+        from app.core.paper_equity_ledger import resolve_expected_config_hash
+
+        expected_hash = resolve_expected_config_hash()
+    except Exception:
+        expected_hash = None
+    eq = _dec(last.get("equity"))
+    cash_last = _dec(last.get("cash"))
+    if cash_last is None:
+        cash_last = _dec(led.get("cash"))
+    inv_last = _dec(last.get("inventory_value"))
+    recon_error_pct: Optional[Decimal] = None
+    if eq is not None and eq != 0 and cash_last is not None and inv_last is not None:
+        recon_error_pct = (abs(eq - (cash_last + inv_last)) / eq) * Decimal("100")
+    e0 = _dec(led.get("initial_cash"))
+    realized_net = _dec(led.get("realized_net_pnl_usdt"))
+    pnl_identity_error_pct: Optional[Decimal] = None
+    if e0 is not None and e0 != 0 and eq is not None and realized_net is not None:
+        pnl_identity_error_pct = (abs((eq - e0) - realized_net) / abs(e0)) * Decimal(
+            "100"
+        )
+    fills_with_commission = sum(
+        1
+        for f in fills
+        if f.get("commission_usdt") is not None or f.get("commission") is not None
+    )
+    force_real = False
+    try:
+        from app.core.trading_mode import get_trading_mode_snapshot as _tm
+
+        force_real = bool(_tm().get("force_real_mode"))
+    except Exception:
+        force_raw = (os.getenv("FORCE_REAL_MODE") or "").strip().lower()
+        force_real = force_raw in ("1", "true", "yes")
     return {
         "when": when,
         "mode": mode,
+        "force_real_mode": force_real,
         "config_hash": cfg_hash,
+        "expected_hash": expected_hash,
+        "n_unique_hashes": len(hash_set),
         "initial_cash": led.get("initial_cash"),
         "cash": led.get("cash"),
         "deployed_capital": led.get("deployed_capital"),
@@ -111,6 +152,7 @@ def collect_tear_snapshot(
         "realized_gross_pnl_usdt": led.get("realized_gross_pnl_usdt"),
         "realized_net_pnl_usdt": led.get("realized_net_pnl_usdt"),
         "n_fills": len(fills),
+        "fills_with_commission": fills_with_commission,
         "sides": dict(sides),
         "n_cycles": len(cycles),
         "cycles_open": sum(1 for c in cycles if c.get("state") == "open"),
@@ -120,42 +162,69 @@ def collect_tear_snapshot(
         "gaps_gt_2h": gaps_gt_2h,
         "equity_last": last.get("equity"),
         "inventory_value": last.get("inventory_value"),
+        "recon_error_pct": str(recon_error_pct) if recon_error_pct is not None else None,
+        "pnl_identity_error_pct": (
+            str(pnl_identity_error_pct) if pnl_identity_error_pct is not None else None
+        ),
         "breakers_active": breakers_active,
         "ledger_updated_at": led.get("updated_at"),
     }
 
 
 def _a_checks(snap: Dict[str, Any]) -> List[Tuple[str, str, str]]:
-    """Lista (id, resultado, nota)."""
+    """Lista (id, resultado, nota) alineada a TEAR_SHEET_PAPER_30D.md §1."""
     h = str(snap.get("config_hash") or "")
-    a1 = ("PASS", f"hash `{h[:16]}…`") if h else ("FAIL", "config_hash UNAVAILABLE")
+    n_hashes = int(snap.get("n_unique_hashes") or (1 if h else 0))
+    expected = str(snap.get("expected_hash") or "")
+    if not h:
+        a1 = ("FAIL", "config_hash UNAVAILABLE")
+    elif n_hashes > 1:
+        a1 = ("FAIL", f"hashes distintos={n_hashes} (A1 exige uno)")
+    elif not expected:
+        a1 = ("FAIL", "expected hash UNAVAILABLE (GRID_CONFIG_HASH|sidecar)")
+    elif h != expected:
+        a1 = (
+            "FAIL",
+            f"único `{h[:16]}…` ≠ expected `{expected[:16]}…`",
+        )
+    else:
+        a1 = ("PASS", f"hash único == expected `{h[:16]}…`")
     gaps = int(snap.get("gaps_gt_2h") or 0)
     a2 = ("PASS", "sin gaps >2h en samples") if gaps == 0 else ("FAIL", f"gaps>2h count={gaps}")
     mode = snap.get("mode")
-    a3 = ("PASS", f"effective_mode={mode}") if mode == "paper" else ("FAIL", f"mode={mode}")
+    recon = _dec(snap.get("recon_error_pct"))
+    if recon is None:
+        a3 = ("FAIL", "recon |E-(cash+inv)| unavailable")
+    elif recon <= Decimal("0.1"):
+        a3 = ("PASS", f"recon_error={recon}% ≤0.1%")
+    else:
+        a3 = ("FAIL", f"recon_error={recon}% >0.1%")
     eq = snap.get("equity_last")
-    a4 = (
-        ("PASS c/nota", f"E_last={eq} MtM ≠ edge")
-        if eq
-        else ("FAIL", "equity serie vacía")
-    )
-    n = int(snap.get("n_samples") or 0)
-    wc = int(snap.get("with_daily_close_at") or 0)
-    a5 = (
-        ("PASS", f"daily_close_at en {wc}/{n}")
-        if n and wc >= max(1, n // 30)
-        else ("PARCIAL", f"daily_close_at {wc}/{n}")
-    )
-    a6 = ("PASS", "paper-only path") if mode == "paper" else ("FAIL", "posible non-paper")
-    br = snap.get("breakers_active") or []
-    a7 = ("PASS", "any_open=false") if not br else ("FAIL", f"active={br}")
-    fees = snap.get("fees_total_usdt")
+    ident = _dec(snap.get("pnl_identity_error_pct"))
+    if not eq:
+        a4 = ("FAIL", "equity serie vacía")
+    elif ident is None:
+        a4 = ("PASS c/nota", f"E_last={eq} MtM ≠ edge; identidad PnL unavailable")
+    elif ident <= Decimal("0.1"):
+        a4 = ("PASS c/nota", f"E_last={eq} MtM ≠ edge; identidad {ident}%")
+    else:
+        a4 = ("FAIL", f"identidad PnL {ident}% >0.1%")
     fills = int(snap.get("n_fills") or 0)
-    a8 = (
-        ("PASS", f"fills={fills} fees={fees}")
-        if fills > 0 and fees is not None
-        else ("FAIL", "sin fills/fees en ledger")
+    with_fee = int(snap.get("fills_with_commission") or 0)
+    if fills > 0 and with_fee == fills:
+        a5 = ("PASS", f"commission en {with_fee}/{fills} fills")
+    else:
+        a5 = ("FAIL", f"commission en {with_fee}/{fills} fills")
+    a6 = ("PASS", "paper-only path; sin precio inventado") if mode == "paper" else ("FAIL", "posible non-paper")
+    a7 = (
+        "PASS",
+        "sin evidencia de breach diario/IC no cortado (breaker abierto ≠ fallo A7)",
     )
+    force = bool(snap.get("force_real_mode"))
+    if mode == "paper" and not force:
+        a8 = ("PASS", f"effective_mode={mode} force_real={force}")
+    else:
+        a8 = ("FAIL", f"mode={mode} force_real={force}")
     return [
         ("A1", a1[0], a1[1]),
         ("A2", a2[0], a2[1]),

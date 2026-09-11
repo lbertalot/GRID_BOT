@@ -166,6 +166,15 @@ async def test_factory_l0_min_notional_threshold_is_20(tmp_path: Path):
 
 
 @pytest.mark.anyio
+async def test_factory_lee_max_concurrent_orders_del_json(tmp_path: Path):
+    payload = _freeze_style_payload()
+    payload["max_concurrent_orders"] = 2
+    manager = await _factory_from_payload(tmp_path, payload)
+    assert manager is not None
+    assert manager.config.max_concurrent_orders == 2
+
+
+@pytest.mark.anyio
 async def test_factory_without_l0_metadata_keeps_default_10(tmp_path: Path):
     manager = await _factory_from_payload(tmp_path, _optimized_style_payload())
     assert manager is not None

@@ -29,7 +29,7 @@ Un solo rojo **invalida el tear sheet completo**. No se compensa con PnL.
 
 | # | Gate | Umbral / evidencia | Fuente de datos | Go | No-go |
 |---|------|--------------------|-----------------|----|-------|
-| **A1** | Config congelada | Un solo `config_hash` de punta a punta; cualquier cambio **reinicia la ventana** | `PaperEquitySeries.config_is_frozen()` / `config_hashes()` | ☐ | ☐ |
+| **A1** | Config congelada | (1) Un solo `config_hash` de punta a punta; (2) ese hash **==** `GRID_CONFIG_HASH` o sidecar freeze (T2). Unicidad sola **no** basta (RCA sticky 2026-09-11). Cambio → reinicio de ventana | `config_is_frozen(expected)` / `config_hashes()` + expected | ☐ | ☐ |
 | **A2** | Cobertura de serie | ≥ **95%** snapshots esperados; **sin gaps > 2 h**; ≥ **30** cierres diarios 00:00 UTC | `PaperEquitySeries.coverage()` | ☐ | ☐ |
 | **A3** | Reconciliación | `\|E_t − (cash_t + Σ qty·mid)\| / E_t ≤ 0,1%` en todo `t` | `equity_breakdown` vs marca registrada | ☐ | ☐ |
 | **A4** | Identidad de PnL | `E_T − E_0 = Σ realizado + Δ no realizado − ops`, tol. ≤ 0,1% | Ledger + cierres diarios | ☐ | ☐ |
