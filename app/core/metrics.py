@@ -74,6 +74,23 @@ breaker_store_sync_errors_total = Counter(
     ["op"],
 )
 
+# RCA 2026-08-30: HASH ausente ≠ CLOSED. 1 sticky en el proceso que fail-closed.
+breaker_store_missing = Gauge(
+    "breaker_store_missing",
+    "1 si este proceso hidrató system_integrity ausente (fail-closed REDUCE_ONLY)",
+)
+
+breaker_store_fail_closed_total = Counter(
+    "breaker_store_fail_closed_total",
+    "Veces que el store durable no tenía system_integrity (fail-closed)",
+)
+
+breaker_store_persist_anomaly_total = Counter(
+    "breaker_store_persist_anomaly_total",
+    "Persistencias de breaker rechazadas (closed sobre HASH/field vacío, etc.)",
+    ["kind"],
+)
+
 # Emergency stop efectivo (env EMERGENCY_STOP o modo crítico activo)
 emergency_stop_active = Gauge(
     "emergency_stop_active", "1 si el emergency stop está activo, 0 si no"
