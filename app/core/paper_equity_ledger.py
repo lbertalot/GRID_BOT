@@ -83,6 +83,18 @@ class PaperLedgerError(Exception):
     """Error base de la telemetría paper."""
 
 
+# G18/G19: lock distribuido de la serie JSON (RCA-G18-G19-series.md).
+# TTL corto anti-deadlock si un worker muere. No file-lock. PROMOTE_LIVE: NO.
+SERIES_LOCK_KEY = "lock:paper:equity_series"
+SERIES_LOCK_TTL_SECONDS = 5
+SERIES_LOCK_BLOCKING_TIMEOUT_SECONDS = 10
+
+
+def _paper_series_lock_enabled() -> bool:
+    raw = os.getenv("PAPER_EQUITY_SERIES_LOCK", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 class MarkPriceUnavailable(PaperLedgerError):
     """No hay precio de marcación real. Falla cerrado: no se inventa un precio."""
 
@@ -1007,8 +1019,11 @@ class PaperEquitySeries:
             "config_hash": config_hash or self.config_hash,
             "daily_close_at": anchor.isoformat() if anchor else None,
         }
-        self._samples.append(sample)
-        self._autosave()
+        if self.storage_path is not None and _paper_series_lock_enabled():
+            self._record_with_distributed_lock(sample)
+        else:
+            self._samples.append(sample)
+            self._autosave()
         return sample
 
     # -- lecturas derivadas -------------------------------------------------
@@ -1190,12 +1205,67 @@ class PaperEquitySeries:
         except Exception as exc:  # pragma: no cover - persistencia best-effort
             logger.error("[PaperLedger] No se pudo persistir la serie paper: %s", exc)
 
+    def _reload_samples_from_storage(self) -> None:
+        if self.storage_path is None or not self.storage_path.exists():
+            return
+        loaded = type(self).load(self.storage_path, storage_path=self.storage_path)
+        self._samples = list(loaded._samples)
+        self.config_hash = loaded.config_hash
+        self._deployed_capital = loaded._deployed_capital
+
+    def _record_with_distributed_lock(self, sample: Dict[str, Any]) -> None:
+        """Serializa reload+append+save entre workers. Fail-closed. TTL 5s.
+
+        RCA G18/G19. No file-lock. PROMOTE_LIVE: NO.
+        """
+        from redis.exceptions import RedisError
+
+        from app.core.distributed_lock import get_redis_client
+
+        try:
+            client = get_redis_client()
+        except RedisError as exc:
+            raise PaperLedgerError(f"series lock redis unavailable: {exc}") from exc
+
+        lock = client.lock(
+            SERIES_LOCK_KEY,
+            timeout=SERIES_LOCK_TTL_SECONDS,
+            blocking=True,
+            blocking_timeout=SERIES_LOCK_BLOCKING_TIMEOUT_SECONDS,
+        )
+        try:
+            acquired = lock.acquire(
+                blocking=True,
+                blocking_timeout=SERIES_LOCK_BLOCKING_TIMEOUT_SECONDS,
+            )
+        except RedisError as exc:
+            raise PaperLedgerError(f"series lock redis unavailable: {exc}") from exc
+        if not acquired:
+            raise PaperLedgerError("series lock acquire timeout")
+        try:
+            self._reload_samples_from_storage()
+            self._samples.append(sample)
+            self.save()
+        finally:
+            try:
+                lock.release()
+            except RedisError as exc:
+                logger.warning("[PaperLedger] No se pudo liberar series lock: %s", exc)
+
 
 def _atomic_write_json(destination: Path, payload: Mapping[str, Any]) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    temporary.replace(destination)
+    unique = f"{os.getpid()}.{uuid.uuid4().hex[:8]}"
+    temporary = destination.with_name(f"{destination.name}.{unique}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(str(temporary), str(destination))
+    except Exception:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -1496,5 +1566,7 @@ __all__ = [
     "mark_price_from_client",
     "paper_equity_is_source_of_truth",
     "reset_paper_telemetry",
+    "SERIES_LOCK_KEY",
+    "SERIES_LOCK_TTL_SECONDS",
     "to_money",
 ]
