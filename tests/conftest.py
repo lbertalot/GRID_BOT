@@ -19,6 +19,9 @@ if not _PROM_DIR or not os.path.isdir(_PROM_DIR):
 # Forzar memory (no setdefault): si el shell/compose ya tiene CB_SHARED_STORE=auto,
 # setdefault no gana y reset_shared_breakers() DEL el HASH de paper.
 os.environ["CB_SHARED_STORE"] = "memory"
+# G18/G19: lock Redis de la serie es fail-closed en paper. Tests unitarios
+# persisten JSON sin Redis; el stress test lo re-habilita explícitamente.
+os.environ.setdefault("PAPER_EQUITY_SERIES_LOCK", "0")
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Asegurar que /app esté en PYTHONPATH antes de importar 'app'
