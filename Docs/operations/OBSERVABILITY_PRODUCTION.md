@@ -5,7 +5,7 @@
 La app expone métricas Prometheus en:
 
 ```
-GET https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com/metrics
+GET https://YOUR-APP-NAME.herokuapp.com/metrics
 ```
 
 ### Métricas clave
@@ -28,7 +28,7 @@ GET https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com/metrics
 1. Crear cuenta gratuita en [grafana.com](https://grafana.com/products/cloud/)
 2. En Grafana Cloud, ir a **Connections → Add new connection → Prometheus**
 3. Configurar un **scrape job** remoto:
-   - Target URL: `https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com/metrics`
+   - Target URL: `https://YOUR-APP-NAME.herokuapp.com/metrics`
    - Scrape interval: `60s`
    - Scrape timeout: `30s` (para absorber cold start)
 4. Importar dashboards desde `docker/grafana/dashboards/` o crear nuevos
@@ -56,7 +56,7 @@ scrape_configs:
     scrape_timeout: 30s
     scheme: https
     static_configs:
-      - targets: ['grid-bot-ia-eu-3ded46704cc4.herokuapp.com']
+      - targets: ['YOUR-APP-NAME.herokuapp.com']
     metrics_path: /metrics
 ```
 

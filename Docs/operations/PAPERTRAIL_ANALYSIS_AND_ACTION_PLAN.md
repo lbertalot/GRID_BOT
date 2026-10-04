@@ -1,7 +1,7 @@
 # Análisis de logs de producción (Papertrail/Heroku) y plan de acción
 
 **Fecha:** 2026-02-17
-**Fuente:** Logs de Heroku (grid-bot-ia), equivalentes a lo que recibe Papertrail.
+**Fuente:** Logs de Heroku (YOUR-APP-NAME), equivalentes a lo que recibe Papertrail.
 
 ---
 

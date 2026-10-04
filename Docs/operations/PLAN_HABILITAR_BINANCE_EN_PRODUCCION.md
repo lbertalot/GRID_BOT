@@ -46,9 +46,9 @@ Ventajas: compatible con la documentación de Binance (IP whitelist), con Heroku
 
 | Paso | Acción | Responsable | Verificación |
 |------|--------|-------------|---------------|
-| 1.1 | Confirmar región actual de la app: `heroku regions -a grid-bot-ia` (o en Dashboard). Si está en US, anotar que habrá que crear/migrar a EU. | Ops | Región anotada |
-| 1.2 | Crear app en Europa **o** usar la existente si ya está en EU. Si se crea nueva: `heroku create grid-bot-ia-eu --region eu-west-1` (o migrar según [Heroku regions](https://devcenter.heroku.com/articles/regions)). | Ops | App en `eu-west-1` (o región EU elegida) |
-| 1.3 | Contratar **QuotaGuard Shield** en esa app EU: `heroku addons:create quotaguardshield:starter -a grid-bot-ia` (o el plan que corresponda). Anotar las 2 IPs estáticas que devuelve el add-on. | Ops | `QUOTAGUARDSHIELD_URL` configurado; IPs anotadas |
+| 1.1 | Confirmar región actual de la app: `heroku regions -a YOUR-APP-NAME` (o en Dashboard). Si está en US, anotar que habrá que crear/migrar a EU. | Ops | Región anotada |
+| 1.2 | Crear app en Europa **o** usar la existente si ya está en EU. Si se crea nueva: `heroku create YOUR-APP-NAME-eu --region eu-west-1` (o migrar según [Heroku regions](https://devcenter.heroku.com/articles/regions)). | Ops | App en `eu-west-1` (o región EU elegida) |
+| 1.3 | Contratar **QuotaGuard Shield** en esa app EU: `heroku addons:create quotaguardshield:starter -a YOUR-APP-NAME` (o el plan que corresponda). Anotar las 2 IPs estáticas que devuelve el add-on. | Ops | `QUOTAGUARDSHIELD_URL` configurado; IPs anotadas |
 | 1.4 | En Binance (API Key): activar **Restrict access to trusted IPs only** y añadir las **2 IPs** de QuotaGuard. Guardar cambios. | Ops | Whitelist con 2 IPs |
 | 1.5 | Documentar en `env.example` y en este doc: `QUOTAGUARDSHIELD_URL` (solo prod; no commitear valor real). Opcional: `BINANCE_USE_PROXY=true` para activar proxy solo cuando exista la URL. | Dev | Variables documentadas |
 
@@ -128,13 +128,13 @@ Por eso el plan se centra en **Heroku EU + QuotaGuard Shield + proxy solo para B
 
 ## 5.1 Estado tras implementación (feb 2026)
 
-- **Hecho:** QuotaGuard Shield en app actual (grid-bot-ia, región **us**). Código de proxy desplegado; en logs aparece `QUOTAGUARDSHIELD_URL presente en env: True` y `Proxy QuotaGuard Shield activo para Binance`.
+- **Hecho:** QuotaGuard Shield en app actual (YOUR-APP-NAME, región **us**). Código de proxy desplegado; en logs aparece `QUOTAGUARDSHIELD_URL presente en env: True` y `Proxy QuotaGuard Shield activo para Binance`.
 - **Problema:** Sigue apareciendo **451** ("Service unavailable from a restricted location"). Binance bloquea por **región/datacenter**: las IPs de QuotaGuard en US (3.222.129.4, 54.205.35.75) están en zona restringida aunque estén en la whitelist.
 - **Próximo paso obligatorio:** Crear app Heroku en **EU** (Fase 1.2), instalar QuotaGuard en esa app para obtener **IPs europeas**, whitelistear esas IPs en Binance y desplegar el mismo código allí (o migrar la app actual a EU si Heroku lo permite).
 
 ### 5.2 App EU creada (feb 2026)
 
-- **App:** `grid-bot-ia-eu` (región **eu**), URL: https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com/
+- **App:** `YOUR-APP-NAME-eu` (región **eu**), URL: https://YOUR-APP-NAME.herokuapp.com/
 - **Add-ons:** QuotaGuard Shield (IPs EU), Papertrail. Misma base de datos y Redis que la app US (misma `DATABASE_URL` y `REDIS_URL`).
 - **IPs estáticas EU para whitelist en Binance:**
   - **3.251.32.127**

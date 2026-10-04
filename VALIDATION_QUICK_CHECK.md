@@ -105,7 +105,7 @@
 
 ### 2. ⏳ Validación Completa (Ejecutar ahora)
 ```bash
-cd /Users/leandrobertalot/Documents/grid_bot
+cd /path/to/gridbot
 python scripts/validate_production.py
 
 # Este script realizará:
@@ -201,7 +201,7 @@ histogram_quantile(0.99, rate(api_request_duration_seconds_bucket[5m]))
 ## 🚀 **COMANDO PARA VALIDACIÓN COMPLETA**
 
 ```bash
-cd /Users/leandrobertalot/Documents/grid_bot
+cd /path/to/gridbot
 
 # Instalar dependencias si faltan (solo primera vez)
 pip install rich requests

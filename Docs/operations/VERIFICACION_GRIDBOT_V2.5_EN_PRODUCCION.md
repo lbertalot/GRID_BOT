@@ -1,7 +1,7 @@
-# Verificación: GridBot v2.5 en producción (grid-bot-ia-eu)
+# Verificación: GridBot v2.5 en producción (YOUR-APP-NAME-eu)
 
 **Fecha:** 2026-02-17
-**App:** https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com/
+**App:** https://YOUR-APP-NAME.herokuapp.com/
 
 Este documento cruza la descripción pública de GridBot v2.5 con el código y la configuración en producción.
 
@@ -86,7 +86,7 @@ Este documento cruza la descripción pública de GridBot v2.5 con el código y l
 | Decimal y defensa | ✅ Decimal en rutas críticas; validaciones y breakers activos |
 | Keep-alive / anti cold-start | ✅ `GET /ping` + loop keep-alive cada 10 min si `APP_URL` configurada |
 
-**Conclusión (actualizado):** Tras la implementación de las Fases 1-5, la descripción de GridBot v2.5 coincide con el código y con lo desplegado en **grid-bot-ia-eu**. El ciclo de trading ahora usa la predicción de régimen de River (MLEngine) cuando `ML_ENABLED=true`, con fallback seguro a RANGE si el ML falla o está desactivado.
+**Conclusión (actualizado):** Tras la implementación de las Fases 1-5, la descripción de GridBot v2.5 coincide con el código y con lo desplegado en **YOUR-APP-NAME-eu**. El ciclo de trading ahora usa la predicción de régimen de River (MLEngine) cuando `ML_ENABLED=true`, con fallback seguro a RANGE si el ML falla o está desactivado.
 
 ---
 
@@ -111,19 +111,19 @@ Comprueba: `/ping`, `/health`, `/metrics`, `/breakers/summary`, `/api/reconcilia
 | 3 | Métricas Prometheus | `curl $APP_URL/metrics \| grep gridbot` | Líneas con métricas `gridbot_*` |
 | 4 | Breakers | `curl $APP_URL/breakers/summary` | JSON con campo `breakers` |
 | 5 | Reconciliación | `curl $APP_URL/api/reconciliation/summary` | `{"status": "ok", ...}` |
-| 6 | TRADING_ENABLED | `heroku config:get TRADING_ENABLED -a grid-bot-ia-eu` | `true` |
-| 7 | EMERGENCY_STOP | `heroku config:get EMERGENCY_STOP -a grid-bot-ia-eu` | `false` |
-| 8 | PAPER_TRADING | `heroku config:get PAPER_TRADING -a grid-bot-ia-eu` | `false` |
-| 9 | ML_ENABLED | `heroku config:get ML_ENABLED -a grid-bot-ia-eu` | `true` |
+| 6 | TRADING_ENABLED | `heroku config:get TRADING_ENABLED -a YOUR-APP-NAME-eu` | `true` |
+| 7 | EMERGENCY_STOP | `heroku config:get EMERGENCY_STOP -a YOUR-APP-NAME-eu` | `false` |
+| 8 | PAPER_TRADING | `heroku config:get PAPER_TRADING -a YOUR-APP-NAME-eu` | `false` |
+| 9 | ML_ENABLED | `heroku config:get ML_ENABLED -a YOUR-APP-NAME-eu` | `true` |
 | 10 | ML usado en ciclo | `curl $APP_URL/metrics \| grep ml_regime_used` | Métrica presente con valor > 0 |
 
 ### Qué hacer si algo falla
 
-- **Endpoint no responde:** Verificar dyno activo (`heroku ps -a grid-bot-ia-eu`). Si está idle, comprobar que `APP_URL` esté configurada para keep-alive.
-- **Breakers activos:** `heroku logs --tail -a grid-bot-ia-eu` y buscar `breaker`. Evaluar si es legítimo; desactivar manualmente si procede.
+- **Endpoint no responde:** Verificar dyno activo (`heroku ps -a YOUR-APP-NAME-eu`). Si está idle, comprobar que `APP_URL` esté configurada para keep-alive.
+- **Breakers activos:** `heroku logs --tail -a YOUR-APP-NAME-eu` y buscar `breaker`. Evaluar si es legítimo; desactivar manualmente si procede.
 - **ML metrics ausentes:** Verificar `ML_ENABLED=true`; si recién arrancó, el primer ciclo tarda hasta 5 min.
-- **EMERGENCY_STOP=true:** Evaluar causa en logs; si es seguro, `heroku config:set EMERGENCY_STOP=false -a grid-bot-ia-eu`.
+- **EMERGENCY_STOP=true:** Evaluar causa en logs; si es seguro, `heroku config:set EMERGENCY_STOP=false -a YOUR-APP-NAME-eu`.
 
 ### Cold start y timeouts
 
-La primera petición tras un período de inactividad puede tardar 10-30 segundos (cold start del dyno Heroku). El endpoint `GET /ping` es el más ligero y puede usarse para "calentar" el dyno antes de consultar endpoints pesados como `/metrics` o `/api/reconciliation/summary`. El loop de keep-alive (configurable vía `APP_URL`) reduce la probabilidad de cold start a prácticamente cero. La descripción de GridBot v2.5 coincide con el código y con lo desplegado en **grid-bot-ia-eu**. La única diferencia es que en producción el ML está desactivado (`ML_ENABLED=false`), por lo que el sistema usa el **fallback seguro** (régimen estático), tal como se indica en “fallback seguro si falla el ML”.
+La primera petición tras un período de inactividad puede tardar 10-30 segundos (cold start del dyno Heroku). El endpoint `GET /ping` es el más ligero y puede usarse para "calentar" el dyno antes de consultar endpoints pesados como `/metrics` o `/api/reconciliation/summary`. El loop de keep-alive (configurable vía `APP_URL`) reduce la probabilidad de cold start a prácticamente cero. La descripción de GridBot v2.5 coincide con el código y con lo desplegado en **YOUR-APP-NAME-eu**. La única diferencia es que en producción el ML está desactivado (`ML_ENABLED=false`), por lo que el sistema usa el **fallback seguro** (régimen estático), tal como se indica en “fallback seguro si falla el ML”.

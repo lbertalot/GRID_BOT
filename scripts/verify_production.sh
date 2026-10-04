@@ -7,8 +7,8 @@
 set -euo pipefail
 
 # --- Configuración -----------------------------------------------------------
-APP_URL="${APP_URL:-https://grid-bot-ia-eu-3ded46704cc4.herokuapp.com}"
-HEROKU_APP="${HEROKU_APP:-grid-bot-ia-eu}"
+APP_URL="${APP_URL:-https://YOUR-APP-NAME.herokuapp.com}"
+HEROKU_APP="${HEROKU_APP:-YOUR-APP-NAME}"
 TIMEOUT=20           # segundos por petición
 PASS=0
 FAIL=0
