@@ -137,7 +137,7 @@ Una vez que me des estos 3 datos, yo ejecuto todo lo demás:
 3. **Password** del proxy
 
 Yo haré:
-- `heroku config:set BINANCE_PROXY_URL=http://gridbot:<PASS>@<IP>:3128 -a grid-bot-ia-eu`
+- `heroku config:set BINANCE_PROXY_URL=http://gridbot:<PASS>@<IP>:3128 -a YOUR-APP-NAME-eu`
 - Verificar logs y conectividad
 - Indicarte exactamente qué marcar en Binance
 
@@ -169,7 +169,7 @@ En **Binance → API Management**:
 ### Error -2015 en Heroku después de configurar todo
 - Verifica que la IP de la VM esté en la whitelist de Binance
 - Verifica que "Habilitar spot y trading" esté marcado en Binance
-- Verifica en Heroku: `heroku config:get BINANCE_PROXY_URL -a grid-bot-ia-eu`
+- Verifica en Heroku: `heroku config:get BINANCE_PROXY_URL -a YOUR-APP-NAME-eu`
 
 ### Cloud-init no completó
 ```bash

@@ -19,7 +19,7 @@
 | 0.3 | Tener Heroku CLI instalado y `heroku login` | ☐ |
 | 0.4 | Conocer el nombre de la app Heroku (ej. `grid-bot-ia`) | ☐ |
 
-**App actual**: `grid-bot-ia`. URL web: ver con `heroku info -a grid-bot-ia` (p. ej. `https://YOUR-APP-NAME.herokuapp.com/`).
+**App actual**: Reemplaza `YOUR-APP-NAME` con el nombre de tu app en Heroku. URL web: ver con `heroku info -a YOUR-APP-NAME`.
 
 ---
 

@@ -240,7 +240,7 @@ app.include_router(alerts.router)  # ✅ AGREGAR
 #### Paso 3: Reiniciar la API
 
 ```bash
-cd /Users/leandrobertalot/Documents/grid_bot
+cd /path/to/gridbot
 docker-compose restart api
 ```
 

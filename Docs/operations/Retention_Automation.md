@@ -18,7 +18,7 @@ Agregar (ajusta la ruta del proyecto):
 
 ```bash
 # Ejecuta los domingos a las 03:15
-15 3 * * 0 cd /Users/leandrobertalot/Documents/grid_bot && \
+15 3 * * 0 cd /path/to/gridbot && \
   MONITORING_DIR=monitoring_data REPORTS_DIR=reports \
   /usr/bin/env python3 scripts/retention_cleanup.py --verbose >> logs/retention.log 2>&1
 ```
@@ -27,7 +27,7 @@ Ver ejecución en seco diaria (opcional):
 
 ```bash
 # Todos los días a las 03:10 (dry-run)
-10 3 * * * cd /Users/leandrobertalot/Documents/grid_bot && \
+10 3 * * * cd /path/to/gridbot && \
   MONITORING_DIR=monitoring_data REPORTS_DIR=reports \
   /usr/bin/env python3 scripts/retention_cleanup.py --dry-run >> logs/retention_dry.log 2>&1
 ```

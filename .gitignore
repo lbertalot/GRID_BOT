@@ -59,6 +59,9 @@ monitoring_data/**
 reports/**
 !reports/.gitkeep
 
+# Archivos privados (deployment, producción, hostnames)
+.private/
+
 # Telemetría de equity paper (S10): ledger y serie MtM del proceso.
 # Es estado contable de una ventana concreta, no configuración versionable.
 paper_telemetry/**

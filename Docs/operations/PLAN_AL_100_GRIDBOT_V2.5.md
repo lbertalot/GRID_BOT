@@ -49,7 +49,7 @@
 
 ## Fase 2: Habilitar ML en producción de forma segura
 
-**Objetivo:** Poner `ML_ENABLED=true` en la app **grid-bot-ia-eu** sin degradar defensas.
+**Objetivo:** Poner `ML_ENABLED=true` en la app **YOUR-APP-NAME-eu** sin degradar defensas.
 
 **Tareas:**
 
@@ -69,7 +69,7 @@
    - Desplegar primero el código de la Fase 1 (ciclo usando ML cuando `ML_ENABLED=true`).
    - Activar `ML_ENABLED=true` en staging o en un horario de bajo riesgo si existe.
    - Revisar logs y métricas (regime predictions, fallbacks, errores).
-   - Activar en producción (grid-bot-ia-eu) y monitorear; mantener posibilidad de volver a `ML_ENABLED=false` si hay incidencias.
+   - Activar en producción (YOUR-APP-NAME-eu) y monitorear; mantener posibilidad de volver a `ML_ENABLED=false` si hay incidencias.
 
 4. **LSTM/Transformer (HybridMLEngine)**
    - Requieren artefactos (model.h5, scaler.pkl, label_encoder.pkl, config.json) por símbolo en un directorio `models/` o configurable. En Heroku habría que generarlos en CI o subirlos a un almacenamiento y descargarlos al arranque.
@@ -159,7 +159,7 @@ Las fases 3 y 5 pueden hacerse en paralelo con la 1; la 2 debe ir después de la
 | Fase | Entregables |
 |------|-------------|
 | 1 | Código en `trading_tasks.py` (y helper de mapeo) que use ML cuando `ML_ENABLED=true`; tests; métricas/logs. |
-| 2 | `ML_ENABLED=true` en grid-bot-ia-eu; documentación de persistencia (o decisión de no persistir modelo); notas de rollout. |
+| 2 | `ML_ENABLED=true` en YOUR-APP-NAME-eu; documentación de persistencia (o decisión de no persistir modelo); notas de rollout. |
 | 3 | Documentación de cold start/timeouts; opcional: `/ping` o keep-alive. |
 | 4 | Configuración y documentación de Prometheus (scraping) y Grafana para prod. |
 | 5 | Checklist de verificación operativa y, opcionalmente, script de comprobación. |
