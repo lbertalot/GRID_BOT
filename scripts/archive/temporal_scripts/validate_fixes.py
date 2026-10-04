@@ -159,7 +159,7 @@ def validate_tests(test_files: List[Path], report: ValidationReport):
 
 
 def main():
-    root = Path("/Users/leandrobertalot/Documents/grid_bot")
+    root = Path("/path/to/gridbot")
 
     # Archivos modificados en las correcciones
     modified_files = [

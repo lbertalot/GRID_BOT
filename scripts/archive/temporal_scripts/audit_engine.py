@@ -459,7 +459,7 @@ class GridBotAuditor:
 
 
 def main():
-    root_path = "/Users/leandrobertalot/Documents/grid_bot"
+    root_path = "/path/to/gridbot"
     auditor = GridBotAuditor(root_path)
 
     report = auditor.run_full_audit()

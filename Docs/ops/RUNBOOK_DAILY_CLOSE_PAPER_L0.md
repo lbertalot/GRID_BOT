@@ -10,7 +10,7 @@
 ## Pre-check (≈23:15 UTC)
 
 ```bash
-cd /Users/leandrobertalot/Developer/trading/GRID_BOT
+cd /path/to/gridbot
 
 docker compose -f docker-compose.local.yml ps
 curl -sS http://localhost:8000/health | jq .trading
