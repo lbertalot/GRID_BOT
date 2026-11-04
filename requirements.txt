@@ -52,13 +52,15 @@ tenacity==8.2.3
 #               opentelemetry-instrumentation-sqlalchemy \
 #               opentelemetry-instrumentation-requests \
 #               opentelemetry-exporter-otlp-proto-grpc
-# 1.44 / 0.65b0: compatible con fastapi 0.141 + starlette 1.x (_IncludedRouter)
+# 1.45.2 / 0.66b2: compatible con fastapi 0.141 + starlette 1.x (_IncludedRouter)
 # y permite protobuf>=5 (cierra PYSEC-2026-1805 vs otel-proto 1.24 que pinneaba <5).
-opentelemetry-sdk==1.44.0
-opentelemetry-instrumentation-fastapi==0.65b0
-opentelemetry-instrumentation-sqlalchemy==0.65b0
-opentelemetry-instrumentation-requests==0.65b0
-opentelemetry-exporter-otlp-proto-grpc==1.44.0
+# opentelemetry-api 1.45.2 cierra CVE-2026-114603 / GHSA-xcq7-p3pf-p88h
+# (DoS en TraceState.from_header; el parche mínimo es api 1.45.1).
+opentelemetry-sdk==1.45.2
+opentelemetry-instrumentation-fastapi==0.66b2
+opentelemetry-instrumentation-sqlalchemy==0.66b2
+opentelemetry-instrumentation-requests==0.66b2
+opentelemetry-exporter-otlp-proto-grpc==1.45.2
 protobuf==5.29.6
 
 # Validación de datos
