@@ -1,6 +1,10 @@
 # Stack ML híbrido obligatorio para la imagen Docker local.
 # Requerido por app/services/hybrid_ml_engine.py (TensorFlow/Keras + River).
 
-tensorflow==2.16.1
+# 2.18.1 es el primer 2.18 que acepta protobuf>=5. 2.16.1 exige protobuf<5
+# y, al instalarse después de requirements.txt, bajaba el pin 5.29.6
+# (reabre PYSEC-2026-1805 / GHSA-7gcm-g887-7qv7).
+tensorflow==2.18.1
 river==0.21.0
 vectorbt==0.26.0
+protobuf==5.29.6
